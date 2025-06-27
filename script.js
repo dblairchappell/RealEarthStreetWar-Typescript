@@ -33,6 +33,11 @@ map.on('load', () => {
         )
         .map(layer => layer.id);
 
+    // Find building layers for hit-testing
+    const buildingLayers = map.getStyle().layers
+        .filter(l => l.type === 'fill' && l.source === 'composite' && l["source-layer"] && l["source-layer"].startsWith('building'))
+        .map(l => l.id);
+
     // Add a single source and layer for highlighting the selected road.
     // This is simpler and more reliable than modifying map styles at runtime.
     map.addSource('selected-road', {
@@ -51,6 +56,18 @@ map.on('load', () => {
         'paint': {
             'line-color': '#fa9005', // Darker orange for selected
             'line-width': 7
+        }
+    });
+
+    // Highlight selected building
+    map.addSource('selected-building', { type: 'geojson', data: null });
+    map.addLayer({
+        id: 'selected-building-fill',
+        type: 'fill',
+        source: 'selected-building',
+        paint: {
+            'fill-color': '#ffeb3b',
+            'fill-opacity': 0.4
         }
     });
 
@@ -87,19 +104,35 @@ map.on('load', () => {
     plantHqBtn.addEventListener('click', () => {
         isPlanting = !isPlanting;
         plantHqBtn.classList.toggle('active', isPlanting);
-        map.getCanvas().style.cursor = isPlanting ? 'crosshair' : '';
+        // Leave cursor management to building-hover logic
     });
 
     map.on('click', (e) => {
         if (!isPlanting) return;
 
-        const coords = e.lngLat;
+        // Require a building under the cursor
+        const buildings = map.queryRenderedFeatures(e.point, { layers: buildingLayers });
+        if (buildings.length === 0) {
+            return;
+        }
+        const buildingFeature = buildings[0];
+        map.getSource('selected-building').setData(buildingFeature);
+
+        // Use the building centroid as the flag position
+        const centroid = turf.centroid(buildingFeature).geometry.coordinates;
+        const coords = { lng: centroid[0], lat: centroid[1] };
         plantHQ(coords);
 
-        // Exit planting mode after placing the HQ
         isPlanting = false;
         plantHqBtn.classList.remove('active');
         map.getCanvas().style.cursor = '';
+    });
+
+    // Dynamic cursor: show crosshair only when hovering a building in planting mode
+    map.on('mousemove', (e) => {
+        if (!isPlanting) return; // only when planting
+        const hits = map.queryRenderedFeatures(e.point, { layers: buildingLayers });
+        map.getCanvas().style.cursor = hits.length > 0 ? 'crosshair' : '';
     });
 
     // --- CORE LOGIC ---
@@ -261,6 +294,7 @@ map.on('load', () => {
     // For simplicity and stability, we'll remove the hover effect for now
     // to ensure the core click-to-select functionality is flawless.
     map.on('mousemove', roadLayers, (e) => {
+        if (isPlanting) return; // keep crosshair during placement mode
         map.getCanvas().style.cursor = e.features.length > 0 ? 'pointer' : '';
     });
 });
