@@ -107,6 +107,19 @@ map.on('load', () => {
         // Leave cursor management to building-hover logic
     });
 
+    function buildingAllowed(feature) {
+        if (!playerUnion) return true; // first flag anywhere
+        const c = turf.centroid(feature).geometry.coordinates;
+        return turf.booleanPointInPolygon(turf.point(c), playerUnion);
+    }
+
+    map.on('mousemove', (e) => {
+        if (!isPlanting) return;
+        const hits = map.queryRenderedFeatures(e.point, { layers: buildingLayers });
+        const allowed = hits.length > 0 && buildingAllowed(hits[0]);
+        map.getCanvas().style.cursor = allowed ? 'crosshair' : '';
+    });
+
     map.on('click', (e) => {
         if (!isPlanting) return;
 
@@ -116,6 +129,9 @@ map.on('load', () => {
             return;
         }
         const buildingFeature = buildings[0];
+        if (!buildingAllowed(buildingFeature)) {
+            return; // outside current territory
+        }
         map.getSource('selected-building').setData(buildingFeature);
 
         // Use the building centroid as the flag position
@@ -126,13 +142,6 @@ map.on('load', () => {
         isPlanting = false;
         plantHqBtn.classList.remove('active');
         map.getCanvas().style.cursor = '';
-    });
-
-    // Dynamic cursor: show crosshair only when hovering a building in planting mode
-    map.on('mousemove', (e) => {
-        if (!isPlanting) return; // only when planting
-        const hits = map.queryRenderedFeatures(e.point, { layers: buildingLayers });
-        map.getCanvas().style.cursor = hits.length > 0 ? 'crosshair' : '';
     });
 
     // --- CORE LOGIC ---
