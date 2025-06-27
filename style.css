@@ -70,4 +70,12 @@ body {
 
 .hidden {
     display: none;
+}
+
+#stats-panel {
+    margin-top: 8px;
+    background: rgba(255,255,255,0.8);
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 14px;
 } 

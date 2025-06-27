@@ -14,11 +14,14 @@ map.on('load', () => {
     const roadTypeEl = document.getElementById('road-type');
     const roadIdEl = document.getElementById('road-id');
     const plantHqBtn = document.getElementById('plant-hq-btn');
+    const refreshBtn = document.getElementById('refresh-map-btn');
+    const buildingCountEl = document.getElementById('building-count');
     let isPlanting = false;
     const hqMarkers = [];            // array of Mapbox markers for visual reference
     const playerFlags = [];          // array of { id, lngLat }
     let playerUnion = null;          // GeoJSON Polygon/MultiPolygon representing union of all circles
     let controlledFeatures = [];     // accumulated road segments already highlighted
+    const controlledBuildingIds = new Set();
 
     const INFLUENCE_RADIUS_KM = 0.5; // 500 meters
 
@@ -107,6 +110,12 @@ map.on('load', () => {
         // Leave cursor management to building-hover logic
     });
 
+    refreshBtn.addEventListener('click', () => {
+        // Force a full page reload with a cache-busting query param so tiles and data are re-requested
+        const url = window.location.pathname + '?r=' + Date.now();
+        window.location.href = url;
+    });
+
     function buildingAllowed(feature) {
         if (!playerUnion) return true; // first flag anywhere
         const c = turf.centroid(feature).geometry.coordinates;
@@ -179,6 +188,7 @@ map.on('load', () => {
         // 6) Fetch & highlight roads only for the new area (if any)
         if (incrementalArea) {
             updateControlledRoadsFromOverpass(circle, coords);
+            updateControlledBuildingsFromOverpass(circle, coords);
         }
     }
 
@@ -296,6 +306,30 @@ map.on('load', () => {
             }
         } catch (e) {
             console.error('Overpass fetch failed', e);
+        }
+    }
+
+    async function updateControlledBuildingsFromOverpass(circle, coords) {
+        const radiusM = INFLUENCE_RADIUS_KM * 1000;
+        const query = `[out:json][timeout:25];(way["building"](around:${radiusM},${coords.lat},${coords.lng});relation["building"](around:${radiusM},${coords.lat},${coords.lng}););out geom;`;
+        const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+        try {
+            const resp = await fetch(url);
+            const data = await resp.json();
+            const geojson = osmtogeojson(data);
+            geojson.features.forEach(f => {
+                const id = f.id || (f.properties && f.properties.id);
+                if (!id) return;
+                if (controlledBuildingIds.has(id)) return; // already counted
+                // ensure the building is truly within current union (in case of overlap queries)
+                const centroid = turf.centroid(f).geometry.coordinates;
+                if (playerUnion && turf.booleanPointInPolygon(turf.point(centroid), playerUnion)) {
+                    controlledBuildingIds.add(id);
+                }
+            });
+            buildingCountEl.textContent = controlledBuildingIds.size;
+        } catch (err) {
+            console.error('Failed to fetch buildings from Overpass', err);
         }
     }
 
