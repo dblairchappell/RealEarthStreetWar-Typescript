@@ -16,6 +16,8 @@ map.on('load', () => {
     const plantHqBtn = document.getElementById('plant-hq-btn');
     const refreshBtn = document.getElementById('refresh-map-btn');
     const buildingCountEl = document.getElementById('building-count');
+    const bankBalanceEl = document.getElementById('bank-balance');
+    let bankBalance = 0;
     let isPlanting = false;
     const hqMarkers = [];            // array of Mapbox markers for visual reference
     const playerFlags = [];          // array of { id, lngLat }
@@ -24,6 +26,8 @@ map.on('load', () => {
     const controlledBuildingIds = new Set();
 
     const INFLUENCE_RADIUS_KM = 0.5; // 500 meters
+    const INCOME_PER_BUILDING_PER_DAY = 10;
+    const SECONDS_PER_DAY = 60; // 1 game day = 60 real seconds
 
     // Find all the road layers to make them interactive
     const roadLayers = map.getStyle().layers
@@ -340,6 +344,13 @@ map.on('load', () => {
         if (isPlanting) return; // keep crosshair during placement mode
         map.getCanvas().style.cursor = e.features.length > 0 ? 'pointer' : '';
     });
+
+    // Update bank balance every second
+    setInterval(() => {
+        const incomePerSecond = (INCOME_PER_BUILDING_PER_DAY / SECONDS_PER_DAY) * controlledBuildingIds.size;
+        bankBalance += incomePerSecond;
+        bankBalanceEl.textContent = bankBalance.toFixed(2);
+    }, 1000);
 });
 
 // Helper function to check if two points are effectively equal
