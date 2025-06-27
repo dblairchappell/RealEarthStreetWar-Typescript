@@ -11,6 +11,12 @@
     <h1>Real-Earth Street War</h1>
     <div id="ui">
         <button id="load-roads">Load Roads in View</button>
+        <div id="info-panel" class="hidden">
+            <h3>Selected Road</h3>
+            <p><strong>Name:</strong> <span id="road-name"></span></p>
+            <p><strong>Type:</strong> <span id="road-type"></span></p>
+            <p><strong>ID:</strong> <span id="road-id"></span></p>
+        </div>
     </div>
     <div id="map"></div>
     <script src='https://api.mapbox.com/mapbox-gl-js/v2.9.1/mapbox-gl.js'></script>

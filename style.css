@@ -32,6 +32,24 @@ h1 {
     background: rgba(0,0,0,0.5);
     padding: 10px;
     border-radius: 5px;
+    color: white;
+}
+
+#info-panel {
+    margin-top: 10px;
+}
+
+#info-panel h3 {
+    margin: 0 0 5px 0;
+}
+
+#info-panel p {
+    margin: 0;
+    font-size: 0.9em;
+}
+
+.hidden {
+    display: none;
 }
 
 button {

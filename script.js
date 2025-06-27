@@ -3,13 +3,17 @@
 mapboxgl.accessToken = 'pk.eyJ1Ijoic3RyZWV0d2FyZ2FtZSIsImEiOiJjbWNleGxyaXAwMmpiMnFzY3ZrcjZ5bzZoIn0.XV6-STLYBkq8osAE4FD_7g';
 const map = new mapboxgl.Map({
     container: 'map', // container ID
-    style: 'mapbox://styles/mapbox/dark-v10', // style URL
+    style: 'mapbox://styles/mapbox/streets-v11', // style URL
     center: [-74.5, 40], // starting position [lng, lat]
     zoom: 9 // starting zoom
 });
 
 map.on('load', () => {
     const loadRoadsButton = document.getElementById('load-roads');
+    const infoPanel = document.getElementById('info-panel');
+    const roadNameEl = document.getElementById('road-name');
+    const roadTypeEl = document.getElementById('road-type');
+    const roadIdEl = document.getElementById('road-id');
     const MIN_ZOOM_FOR_ROADS = 12;
 
     loadRoadsButton.addEventListener('click', async () => {
@@ -58,8 +62,8 @@ map.on('load', () => {
                         'line-cap': 'round'
                     },
                     'paint': {
-                        'line-color': '#ff0000',
-                        'line-width': 3
+                        'line-color': '#ffbc36',
+                        'line-width': 4
                     }
                 });
 
@@ -81,14 +85,21 @@ map.on('load', () => {
                         'line-cap': 'round'
                     },
                     'paint': {
-                        'line-color': '#0000ff', // Blue for selected
-                        'line-width': 4
+                        'line-color': '#fa9005', // Blue for selected
+                        'line-width': 7
                     }
                 });
 
                 map.on('click', 'road-lines', (e) => {
                     const feature = e.features[0];
-                    console.log('Selected Road Properties:', feature.properties);
+                    const properties = feature.properties;
+                    console.log('Selected Road Properties:', properties);
+
+                    // Populate and show the info panel
+                    roadNameEl.textContent = properties.name || 'Unnamed Road';
+                    roadTypeEl.textContent = properties.highway;
+                    roadIdEl.textContent = feature.id;
+                    infoPanel.classList.remove('hidden');
 
                     // Update the 'selected-road' source with the clicked feature
                     const selectedRoadSource = map.getSource('selected-road');
