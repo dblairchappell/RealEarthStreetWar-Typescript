@@ -17,7 +17,9 @@ map.on('load', () => {
     const refreshBtn = document.getElementById('refresh-map-btn');
     const buildingCountEl = document.getElementById('building-count');
     const bankBalanceEl = document.getElementById('bank-balance');
+    const dateEl = document.getElementById('game-date');
     let bankBalance = 0;
+    let gameDate = new Date(2023, 0, 1); // Jan 1, 2023
     let isPlanting = false;
     const hqMarkers = [];            // array of Mapbox markers for visual reference
     const playerFlags = [];          // array of { id, lngLat }
@@ -345,12 +347,26 @@ map.on('load', () => {
         map.getCanvas().style.cursor = e.features.length > 0 ? 'pointer' : '';
     });
 
+    function updateDateDisplay() {
+        dateEl.textContent = gameDate.toLocaleDateString('en-US', {
+            day: 'numeric', month: 'short', year: 'numeric'
+        });
+    }
+    updateDateDisplay();
+
     // Update bank balance every second
     setInterval(() => {
         const incomePerSecond = (INCOME_PER_BUILDING_PER_DAY / SECONDS_PER_DAY) * controlledBuildingIds.size;
         bankBalance += incomePerSecond;
         bankBalanceEl.textContent = bankBalance.toFixed(2);
     }, 1000);
+
+    // Advance game date every game day (60s)
+    setInterval(() => {
+        // add one day
+        gameDate.setDate(gameDate.getDate() + 1);
+        updateDateDisplay();
+    }, SECONDS_PER_DAY * 1000);
 });
 
 // Helper function to check if two points are effectively equal
