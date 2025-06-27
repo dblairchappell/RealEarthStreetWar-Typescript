@@ -138,89 +138,91 @@ map.on('load', () => {
             console.log('Processing', geojson.features.length, 'roads...');
 
             const validRoads = [];
-            const center = turf.point([coords.lng, coords.lat]);
+            const centerLng = coords.lng;
+            const centerLat = coords.lat;
+            const cosLat = Math.cos(centerLat * Math.PI / 180); // for E-W distance scaling
             const radiusKm = INFLUENCE_RADIUS_KM;
+            const radiusMeters = radiusKm * 1000;
+            const radiusSq = radiusMeters * radiusMeters;
 
-            // Process each road to extract segments within the circle
+            // Fast planar distance approximation (good for < ~10km radius)
+            function distSq(lon, lat) {
+                const dx = (lon - centerLng) * cosLat * 111_320; // meters per degree lon ≈ 111.32km * cos(lat)
+                const dy = (lat - centerLat) * 110_574;          // meters per degree lat ≈ 110.574km
+                return dx * dx + dy * dy; // squared distance in m^2
+            }
+
+            // Process each road and clip segments that fall within the circle
             geojson.features.forEach(f => {
-                if (f.geometry.type === 'LineString') {
-                    const coords = f.geometry.coordinates;
-                    const segments = [];
-                    
-                    // Go through each pair of consecutive points
-                    for (let i = 0; i < coords.length - 1; i++) {
-                        const p1 = coords[i];
-                        const p2 = coords[i + 1];
-                        
-                        const d1 = turf.distance(center, turf.point(p1), { units: 'kilometers' });
-                        const d2 = turf.distance(center, turf.point(p2), { units: 'kilometers' });
-                        
-                        const p1Inside = d1 <= radiusKm;
-                        const p2Inside = d2 <= radiusKm;
-                        
-                        if (p1Inside && p2Inside) {
-                            // Both points inside - add the whole segment
-                            segments.push([p1, p2]);
-                        } else if (p1Inside || p2Inside) {
-                            // One point inside, one outside - find intersection with circle
-                            const line = turf.lineString([p1, p2]);
-                            try {
-                                const intersections = turf.lineIntersect(line, circle);
-                                if (intersections.features.length > 0) {
-                                    const intersection = intersections.features[0].geometry.coordinates;
-                                    if (p1Inside) {
-                                        // p1 is inside, p2 is outside
-                                        segments.push([p1, intersection]);
-                                    } else {
-                                        // p1 is outside, p2 is inside
-                                        segments.push([intersection, p2]);
-                                    }
-                                } else {
-                                    // Fallback: if no intersection found but one point is inside
-                                    if (p1Inside) {
-                                        segments.push([p1, p2]);
-                                    }
-                                }
-                            } catch (e) {
-                                // If intersection calculation fails, include segment if either point is inside
-                                if (p1Inside || p2Inside) {
-                                    segments.push([p1, p2]);
-                                }
-                            }
+                if (f.geometry.type !== 'LineString') return; // skip non-LineString geometries
+
+                const coordsArr = f.geometry.coordinates;
+                let currentLine = [];
+
+                for (let i = 0; i < coordsArr.length - 1; i++) {
+                    const [lon1, lat1] = coordsArr[i];
+                    const [lon2, lat2] = coordsArr[i + 1];
+
+                    const d1sq = distSq(lon1, lat1);
+                    const d2sq = distSq(lon2, lat2);
+
+                    const p1Inside = d1sq <= radiusSq;
+                    const p2Inside = d2sq <= radiusSq;
+
+                    // Helper to push a point into current line
+                    const pushPoint = (pt) => {
+                        if (currentLine.length === 0 || (currentLine[currentLine.length - 1][0] !== pt[0] || currentLine[currentLine.length - 1][1] !== pt[1])) {
+                            currentLine.push(pt);
                         }
-                        // If both points are outside, skip this segment
-                    }
-                    
-                    // Convert segments to continuous linestrings
-                    if (segments.length > 0) {
-                        // Group consecutive segments into continuous lines
-                        const lines = [];
-                        let currentLine = [segments[0][0], segments[0][1]];
-                        
-                        for (let i = 1; i < segments.length; i++) {
-                            const prevEnd = currentLine[currentLine.length - 1];
-                            const currStart = segments[i][0];
-                            
-                            // Check if this segment connects to the previous one
-                            const distance = turf.distance(turf.point(prevEnd), turf.point(currStart), { units: 'meters' });
-                            if (distance < 10) { // Within 10 meters - consider connected
-                                currentLine.push(segments[i][1]);
+                    };
+
+                    if (p1Inside && p2Inside) {
+                        // Whole segment inside – add both endpoints
+                        pushPoint([lon1, lat1]);
+                        pushPoint([lon2, lat2]);
+                    } else if (p1Inside !== p2Inside) {
+                        // Segment crosses the circle boundary – find intersection by simple linear interpolation
+                        const dx = lon2 - lon1;
+                        const dy = lat2 - lat1;
+
+                        // Approximate along parameter t where distance equals radius
+                        // Use binary search to refine intersection (few iterations, cheap)
+                        let tLow = 0, tHigh = 1, tMid = 0;
+                        for (let iter = 0; iter < 6; iter++) { // 6 iterations ~1/64 precision, good enough
+                            tMid = (tLow + tHigh) / 2;
+                            const lonMid = lon1 + dx * tMid;
+                            const latMid = lat1 + dy * tMid;
+                            const dMidSq = distSq(lonMid, latMid);
+                            if ((p1Inside && dMidSq > radiusSq) || (!p1Inside && dMidSq <= radiusSq)) {
+                                tHigh = tMid;
                             } else {
-                                // Start a new line
-                                if (currentLine.length >= 2) {
-                                    lines.push(turf.lineString(currentLine));
-                                }
-                                currentLine = [segments[i][0], segments[i][1]];
+                                tLow = tMid;
                             }
                         }
-                        
-                        // Add the last line
-                        if (currentLine.length >= 2) {
-                            lines.push(turf.lineString(currentLine));
+                        const lonInt = lon1 + dx * tMid;
+                        const latInt = lat1 + dy * tMid;
+                        const intersection = [lonInt, latInt];
+
+                        // Add clipped segment part that lies inside
+                        if (p1Inside) {
+                            pushPoint([lon1, lat1]);
+                            pushPoint(intersection);
+                        } else {
+                            pushPoint(intersection);
+                            pushPoint([lon2, lat2]);
                         }
-                        
-                        validRoads.push(...lines);
+                    } else {
+                        // Both outside – flush current line if exists
+                        if (currentLine.length >= 2) {
+                            validRoads.push(turf.lineString(currentLine));
+                        }
+                        currentLine = [];
                     }
+                }
+
+                // Flush any remaining line after finishing the road
+                if (currentLine.length >= 2) {
+                    validRoads.push(turf.lineString(currentLine));
                 }
             });
 
