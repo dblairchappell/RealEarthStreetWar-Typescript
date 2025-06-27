@@ -15,7 +15,10 @@ map.on('load', () => {
     const roadIdEl = document.getElementById('road-id');
     const plantHqBtn = document.getElementById('plant-hq-btn');
     let isPlanting = false;
-    let hqMarker = null;
+    const hqMarkers = [];            // array of Mapbox markers for visual reference
+    const playerFlags = [];          // array of { id, lngLat }
+    let playerUnion = null;          // GeoJSON Polygon/MultiPolygon representing union of all circles
+    let controlledFeatures = [];     // accumulated road segments already highlighted
 
     const INFLUENCE_RADIUS_KM = 0.5; // 500 meters
 
@@ -102,24 +105,39 @@ map.on('load', () => {
     // --- CORE LOGIC ---
 
     function plantHQ(coords) {
-        // Remove existing marker if there is one
-        if (hqMarker) {
-            hqMarker.remove();
-        }
-        // Add a new marker to the map
-        hqMarker = new mapboxgl.Marker().setLngLat(coords).addTo(map);
+        // 1) Add a marker for the new flag
+        const marker = new mapboxgl.Marker().setLngLat(coords).addTo(map);
+        hqMarkers.push(marker);
 
-        // Create a circle of influence around the HQ
+        // 2) Build the circle polygon for this flag
         const center = [coords.lng, coords.lat];
         const radius = INFLUENCE_RADIUS_KM;
         const options = { steps: 64, units: 'kilometers' };
-        const influenceCircle = turf.circle(center, radius, options);
+        const circle = turf.circle(center, radius, options);
 
-        // Update the map to show the new influence area
-        map.getSource('influence-area').setData(influenceCircle);
+        // 3) Compute the area that is truly new (circle minus current union)
+        let incrementalArea;
+        if (playerUnion) {
+            try {
+                incrementalArea = turf.difference(circle, playerUnion);
+            } catch (err) {
+                console.warn('turf.difference failed, falling back to full circle', err);
+                incrementalArea = circle;
+            }
+        } else {
+            incrementalArea = circle;
+        }
 
-        // Update road control based on the new HQ location
-        updateControlledRoadsFromOverpass(influenceCircle, coords);
+        // 4) Update the running union
+        playerUnion = playerUnion ? turf.union(playerUnion, circle) : circle;
+
+        // 5) Update influence fill layer to show the full territory
+        map.getSource('influence-area').setData(playerUnion);
+
+        // 6) Fetch & highlight roads only for the new area (if any)
+        if (incrementalArea) {
+            updateControlledRoadsFromOverpass(circle, coords);
+        }
     }
 
     async function updateControlledRoadsFromOverpass(circle, coords) {
@@ -227,10 +245,13 @@ map.on('load', () => {
             });
 
             console.log('Highlighted roads:', validRoads.length);
-            map.getSource('controlled-roads').setData({ 
-                type: 'FeatureCollection', 
-                features: validRoads 
-            });
+            if (validRoads.length > 0) {
+                controlledFeatures.push(...validRoads);
+                map.getSource('controlled-roads').setData({
+                    type: 'FeatureCollection',
+                    features: controlledFeatures
+                });
+            }
         } catch (e) {
             console.error('Overpass fetch failed', e);
         }
