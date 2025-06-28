@@ -35,7 +35,7 @@ map.on('load', () => {
     let totalResidents = 0;
 
     const INFLUENCE_RADIUS_KM = 0.2; // 200 meters
-    const INCOME_PER_RESIDENT_PER_DAY = 10;
+    const INCOME_PER_RESIDENT_PER_DAY = 1;
     const SECONDS_PER_DAY = 1; // 1 game day = 1 real second
     const AREA_PER_RESIDENT = 25; // m^2
     const METERS_PER_FLOOR_DEFAULT = 3;
@@ -167,6 +167,14 @@ map.on('load', () => {
         minzoom: 15
     });
 
+    // Map from building id -> { count, marker }
+    const buildingGangData = {};
+    let totalGangMembers = 0;
+    // Hide previously defined label layer if exists (from earlier version)
+    if (map.getLayer('hq-building-gang-labels')) {
+        map.setLayoutProperty('hq-building-gang-labels', 'visibility', 'none');
+    }
+
     // --- UI EVENT LISTENERS ---
 
     plantHqBtn.addEventListener('click', () => {
@@ -211,7 +219,7 @@ map.on('load', () => {
         // Use the building centroid as the flag position
         const centroid = turf.centroid(buildingFeature).geometry.coordinates;
         const coords = { lng: centroid[0], lat: centroid[1] };
-        plantHQ(coords);
+        plantHQ(coords, buildingFeature);
 
         isPlanting = false;
         plantHqBtn.classList.remove('active');
@@ -220,14 +228,33 @@ map.on('load', () => {
 
     // --- CORE LOGIC ---
 
-    function plantHQ(coords) {
+    function plantHQ(coords, buildingFeature) {
         if (hqMarkers.length >= maxGangMembers) {
             alert('Not enough gang members. Increase wage offer to recruit more.');
             return;
         }
-        // 1) Add a marker for the new flag
-        const marker = new mapboxgl.Marker().setLngLat(coords).addTo(map);
+        // 1) Add or update a marker for the building
+        const bId = buildingFeature.id || (buildingFeature.properties && buildingFeature.properties.id);
+        let marker;
+        if (bId != null && buildingGangData[bId]) {
+            // Existing marker – just update count
+            const data = buildingGangData[bId];
+            data.count += 1;
+            data.element.textContent = data.count;
+            marker = data.marker;
+        } else {
+            // First gang member in this building – create custom marker element
+            const el = document.createElement('div');
+            el.className = 'gang-marker';
+            el.textContent = '1';
+            marker = new mapboxgl.Marker(el).setLngLat(coords).addTo(map);
+            if (bId != null) {
+                buildingGangData[bId] = { count: 1, marker, element: el };
+            }
+        }
+
         hqMarkers.push(marker);
+        totalGangMembers += 1;
 
         // 2) Build the circle polygon for this flag
         const center = [coords.lng, coords.lat];
@@ -447,8 +474,9 @@ map.on('load', () => {
 
     // Update bank balance every real second.
     setInterval(() => {
-        const incomePerSecond = (INCOME_PER_RESIDENT_PER_DAY / SECONDS_PER_DAY) * totalResidents; // = totalResidents
-        const wagesPerSecond = hqMarkers.length * wageOffer; // wage per gang member per day
+        const payingResidents = Math.max(0, totalResidents - totalGangMembers);
+        const incomePerSecond = (INCOME_PER_RESIDENT_PER_DAY / SECONDS_PER_DAY) * payingResidents;
+        const wagesPerSecond = Math.max(0, maxGangMembers - 1) * wageOffer; // first member (player) unpaid
         bankBalance += incomePerSecond - wagesPerSecond;
         bankBalanceEl.textContent = bankBalance.toFixed(2);
     }, 1000);
