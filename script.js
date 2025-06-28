@@ -18,6 +18,11 @@ map.on('load', () => {
     const buildingCountEl = document.getElementById('building-count');
     const bankBalanceEl = document.getElementById('bank-balance');
     const dateEl = document.getElementById('game-date');
+    const wageSlider = document.getElementById('wage-slider');
+    const wageDisplayEl = document.getElementById('wage-display');
+    const gangCountEl = document.getElementById('gang-count');
+    const gangMaxEl = document.getElementById('gang-max');
+
     let bankBalance = 0;
     let gameDate = new Date(2023, 0, 1); // Jan 1, 2023
     let isPlanting = false;
@@ -30,10 +35,41 @@ map.on('load', () => {
     let totalResidents = 0;
 
     const INFLUENCE_RADIUS_KM = 0.2; // 200 meters
-    const INCOME_PER_RESIDENT_PER_DAY = 1;
-    const SECONDS_PER_DAY = 60; // 1 game day = 60 real seconds
+    const INCOME_PER_RESIDENT_PER_DAY = 10;
+    const SECONDS_PER_DAY = 1; // 1 game day = 1 real second
     const AREA_PER_RESIDENT = 25; // m^2
     const METERS_PER_FLOOR_DEFAULT = 3;
+
+    // Gang wage offer (per member per day) & gang availability
+    const MIN_WAGE = 50; // $50 corresponds to 1% population willing
+    const PERCENT_PER_INCREMENT = 0.01; // 1% per $10 increment
+    let wageOffer = parseInt(wageSlider.value, 10); // initial wage per member per day
+    let maxGangMembers = 0; // will be computed based on totalResidents
+
+    function computeMaxGangMembers() {
+        if (wageOffer < MIN_WAGE) return 0;
+        const increments = Math.floor((wageOffer - MIN_WAGE) / 10) + 1; // 50->1, 60->2, etc.
+        const willingPercent = increments * PERCENT_PER_INCREMENT; // convert to fraction
+        const calc = Math.floor(totalResidents * willingPercent);
+        return Math.max(1, calc);
+    }
+
+    // Initialise max gang members at startup
+    maxGangMembers = computeMaxGangMembers();
+
+    function updateGangUI() {
+        wageDisplayEl.textContent = wageOffer;
+        gangMaxEl.textContent = maxGangMembers;
+        gangCountEl.textContent = hqMarkers.length;
+    }
+    updateGangUI();
+
+    wageSlider.addEventListener('input', () => {
+        wageOffer = parseInt(wageSlider.value, 10);
+        maxGangMembers = computeMaxGangMembers();
+        updateGangUI();
+        plantHqBtn.disabled = hqMarkers.length >= maxGangMembers;
+    });
 
     // Find all the road layers to make them interactive
     const roadLayers = map.getStyle().layers
@@ -185,6 +221,10 @@ map.on('load', () => {
     // --- CORE LOGIC ---
 
     function plantHQ(coords) {
+        if (hqMarkers.length >= maxGangMembers) {
+            alert('Not enough gang members. Increase wage offer to recruit more.');
+            return;
+        }
         // 1) Add a marker for the new flag
         const marker = new mapboxgl.Marker().setLngLat(coords).addTo(map);
         hqMarkers.push(marker);
@@ -219,6 +259,8 @@ map.on('load', () => {
             updateControlledRoadsFromOverpass(circle, coords);
             updateControlledBuildingsFromOverpass(circle, coords);
         }
+        maxGangMembers = computeMaxGangMembers();
+        updateGangUI();
     }
 
     async function updateControlledRoadsFromOverpass(circle, coords) {
@@ -378,6 +420,9 @@ map.on('load', () => {
             if (added) {
                 buildingCountEl.textContent = controlledBuildingIds.size;
                 map.getSource('controlled-buildings').setData({ type: 'FeatureCollection', features: controlledBuildingFeatures });
+                // Recompute max gang members since population changed
+                maxGangMembers = computeMaxGangMembers();
+                updateGangUI();
                 // totalResidents can be used in future for income calculations
             }
         } catch (err) {
@@ -400,14 +445,15 @@ map.on('load', () => {
     }
     updateDateDisplay();
 
-    // Update bank balance every second, using residents rather than building count
+    // Update bank balance every real second.
     setInterval(() => {
-        const incomePerSecond = (INCOME_PER_RESIDENT_PER_DAY / SECONDS_PER_DAY) * totalResidents;
-        bankBalance += incomePerSecond;
+        const incomePerSecond = (INCOME_PER_RESIDENT_PER_DAY / SECONDS_PER_DAY) * totalResidents; // = totalResidents
+        const wagesPerSecond = hqMarkers.length * wageOffer; // wage per gang member per day
+        bankBalance += incomePerSecond - wagesPerSecond;
         bankBalanceEl.textContent = bankBalance.toFixed(2);
     }, 1000);
 
-    // Advance game date every game day (60s)
+    // Advance game date every game day (now every 1s)
     setInterval(() => {
         // add one day
         gameDate.setDate(gameDate.getDate() + 1);
