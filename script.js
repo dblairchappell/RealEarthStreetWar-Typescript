@@ -1,9 +1,13 @@
 // Game logic will go here
 
-mapboxgl.accessToken = 'pk.eyJ1Ijoic3RyZWV0d2FyZ2FtZSIsImEiOiJjbWNleGxyaXAwMmpiMnFzY3ZrcjZ5bzZoIn0.XV6-STLYBkq8osAE4FD_7g';
-const map = new mapboxgl.Map({
+// MapLibre GL JS doesn't require an access token for open data sources
+const map = new maplibregl.Map({
     container: 'map', // container ID
-    style: 'mapbox://styles/mapbox/satellite-streets-v11', // satellite imagery plus full vector layers
+    // Alternative free styles you can try:
+    // style: 'https://demotiles.maplibre.org/style.json', // Free MapLibre demo style
+    style: 'https://tiles.openfreemap.org/styles/liberty', // OpenFreeMap Liberty style (better building data)
+    // style: 'https://tiles.openfreemap.org/styles/positron', // OpenFreeMap Positron style  
+    // style: 'https://tiles.openfreemap.org/styles/bright', // OpenFreeMap Bright style
     center: [-74.5, 40], // starting position [lng, lat]
     zoom: 13, // start a bit closer to see details
     pitch: 60, // tilt for 3-D perspective
@@ -13,39 +17,61 @@ const map = new mapboxgl.Map({
 
 map.on('load', () => {
     // ---------------- 3-D TERRAIN & BUILDINGS ----------------
-    // Add DEM source for terrain relief (optional; comment out if not desired)
-    if (!map.getSource('mapbox-dem')) {
-        map.addSource('mapbox-dem', {
-            type: 'raster-dem',
-            url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
-            tileSize: 512,
-            maxzoom: 14
-        });
-        map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.2 });
-    }
-
-    // Insert a 3-D buildings layer (fill-extrusion) beneath symbol layers so labels stay on top
-    const labelLayer = map.getStyle().layers.find(l => l.type === 'symbol' && l.layout && l.layout['text-field']);
-    if (!map.getLayer('3d-buildings')) {
-        map.addLayer({
-            id: '3d-buildings',
-            source: 'composite',
-            'source-layer': 'building',
-            type: 'fill-extrusion',
-            minzoom: 15,
-            filter: ['has', 'height'],
-            paint: {
-                'fill-extrusion-color': [
-                    'interpolate', ['linear'], ['get', 'height'],
-                    0, '#d1d1d1',
-                    100, '#c0c0c0',
-                    300, '#b0b0b0'
-                ],
-                'fill-extrusion-height': ['get', 'height'],
-                'fill-extrusion-base': ['coalesce', ['get', 'min_height'], 0],
-                'fill-extrusion-opacity': 0.6
+    // Note: 3D terrain and buildings may not be available with all free styles
+    // The demo style might not have building height data, so we'll make this optional
+    
+    // Check what sources are actually available in the loaded style
+    const sources = map.getStyle().sources;
+    console.log('Available sources:', Object.keys(sources));
+    
+    let buildingSourceName = null;
+    let buildingSourceLayer = 'building';
+    
+    // Try to find a source that has building data
+    if (sources['openmaptiles']) {
+        buildingSourceName = 'openmaptiles';
+    } else if (sources['composite']) {
+        buildingSourceName = 'composite';
+    } else {
+        // Look for any source that might have building data
+        for (const [sourceName, sourceConfig] of Object.entries(sources)) {
+            if (sourceConfig.type === 'vector') {
+                buildingSourceName = sourceName;
+                break;
             }
-        }, labelLayer ? labelLayer.id : undefined);
+        }
+    }
+    
+    // Try to add 3D buildings if the data is available
+    const layers = map.getStyle().layers;
+    const labelLayer = layers.find(l => l.type === 'symbol' && l.layout && l.layout['text-field']);
+    
+    // Check if we have building data in the style for 3D buildings
+    if (buildingSourceName && !map.getLayer('3d-buildings')) {
+        try {
+            map.addLayer({
+                id: '3d-buildings',
+                source: buildingSourceName,
+                'source-layer': 'building',
+                type: 'fill-extrusion',
+                minzoom: 15,
+                filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['has', 'height']],
+                paint: {
+                    'fill-extrusion-color': [
+                        'interpolate', ['linear'], ['get', 'height'],
+                        0, '#d1d1d1',
+                        100, '#c0c0c0',
+                        300, '#b0b0b0'
+                    ],
+                    'fill-extrusion-height': ['get', 'height'],
+                    'fill-extrusion-base': ['coalesce', ['get', 'min_height'], 0],
+                    'fill-extrusion-opacity': 1
+                }
+            }, labelLayer ? labelLayer.id : undefined);
+            console.log('3D buildings layer added');
+        } catch (e) {
+            console.log('3D buildings not available with this style:', e);
+        }
     }
 
     const infoPanel = document.getElementById('info-panel');
@@ -113,24 +139,46 @@ map.on('load', () => {
     });
 
     // Find all the road layers to make them interactive
-    const roadLayers = map.getStyle().layers
+    // Look for any line layers that might represent roads
+    const allLayers = map.getStyle().layers;
+    console.log('Available layers:', allLayers.map(l => `${l.id} (${l.type}, source: ${l.source})`));
+    
+    const roadLayers = allLayers
         .filter(layer =>
             layer.type === 'line' &&
-            layer.source === 'composite' &&
+            layer.source && // has a source
             layer['source-layer'] &&
-            (layer['source-layer'].startsWith('road') || layer['source-layer'].startsWith('bridge')) &&
-            !layer.id.includes('casing')
+            (layer['source-layer'].includes('road') || 
+             layer['source-layer'].includes('transportation') || 
+             layer['source-layer'].includes('bridge') ||
+             layer.id.includes('road') ||
+             layer.id.includes('street') ||
+             layer.id.includes('highway')) &&
+            !layer.id.includes('casing') &&
+            !layer.id.includes('label')
         )
         .map(layer => layer.id);
+    
+    console.log('Road layers found:', roadLayers);
 
     // Add an invisible fill layer dedicated to hit-testing buildings; this works regardless of style visibility
-    map.addLayer({
-        id: 'building-hit',
-        type: 'fill',
-        source: 'composite',
-        'source-layer': 'building',
-        paint: { 'fill-opacity': 0 }
-    });
+    // Use the building source we detected earlier
+    if (buildingSourceName) {
+        try {
+            map.addLayer({
+                id: 'building-hit',
+                type: 'fill',
+                source: buildingSourceName,
+                'source-layer': buildingSourceLayer,
+                paint: { 'fill-opacity': 0 }
+            });
+            console.log(`Building layer added using source: ${buildingSourceName}`);
+        } catch (e) {
+            console.log('Building layer not available with this source:', e);
+        }
+    } else {
+        console.log('No suitable vector source found for buildings');
+    }
 
     // Use this layer exclusively for hovering / clicks
     const buildingLayers = ['building-hit'];
@@ -205,7 +253,7 @@ map.on('load', () => {
         layout: {
             'text-field': ['to-string', ['get', 'pop_est']],
             'text-size': 12,
-            'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold']
+            'text-font': ['Noto Sans Regular', 'Arial Unicode MS Regular']
         },
         paint: {
             'text-color': '#111',
@@ -264,9 +312,8 @@ map.on('load', () => {
         }
         map.getSource('selected-building').setData(buildingFeature);
 
-        // Use the building centroid as the flag position
-        const centroid = turf.centroid(buildingFeature).geometry.coordinates;
-        const coords = { lng: centroid[0], lat: centroid[1] };
+        // Use the exact click position instead of building centroid for better accuracy
+        const coords = { lng: e.lngLat.lng, lat: e.lngLat.lat };
         plantHQ(coords, buildingFeature);
 
         isPlanting = false;
@@ -295,7 +342,7 @@ map.on('load', () => {
             const el = document.createElement('div');
             el.className = 'gang-marker';
             el.textContent = '1';
-            marker = new mapboxgl.Marker(el).setLngLat(coords).addTo(map);
+            marker = new maplibregl.Marker(el).setLngLat(coords).addTo(map);
             if (bId != null) {
                 buildingGangData[bId] = { count: 1, marker, element: el };
             }
