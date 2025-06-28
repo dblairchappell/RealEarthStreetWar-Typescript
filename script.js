@@ -26,10 +26,14 @@ map.on('load', () => {
     let playerUnion = null;          // GeoJSON Polygon/MultiPolygon representing union of all circles
     let controlledFeatures = [];     // accumulated road segments already highlighted
     const controlledBuildingIds = new Set();
+    const controlledBuildingFeatures = [];
+    let totalResidents = 0;
 
-    const INFLUENCE_RADIUS_KM = 0.5; // 500 meters
-    const INCOME_PER_BUILDING_PER_DAY = 10;
+    const INFLUENCE_RADIUS_KM = 0.2; // 200 meters
+    const INCOME_PER_RESIDENT_PER_DAY = 1;
     const SECONDS_PER_DAY = 60; // 1 game day = 60 real seconds
+    const AREA_PER_RESIDENT = 25; // m^2
+    const METERS_PER_FLOOR_DEFAULT = 3;
 
     // Find all the road layers to make them interactive
     const roadLayers = map.getStyle().layers
@@ -106,6 +110,25 @@ map.on('load', () => {
             'line-color': '#fa9005',
             'line-width': 5
         }
+    });
+
+    // After existing sources and layers setup, add one for controlled buildings labels
+    map.addSource('controlled-buildings', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    map.addLayer({
+        id: 'controlled-building-labels',
+        type: 'symbol',
+        source: 'controlled-buildings',
+        layout: {
+            'text-field': ['to-string', ['get', 'pop_est']],
+            'text-size': 12,
+            'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold']
+        },
+        paint: {
+            'text-color': '#111',
+            'text-halo-color': '#ffffff',
+            'text-halo-width': 1
+        },
+        minzoom: 15
     });
 
     // --- UI EVENT LISTENERS ---
@@ -317,23 +340,46 @@ map.on('load', () => {
 
     async function updateControlledBuildingsFromOverpass(circle, coords) {
         const radiusM = INFLUENCE_RADIUS_KM * 1000;
-        const query = `[out:json][timeout:25];(way["building"](around:${radiusM},${coords.lat},${coords.lng});relation["building"](around:${radiusM},${coords.lat},${coords.lng}););out geom;`;
+        const query = `[out:json][timeout:25];(way["building"](around:${radiusM},${coords.lat},${coords.lng});relation["building"](around:${radiusM},${coords.lat},${coords.lng}););out geom tags;`;
         const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
         try {
             const resp = await fetch(url);
             const data = await resp.json();
             const geojson = osmtogeojson(data);
+            let added = false;
             geojson.features.forEach(f => {
                 const id = f.id || (f.properties && f.properties.id);
                 if (!id) return;
                 if (controlledBuildingIds.has(id)) return; // already counted
-                // ensure the building is truly within current union (in case of overlap queries)
                 const centroid = turf.centroid(f).geometry.coordinates;
-                if (playerUnion && turf.booleanPointInPolygon(turf.point(centroid), playerUnion)) {
-                    controlledBuildingIds.add(id);
+                if (!(playerUnion && turf.booleanPointInPolygon(turf.point(centroid), playerUnion))) {
+                    return; // skip if not actually inside
                 }
+
+                // Estimate population
+                const area = turf.area(f); // in m^2
+                let levels = parseFloat(f.properties["building:levels"]);
+                if (!levels || isNaN(levels)) {
+                    const height = parseFloat(f.properties.height);
+                    if (height && !isNaN(height)) {
+                        levels = height / METERS_PER_FLOOR_DEFAULT;
+                    }
+                }
+                if (!levels || isNaN(levels)) levels = 2; // fallback
+                const pop_est = Math.max(1, Math.round((area * levels) / AREA_PER_RESIDENT));
+
+                // Attach and store
+                f.properties = { ...f.properties, pop_est };
+                controlledBuildingIds.add(id);
+                controlledBuildingFeatures.push(f);
+                totalResidents += pop_est;
+                added = true;
             });
-            buildingCountEl.textContent = controlledBuildingIds.size;
+            if (added) {
+                buildingCountEl.textContent = controlledBuildingIds.size;
+                map.getSource('controlled-buildings').setData({ type: 'FeatureCollection', features: controlledBuildingFeatures });
+                // totalResidents can be used in future for income calculations
+            }
         } catch (err) {
             console.error('Failed to fetch buildings from Overpass', err);
         }
@@ -354,9 +400,9 @@ map.on('load', () => {
     }
     updateDateDisplay();
 
-    // Update bank balance every second
+    // Update bank balance every second, using residents rather than building count
     setInterval(() => {
-        const incomePerSecond = (INCOME_PER_BUILDING_PER_DAY / SECONDS_PER_DAY) * controlledBuildingIds.size;
+        const incomePerSecond = (INCOME_PER_RESIDENT_PER_DAY / SECONDS_PER_DAY) * totalResidents;
         bankBalance += incomePerSecond;
         bankBalanceEl.textContent = bankBalance.toFixed(2);
     }, 1000);
