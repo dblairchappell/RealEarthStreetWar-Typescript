@@ -3,7 +3,7 @@
 mapboxgl.accessToken = 'pk.eyJ1Ijoic3RyZWV0d2FyZ2FtZSIsImEiOiJjbWNleGxyaXAwMmpiMnFzY3ZrcjZ5bzZoIn0.XV6-STLYBkq8osAE4FD_7g';
 const map = new mapboxgl.Map({
     container: 'map', // container ID
-    style: 'mapbox://styles/mapbox/streets-v11', // style URL
+    style: 'mapbox://styles/mapbox/satellite-streets-v11', // satellite imagery plus full vector layers
     center: [-74.5, 40], // starting position [lng, lat]
     zoom: 13 // start a bit closer to see details
 });
@@ -17,6 +17,7 @@ map.on('load', () => {
     const refreshBtn = document.getElementById('refresh-map-btn');
     const buildingCountEl = document.getElementById('building-count');
     const bankBalanceEl = document.getElementById('bank-balance');
+    const residentCountEl = document.getElementById('resident-count');
     const dateEl = document.getElementById('game-date');
     const wageSlider = document.getElementById('wage-slider');
     const wageDisplayEl = document.getElementById('wage-display');
@@ -61,6 +62,7 @@ map.on('load', () => {
         wageDisplayEl.textContent = wageOffer;
         gangMaxEl.textContent = maxGangMembers;
         gangCountEl.textContent = hqMarkers.length;
+        residentCountEl.textContent = totalResidents;
     }
     updateGangUI();
 
@@ -82,10 +84,17 @@ map.on('load', () => {
         )
         .map(layer => layer.id);
 
-    // Find building layers for hit-testing
-    const buildingLayers = map.getStyle().layers
-        .filter(l => l.type === 'fill' && l.source === 'composite' && l["source-layer"] && l["source-layer"].startsWith('building'))
-        .map(l => l.id);
+    // Add an invisible fill layer dedicated to hit-testing buildings; this works regardless of style visibility
+    map.addLayer({
+        id: 'building-hit',
+        type: 'fill',
+        source: 'composite',
+        'source-layer': 'building',
+        paint: { 'fill-opacity': 0 }
+    });
+
+    // Use this layer exclusively for hovering / clicks
+    const buildingLayers = ['building-hit'];
 
     // Add a single source and layer for highlighting the selected road.
     // This is simpler and more reliable than modifying map styles at runtime.
