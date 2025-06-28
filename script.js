@@ -3,11 +3,8 @@
 // MapLibre GL JS doesn't require an access token for open data sources
 const map = new maplibregl.Map({
     container: 'map', // container ID
-    // Alternative free styles you can try:
-    // style: 'https://demotiles.maplibre.org/style.json', // Free MapLibre demo style
-    style: 'https://tiles.openfreemap.org/styles/liberty', // OpenFreeMap Liberty style (better building data)
-    // style: 'https://tiles.openfreemap.org/styles/positron', // OpenFreeMap Positron style  
-    // style: 'https://tiles.openfreemap.org/styles/bright', // OpenFreeMap Bright style
+    // Using Carto Voyager style - a high-quality, free style with building data
+    style: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
     center: [-74.5, 40], // starting position [lng, lat]
     zoom: 13, // start a bit closer to see details
     pitch: 60, // tilt for 3-D perspective
@@ -15,64 +12,99 @@ const map = new maplibregl.Map({
     antialias: true // smoother edges on extrusions
 });
 
+// Handle missing images and fonts gracefully
+map.on('styleimagemissing', (e) => {
+    // Create a dummy-placeholder image for any missing icons
+    const width = 1;
+    const height = 1;
+    const data = new Uint8Array([0, 0, 0, 0]);
+    if (!map.hasImage(e.id)) {
+        map.addImage(e.id, { width, height, data });
+    }
+});
+
+map.on('error', (e) => {
+    // Suppress font loading errors. The map will fall back to other fonts.
+    if (e.error && e.error.message && e.error.message.includes('font')) {
+        console.warn('Font loading error (suppressed):', e.error.message);
+        return;
+    }
+    console.error('A map error occurred:', e);
+});
+
 map.on('load', () => {
-    // ---------------- 3-D TERRAIN & BUILDINGS ----------------
-    // Note: 3D terrain and buildings may not be available with all free styles
-    // The demo style might not have building height data, so we'll make this optional
-    
+    // Find a reliable anchor layer from the style to insert our custom layers before.
+    const allMapLayers = map.getStyle().layers;
+    let anchorLayerId;
+    const topLabelLayerIds = ['place-labels-major', 'road-labels', 'water-labels'];
+    for (const id of topLabelLayerIds) {
+        if (allMapLayers.some(l => l.id.startsWith(id))) {
+            anchorLayerId = allMapLayers.find(l => l.id.startsWith(id)).id;
+            break;
+        }
+    }
+    if (!anchorLayerId) {
+        const firstSymbol = allMapLayers.find(l => l.type === 'symbol');
+        anchorLayerId = firstSymbol ? firstSymbol.id : undefined;
+    }
+    console.log(`Using anchor layer for custom layers: ${anchorLayerId}`);
+
     // Check what sources are actually available in the loaded style
     const sources = map.getStyle().sources;
-    console.log('Available sources:', Object.keys(sources));
-    
-    let buildingSourceName = null;
-    let buildingSourceLayer = 'building';
-    
-    // Try to find a source that has building data
-    if (sources['openmaptiles']) {
-        buildingSourceName = 'openmaptiles';
-    } else if (sources['composite']) {
-        buildingSourceName = 'composite';
-    } else {
-        // Look for any source that might have building data
-        for (const [sourceName, sourceConfig] of Object.entries(sources)) {
-            if (sourceConfig.type === 'vector') {
-                buildingSourceName = sourceName;
-                break;
-            }
-        }
+    let buildingSourceName = 'carto'; // Default for the current style
+    if (!sources['carto']) {
+        // Fallback if the source name is different
+        const vectorSource = Object.keys(sources).find(s => sources[s].type === 'vector');
+        if (vectorSource) buildingSourceName = vectorSource;
     }
     
-    // Try to add 3D buildings if the data is available
-    const layers = map.getStyle().layers;
-    const labelLayer = layers.find(l => l.type === 'symbol' && l.layout && l.layout['text-field']);
-    
-    // Check if we have building data in the style for 3D buildings
-    if (buildingSourceName && !map.getLayer('3d-buildings')) {
-        try {
-            map.addLayer({
-                id: '3d-buildings',
-                source: buildingSourceName,
-                'source-layer': 'building',
-                type: 'fill-extrusion',
-                minzoom: 15,
-                filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['has', 'height']],
-                paint: {
-                    'fill-extrusion-color': [
-                        'interpolate', ['linear'], ['get', 'height'],
-                        0, '#d1d1d1',
-                        100, '#c0c0c0',
-                        300, '#b0b0b0'
-                    ],
-                    'fill-extrusion-height': ['get', 'height'],
-                    'fill-extrusion-base': ['coalesce', ['get', 'min_height'], 0],
-                    'fill-extrusion-opacity': 1
-                }
-            }, labelLayer ? labelLayer.id : undefined);
-            console.log('3D buildings layer added');
-        } catch (e) {
-            console.log('3D buildings not available with this style:', e);
+    // Add 2D building footprints first.
+    map.addLayer({
+        id: 'building-footprints',
+        source: buildingSourceName,
+        'source-layer': 'building',
+        type: 'fill',
+        minzoom: 13,
+        paint: {
+            'fill-color': '#cccccc',
+            'fill-opacity': 0.1
         }
-    }
+    });
+
+    // Add 3D buildings on top of the footprints.
+    map.addLayer({
+        id: '3d-buildings',
+        source: buildingSourceName,
+        'source-layer': 'building',
+        type: 'fill-extrusion',
+        minzoom: 14,
+        filter: ['==', ['geometry-type'], 'Polygon'],
+        paint: {
+            'fill-extrusion-color': '#dcdcdc',
+            'fill-extrusion-height': [
+                'case',
+                ['>', ['to-number', ['get', 'height']], 0],
+                ['to-number', ['get', 'height']],
+                5
+            ],
+            'fill-extrusion-base': 0,
+            'fill-extrusion-opacity': 1
+        }
+    }, 'building-footprints'); // Insert after footprints
+
+    // Add outlines on top of everything for a clean look.
+    map.addLayer({
+        id: 'building-outlines',
+        source: buildingSourceName,
+        'source-layer': 'building',
+        type: 'line',
+        minzoom: 13,
+        paint: {
+            'line-color': '#333333',
+            'line-width': 2,
+            'line-opacity': 1
+        }
+    }, '3d-buildings'); // Insert after 3D buildings
 
     const infoPanel = document.getElementById('info-panel');
     const roadNameEl = document.getElementById('road-name');
@@ -140,10 +172,7 @@ map.on('load', () => {
 
     // Find all the road layers to make them interactive
     // Look for any line layers that might represent roads
-    const allLayers = map.getStyle().layers;
-    console.log('Available layers:', allLayers.map(l => `${l.id} (${l.type}, source: ${l.source})`));
-    
-    const roadLayers = allLayers
+    const roadLayers = map.getStyle().layers
         .filter(layer =>
             layer.type === 'line' &&
             layer.source && // has a source
@@ -169,7 +198,7 @@ map.on('load', () => {
                 id: 'building-hit',
                 type: 'fill',
                 source: buildingSourceName,
-                'source-layer': buildingSourceLayer,
+                'source-layer': 'building',
                 paint: { 'fill-opacity': 0 }
             });
             console.log(`Building layer added using source: ${buildingSourceName}`);
@@ -228,7 +257,7 @@ map.on('load', () => {
         source: 'influence-area',
         paint: {
             'fill-color': '#007bff',
-            'fill-opacity': 0.1
+            'fill-opacity': 0.2
         }
     });
 
@@ -253,7 +282,7 @@ map.on('load', () => {
         layout: {
             'text-field': ['to-string', ['get', 'pop_est']],
             'text-size': 12,
-            'text-font': ['Noto Sans Regular', 'Arial Unicode MS Regular']
+            'text-font': ['sans-serif']
         },
         paint: {
             'text-color': '#111',
