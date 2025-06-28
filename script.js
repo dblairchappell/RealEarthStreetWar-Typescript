@@ -3,8 +3,8 @@
 // MapLibre GL JS doesn't require an access token for open data sources
 const map = new maplibregl.Map({
     container: 'map', // container ID
-    // Using Carto Voyager style - a high-quality, free style with building data
-    style: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
+    // Using a local style file for full control and customization
+    style: 'map-style.json',
     center: [-74.5, 40], // starting position [lng, lat]
     zoom: 13, // start a bit closer to see details
     pitch: 60, // tilt for 3-D perspective
