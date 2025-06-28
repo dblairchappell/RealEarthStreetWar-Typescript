@@ -212,7 +212,7 @@ map.on('load', () => {
         source: 'selected-building',
         paint: {
             'fill-color': '#ffeb3b',
-            'fill-opacity': 0.4
+            'fill-opacity': 0
         }
     });
 
@@ -228,7 +228,7 @@ map.on('load', () => {
         source: 'influence-area',
         paint: {
             'fill-color': '#007bff',
-            'fill-opacity': 0.2
+            'fill-opacity': 0.1
         }
     });
 
