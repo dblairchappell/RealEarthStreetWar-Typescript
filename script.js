@@ -5,10 +5,49 @@ const map = new mapboxgl.Map({
     container: 'map', // container ID
     style: 'mapbox://styles/mapbox/satellite-streets-v11', // satellite imagery plus full vector layers
     center: [-74.5, 40], // starting position [lng, lat]
-    zoom: 13 // start a bit closer to see details
+    zoom: 13, // start a bit closer to see details
+    pitch: 60, // tilt for 3-D perspective
+    bearing: -20, // slight rotation for depth perception
+    antialias: true // smoother edges on extrusions
 });
 
 map.on('load', () => {
+    // ---------------- 3-D TERRAIN & BUILDINGS ----------------
+    // Add DEM source for terrain relief (optional; comment out if not desired)
+    if (!map.getSource('mapbox-dem')) {
+        map.addSource('mapbox-dem', {
+            type: 'raster-dem',
+            url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
+            tileSize: 512,
+            maxzoom: 14
+        });
+        map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.2 });
+    }
+
+    // Insert a 3-D buildings layer (fill-extrusion) beneath symbol layers so labels stay on top
+    const labelLayer = map.getStyle().layers.find(l => l.type === 'symbol' && l.layout && l.layout['text-field']);
+    if (!map.getLayer('3d-buildings')) {
+        map.addLayer({
+            id: '3d-buildings',
+            source: 'composite',
+            'source-layer': 'building',
+            type: 'fill-extrusion',
+            minzoom: 15,
+            filter: ['has', 'height'],
+            paint: {
+                'fill-extrusion-color': [
+                    'interpolate', ['linear'], ['get', 'height'],
+                    0, '#d1d1d1',
+                    100, '#c0c0c0',
+                    300, '#b0b0b0'
+                ],
+                'fill-extrusion-height': ['get', 'height'],
+                'fill-extrusion-base': ['coalesce', ['get', 'min_height'], 0],
+                'fill-extrusion-opacity': 0.6
+            }
+        }, labelLayer ? labelLayer.id : undefined);
+    }
+
     const infoPanel = document.getElementById('info-panel');
     const roadNameEl = document.getElementById('road-name');
     const roadTypeEl = document.getElementById('road-type');
