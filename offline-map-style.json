@@ -11,7 +11,7 @@
     }
   },
   "sprite": "https://tiles.basemaps.cartocdn.com/gl/voyager-gl-style/sprite",
-  "glyphs": "https://tiles.basemaps.cartocdn.com/fonts/{fontstack}/{range}.pbf",
+  "glyphs": "/fonts/{fontstack}/{range}.pbf",
   "layers": [
     {
       "id": "background",
@@ -252,7 +252,7 @@
       "minzoom": 10,
       "layout": {
         "text-field": ["get", "name"],
-        "text-font": ["Open Sans Regular"],
+        "text-font": ["Noto Sans Regular"],
         "text-size": 12,
         "text-max-width": 8,
         "symbol-placement": "line"
@@ -272,7 +272,7 @@
       "minzoom": 15,
       "layout": {
         "text-field": ["get", "name"],
-        "text-font": ["Open Sans Regular"],
+        "text-font": ["Noto Sans Regular"],
         "text-size": 10,
         "symbol-placement": "line",
         "text-rotation-alignment": "map"
@@ -292,7 +292,7 @@
       "minzoom": 12,
       "layout": {
         "text-field": ["get", "name"],
-        "text-font": ["Open Sans Bold"],
+        "text-font": ["Noto Sans Medium"],
         "text-size": {
           "stops": [[12, 10], [16, 14]]
         },
@@ -313,7 +313,7 @@
       "filter": ["==", "class", "city"],
       "layout": {
         "text-field": ["get", "name"],
-        "text-font": ["Open Sans Bold"],
+        "text-font": ["Noto Sans Medium"],
         "text-size": {
           "stops": [[6, 12], [12, 18]]
         },
@@ -334,7 +334,7 @@
       "minzoom": 8,
       "layout": {
         "text-field": ["get", "name"],
-        "text-font": ["Open Sans Semibold"],
+        "text-font": ["Noto Sans Medium"],
         "text-size": {
           "stops": [[8, 10], [14, 16]]
         },
@@ -355,7 +355,7 @@
       "minzoom": 10,
       "layout": {
         "text-field": ["get", "name"],
-        "text-font": ["Open Sans Regular"],
+        "text-font": ["Noto Sans Regular"],
         "text-size": {
           "stops": [[10, 9], [16, 14]]
         },
@@ -375,7 +375,7 @@
       "minzoom": 14,
       "layout": {
         "text-field": ["get", "name"],
-        "text-font": ["Open Sans Regular"],
+        "text-font": ["Noto Sans Regular"],
         "text-size": 10,
         "text-anchor": "top",
         "text-offset": [0, 0.5]

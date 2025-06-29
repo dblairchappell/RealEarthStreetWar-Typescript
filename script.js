@@ -224,13 +224,7 @@ map.on('load', () => {
         layout: {
             'text-field': ['to-string', ['get', 'pop_est']],
             'text-size': 12,
-            'text-font': [
-                "Montserrat Regular",
-                "Open Sans Regular",
-                "Noto Sans Regular",
-                "HanWangHeiLight Regular",
-                "NanumBarunGothic Regular"
-            ]
+            'text-font': ["Noto Sans Regular"]
         },
         paint: {
             'text-color': '#111',
