@@ -6,68 +6,102 @@ This project is a prototype for a massively multiplayer online strategy game ins
 
 The core gameplay loop is intended to be:
 - **Territory Control:** Every street segment is a distinct, conquerable territory.
-- **Resource Generation:** Owning territories generates resources. The plan is to have resource generation tied to properties like the length of a road.
+- **Resource Generation:** Owning territories generates resources based on properties like population density and building footprints.
 - **Strategic Depth:** A street's defensibility is determined by how many other streets it connects to, creating natural choke points and strategic fronts.
 
 ## Current Status
 
-This repository contains a **frontend-only prototype** built with vanilla HTML, CSS, and JavaScript. It has evolved from a simple proof-of-concept into a more sophisticated game prototype with offline capabilities.
+This repository contains a **fully offline, frontend-only prototype** built with vanilla HTML, CSS, and JavaScript. The application runs entirely without internet connectivity using local map data and assets.
 
 **Current features include:**
-- **Complete Offline Mode**: 116MB New Jersey map data with all layers (buildings, roads, water, terrain)
-- Interactive 3D building visualization using local PMTiles data
-- HQ placement system with territory control mechanics
-- Population estimation and income calculation based on building footprints
-- Gang wage system with recruitment mechanics tied to population
-- Territory expansion through influence radius visualization
-- Real-time building and road control with visual feedback
-- Expansion pack system for additional regional data
-
-**Technical Evolution:**
-- Migrated from online Overpass API queries to local PMTiles files for performance
-- Implemented complete offline map rendering using OpenMapTiles schema
-- Added 3D building extrusions with height data from OpenStreetMap
-- Created territory control and resource management systems
+- **Complete Offline Operation**: 116MB New Jersey map data with all layers (buildings, roads, water, terrain, labels)
+- **3D Building Visualization**: Interactive building rendering with height data from local PMTiles
+- **HQ Placement System**: Territory control mechanics with influence radius visualization
+- **Population & Income Calculation**: Based on building footprints and density analysis
+- **Gang Recruitment System**: Wage-based recruitment tied to local population
+- **Territory Expansion**: Visual feedback for building and road control
+- **Local Asset Management**: All JavaScript libraries, fonts, and map data stored locally
 
 ## Technical Implementation
 
 ### Tech Stack
-- **HTML5, CSS3, JavaScript (ES6+):** The core technologies for the web client.
-- **MapLibre GL JS (`v3.6.2`):** The open-source mapping library used to render the high-performance, interactive map.
-  - The map style is loaded from the local file `map-style.json` (a lightly customised derivative of Carto's "Voyager" vector style).
-  - No access token is required because all map sources are open and MapLibre GL does not impose authentication.
-- **Overpass API:** A read-only API used to query up-to-date OpenStreetMap (OSM) data. The prototype sends queries to this API to get all "ways" (roads) within the user's current map view.
-- **osmtogeojson (`v3.0.0-beta.4`):** A small client-side library used to convert the raw JSON data from the Overpass API into standard GeoJSON, which MapLibre GL can ingest directly.
+- **HTML5, CSS3, JavaScript (ES6+):** Core web technologies for the client
+- **MapLibre GL JS (`v3.6.2`):** Open-source mapping library for high-performance map rendering
+- **PMTiles:** Vector tile format for efficient offline map data storage
+- **Local Assets:** All dependencies stored in `libs/` directory for offline operation
+
+### Data Sources
+- **Map Data**: Complete New Jersey dataset generated using Planetiler from OpenStreetMap
+- **Building Heights**: Extracted from OpenStreetMap `building:levels` and `height` tags
+- **Fonts**: Noto Sans font family in PBF format for offline text rendering
+- **No External Dependencies**: Zero network requests during normal operation
 
 ### Project Structure
-- `index.html`: The main entry point for the application. It sets up the basic page structure and includes all necessary CSS and JavaScript files.
-- `style.css`: Contains all custom styles for the UI elements, such as the title, buttons, and information panel.
-- `script.js`: The heart of the prototype. This file contains all the client-side logic:
-  - MapLibre map initialization.
-  - The click listener for the "Load Roads" button.
-  - The function to construct the Overpass API query and fetch data.
-  - Logic to add the road data to the map as two separate layers: one for unselected roads (`road-lines`) and one for the currently selected road (`selected-road-line`).
-  - The click handler for selecting a road, which populates the UI panel with its data.
-- `.gitignore`: Standard configuration to exclude files like `node_modules` and `.env` from version control, in preparation for future backend development.
+- `index.html`: Main application entry point
+- `style.css`: UI styling and layout
+- `script.js`: Core game logic and map interaction
+- `offline-map-style.json`: MapLibre style definition using local data sources
+- `libs/`: Local JavaScript libraries (MapLibre GL, PMTiles, Turf.js, etc.)
+- `fonts/`: Local font files in PBF format for map text rendering
+- `tiles/nj-complete.pmtiles`: Complete New Jersey map data (116MB)
+
+### Key Features
+- **Territory Control**: Click buildings to claim them for your gang
+- **Population Analysis**: Real-time calculation based on building footprints
+- **Resource Management**: Income generation tied to controlled territories
+- **3D Visualization**: Buildings rendered with realistic heights
+- **Offline First**: No internet connection required after initial setup
 
 ## How to Run the Project
 
-This is a static web project with no build process.
+This is a completely offline application with no build process required.
 
-1.  Ensure you have a working internet connection (to fetch map tiles and road data).
-2.  Simply open the `index.html` file in any modern web browser.
-3.  For best results, run it from a local web server (e.g., using the "Live Server" extension in VS Code), although it will also work via the `file:///` protocol.
+1. **No internet connection needed** - all assets are local
+2. **Start a local web server** in the project directory:
+   ```bash
+   python -m http.server 8000
+   ```
+   Or use any other local server (Live Server extension in VS Code, etc.)
+3. **Open your browser** to `http://localhost:8000`
+4. **Start playing** - click buildings to claim territory and build your gang
 
-## Next Steps (Where We Left Off)
+## Technical Evolution
 
-The project is at a point where the frontend proof-of-concept is solid. The next phase can proceed in several directions:
+The project has evolved through several phases:
 
-1.  **Continue Frontend Development:**
-    - Add a "Claim" button to the info panel. This would be the next logical step in the UI.
-    - Visually differentiate roads based on their type (e.g., `primary`, `residential`) using data-driven styling in MapLibre GL.
+1. **Online Prototype**: Originally used Carto CDN and Overpass API for live data
+2. **Hybrid Approach**: Migrated to local PMTiles for building data while keeping online base map
+3. **Full Offline**: Complete migration to local assets including:
+   - Local PMTiles data for all map layers
+   - Local JavaScript libraries
+   - Local font files
+   - Removed sprite dependencies (not needed)
+   - Clean error handling for missing tiles
 
-2.  **Begin Backend Development:** This is the most significant next step to turn the prototype into a true game. The proposed stack is:
-    - **Backend Framework:** Node.js (likely with a framework like Express or Fastify).
-    - **Database:** PostgreSQL with the **PostGIS** extension. This is critical for efficiently storing and querying the geospatial data of the roads and territory ownership.
+## Performance & Data
 
-The immediate next step we were considering was to **add a "Claim" button to the UI panel** as a final piece of frontend work before tackling the backend. 
+- **Map Data Size**: 116MB for complete New Jersey coverage
+- **Zoom Levels**: Supports zoom levels 0-14 with detailed building data
+- **Coverage Area**: All of New Jersey with building heights, roads, water, and terrain
+- **Load Time**: Fast initial load due to local assets
+- **Memory Usage**: Efficient vector tile rendering with on-demand loading
+
+## Next Steps
+
+The project is ready for the next phase of development:
+
+1. **Backend Development**:
+   - Node.js server with PostgreSQL + PostGIS
+   - Real-time multiplayer functionality
+   - Persistent territory ownership
+
+2. **Additional Regions**:
+   - Expand beyond New Jersey using the same PMTiles approach
+   - Multi-region gameplay mechanics
+
+3. **Enhanced Features**:
+   - Combat system between gangs
+   - Resource trading and economics
+   - Strategic alliance mechanics
+
+The offline foundation is solid and ready to support multiplayer backend integration.

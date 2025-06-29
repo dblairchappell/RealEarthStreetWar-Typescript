@@ -1,4 +1,5 @@
-// Game logic will go here
+// Real-Earth Street War - Fully Offline Game Logic
+// Uses local PMTiles data for all map features and territory control
 
 // Set up PMTiles protocol for loading .pmtiles files
 let protocol = new pmtiles.Protocol();
@@ -7,7 +8,7 @@ maplibregl.addProtocol("pmtiles", protocol.tile);
 // MapLibre GL JS doesn't require an access token for open data sources
 const map = new maplibregl.Map({
     container: 'map', // container ID
-    // Using complete offline style with local PMTiles data
+    // Using complete offline style with local PMTiles data, fonts, and no sprites
     style: 'offline-map-style.json',
     center: [-74.5, 40], // starting position [lng, lat]
     zoom: 13, // start a bit closer to see details
@@ -369,156 +370,101 @@ map.on('load', () => {
         // 5) Update influence fill layer to show the full territory
         map.getSource('influence-area').setData(playerUnion);
 
-        // 6) Fetch & highlight roads only for the new area (if any)
+        // 6) Update controlled roads and buildings using local data
         if (incrementalArea) {
-            updateControlledRoadsFromOverpass(circle, coords);
-            updateControlledBuildingsFromOverpass(circle, coords);
+            updateControlledRoadsFromLocal(circle, coords);
+            updateControlledBuildingsFromLocal(circle, coords);
         }
         maxGangMembers = computeMaxGangMembers();
         updateGangUI();
     }
 
-    async function updateControlledRoadsFromOverpass(circle, coords) {
-        const radiusM = INFLUENCE_RADIUS_KM * 1000;
-        const query = `[out:json][timeout:25];(
-            way["highway"~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|service|living_street|pedestrian|track|bus_guideway|escape|raceway|road|footway|bridleway|steps|corridor|path|cycleway|construction)$"](around:${radiusM},${coords.lat},${coords.lng});
-            way["highway"]["area"!="yes"](around:${radiusM},${coords.lat},${coords.lng});
-        );out geom;`;
-
-        const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+    function updateControlledRoadsFromLocal(circle, coords) {
+        // Query roads from local PMTiles using MapLibre's queryRenderedFeatures
+        // Get the bounding box of the circle for efficient querying
+        const bbox = turf.bbox(circle);
+        const sw = map.project([bbox[0], bbox[1]]);
+        const ne = map.project([bbox[2], bbox[3]]);
         
-        try {
-            const resp = await fetch(url);
-            const data = await resp.json();
-            const geojson = osmtogeojson(data);
-            console.log('Processing', geojson.features.length, 'roads...');
+        const roadFeatures = map.queryRenderedFeatures([
+            [sw.x, ne.y], // top-left
+            [ne.x, sw.y]  // bottom-right
+        ], {
+            layers: roadLayers // Use the road layers we identified earlier
+        });
 
-            const validRoads = [];
-            const centerLng = coords.lng;
-            const centerLat = coords.lat;
-            const cosLat = Math.cos(centerLat * Math.PI / 180); // for E-W distance scaling
-            const radiusKm = INFLUENCE_RADIUS_KM;
-            const radiusMeters = radiusKm * 1000;
-            const radiusSq = radiusMeters * radiusMeters;
+        console.log('Processing', roadFeatures.length, 'local roads...');
 
-            // Fast planar distance approximation (good for < ~10km radius)
-            function distSq(lon, lat) {
-                const dx = (lon - centerLng) * cosLat * 111_320; // meters per degree lon ≈ 111.32km * cos(lat)
-                const dy = (lat - centerLat) * 110_574;          // meters per degree lat ≈ 110.574km
-                return dx * dx + dy * dy; // squared distance in m^2
-            }
-
-            // Process each road and clip segments that fall within the circle
-            geojson.features.forEach(f => {
-                if (f.geometry.type !== 'LineString') return; // skip non-LineString geometries
-
-                const coordsArr = f.geometry.coordinates;
-                let currentLine = [];
-
-                for (let i = 0; i < coordsArr.length - 1; i++) {
-                    const [lon1, lat1] = coordsArr[i];
-                    const [lon2, lat2] = coordsArr[i + 1];
-
-                    const d1sq = distSq(lon1, lat1);
-                    const d2sq = distSq(lon2, lat2);
-
-                    const p1Inside = d1sq <= radiusSq;
-                    const p2Inside = d2sq <= radiusSq;
-
-                    // Helper to push a point into current line
-                    const pushPoint = (pt) => {
-                        if (currentLine.length === 0 || (currentLine[currentLine.length - 1][0] !== pt[0] || currentLine[currentLine.length - 1][1] !== pt[1])) {
-                            currentLine.push(pt);
+        const validRoads = [];
+        roadFeatures.forEach(feature => {
+            if (!feature.geometry || feature.geometry.type !== 'LineString') return;
+            
+            // Check if the road intersects with our circle
+            try {
+                const lineString = turf.lineString(feature.geometry.coordinates);
+                const intersects = turf.booleanIntersects(lineString, circle);
+                
+                if (intersects) {
+                    // Clip the road to only the part inside the circle
+                    try {
+                        const clipped = turf.lineIntersect(lineString, circle);
+                        if (clipped.features.length > 0) {
+                            validRoads.push(lineString);
                         }
-                    };
-
-                    if (p1Inside && p2Inside) {
-                        // Whole segment inside – add both endpoints
-                        pushPoint([lon1, lat1]);
-                        pushPoint([lon2, lat2]);
-                    } else if (p1Inside !== p2Inside) {
-                        // Segment crosses the circle boundary – find intersection by simple linear interpolation
-                        const dx = lon2 - lon1;
-                        const dy = lat2 - lat1;
-
-                        // Approximate along parameter t where distance equals radius
-                        // Use binary search to refine intersection (few iterations, cheap)
-                        let tLow = 0, tHigh = 1, tMid = 0;
-                        for (let iter = 0; iter < 6; iter++) { // 6 iterations ~1/64 precision, good enough
-                            tMid = (tLow + tHigh) / 2;
-                            const lonMid = lon1 + dx * tMid;
-                            const latMid = lat1 + dy * tMid;
-                            const dMidSq = distSq(lonMid, latMid);
-                            if ((p1Inside && dMidSq > radiusSq) || (!p1Inside && dMidSq <= radiusSq)) {
-                                tHigh = tMid;
-                            } else {
-                                tLow = tMid;
-                            }
-                        }
-                        const lonInt = lon1 + dx * tMid;
-                        const latInt = lat1 + dy * tMid;
-                        const intersection = [lonInt, latInt];
-
-                        // Add clipped segment part that lies inside
-                        if (p1Inside) {
-                            pushPoint([lon1, lat1]);
-                            pushPoint(intersection);
-                        } else {
-                            pushPoint(intersection);
-                            pushPoint([lon2, lat2]);
-                        }
-                    } else {
-                        // Both outside – flush current line if exists
-                        if (currentLine.length >= 2) {
-                            validRoads.push(turf.lineString(currentLine));
-                        }
-                        currentLine = [];
+                    } catch (err) {
+                        // If clipping fails, just add the whole road if it intersects
+                        validRoads.push(lineString);
                     }
                 }
-
-                // Flush any remaining line after finishing the road
-                if (currentLine.length >= 2) {
-                    validRoads.push(turf.lineString(currentLine));
-                }
-            });
-
-            console.log('Highlighted roads:', validRoads.length);
-            if (validRoads.length > 0) {
-                controlledFeatures.push(...validRoads);
-                map.getSource('controlled-roads').setData({
-                    type: 'FeatureCollection',
-                    features: controlledFeatures
-                });
+            } catch (err) {
+                console.warn('Error processing road feature:', err);
             }
-        } catch (e) {
-            console.error('Overpass fetch failed', e);
+        });
+
+        console.log('Highlighted roads:', validRoads.length);
+        if (validRoads.length > 0) {
+            controlledFeatures.push(...validRoads);
+            map.getSource('controlled-roads').setData({
+                type: 'FeatureCollection',
+                features: controlledFeatures
+            });
         }
     }
 
-    async function updateControlledBuildingsFromOverpass(circle, coords) {
-        const radiusM = INFLUENCE_RADIUS_KM * 1000;
-        const query = `[out:json][timeout:25];(way["building"](around:${radiusM},${coords.lat},${coords.lng});relation["building"](around:${radiusM},${coords.lat},${coords.lng}););out geom tags;`;
-        const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
-        try {
-            const resp = await fetch(url);
-            const data = await resp.json();
-            const geojson = osmtogeojson(data);
-            let added = false;
+    function updateControlledBuildingsFromLocal(circle, coords) {
+        // Query buildings from local PMTiles using MapLibre's queryRenderedFeatures
+        const bbox = turf.bbox(circle);
+        const sw = map.project([bbox[0], bbox[1]]);
+        const ne = map.project([bbox[2], bbox[3]]);
+        
+        const buildingFeatures = map.queryRenderedFeatures([
+            [sw.x, ne.y], // top-left
+            [ne.x, sw.y]  // bottom-right
+        ], {
+            layers: buildingLayers // Use building-hit layer
+        });
+
+        console.log('Processing', buildingFeatures.length, 'local buildings...');
+        let added = false;
+        
+        buildingFeatures.forEach(f => {
+            const id = f.id || (f.properties && f.properties.id) || 
+                      `building_${f.geometry.coordinates[0][0]}_${f.geometry.coordinates[0][1]}`;
             
-            geojson.features.forEach(f => {
-                const id = f.id || (f.properties && f.properties.id);
-                if (!id) return;
-                if (controlledBuildingIds.has(id)) return; // already counted
+            if (controlledBuildingIds.has(id)) return; // already counted
+            
+            // Check if building is inside the circle
+            try {
                 const centroid = turf.centroid(f).geometry.coordinates;
                 if (!(playerUnion && turf.booleanPointInPolygon(turf.point(centroid), playerUnion))) {
                     return; // skip if not actually inside
                 }
 
-                // Estimate population
+                // Estimate population using the same logic as before
                 const area = turf.area(f); // in m^2
-                let levels = parseFloat(f.properties["building:levels"]);
+                let levels = parseFloat(f.properties["building:levels"] || f.properties.levels);
                 if (!levels || isNaN(levels)) {
-                    const height = parseFloat(f.properties.height);
+                    const height = parseFloat(f.properties.height || f.properties.render_height);
                     if (height && !isNaN(height)) {
                         levels = height / METERS_PER_FLOOR_DEFAULT;
                     }
@@ -532,18 +478,18 @@ map.on('load', () => {
                 controlledBuildingFeatures.push(f);
                 totalResidents += pop_est;
                 added = true;
-            });
-            
-            if (added) {
-                buildingCountEl.textContent = controlledBuildingIds.size;
-                map.getSource('controlled-buildings').setData({ type: 'FeatureCollection', features: controlledBuildingFeatures });
-                // Recompute max gang members since population changed
-                maxGangMembers = computeMaxGangMembers();
-                updateGangUI();
-                // totalResidents can be used in future for income calculations
+            } catch (err) {
+                console.warn('Error processing building feature:', err);
             }
-        } catch (err) {
-            console.error('Failed to fetch buildings from Overpass:', err);
+        });
+        
+        if (added) {
+            buildingCountEl.textContent = controlledBuildingIds.size;
+            map.getSource('controlled-buildings').setData({ type: 'FeatureCollection', features: controlledBuildingFeatures });
+            // Recompute max gang members since population changed
+            maxGangMembers = computeMaxGangMembers();
+            updateGangUI();
+            // totalResidents can be used in future for income calculations
         }
     }
 
