@@ -11,14 +11,23 @@ The core gameplay loop is intended to be:
 
 ## Current Status
 
-This repository contains a **frontend-only prototype** built with vanilla HTML, CSS, and JavaScript. It is not yet a playable game but rather a proof-of-concept for the client-side map interface.
+This repository contains a **frontend-only prototype** built with vanilla HTML, CSS, and JavaScript. It has evolved from a simple proof-of-concept into a more sophisticated game prototype with offline capabilities.
 
 **Current features include:**
-- An interactive, full-screen map of the world using MapLibre GL JS.
-- The ability to dynamically fetch and display real-world road data for the current map view from OpenStreetMap.
-- A zoom-level check to prevent the application from fetching too much data and crashing.
-- Roads are rendered as distinct, selectable vector lines.
-- Clicking a road highlights it and displays its properties (Name, Type, OSM ID) in a UI panel.
+- **Complete Offline Mode**: 116MB New Jersey map data with all layers (buildings, roads, water, terrain)
+- Interactive 3D building visualization using local PMTiles data
+- HQ placement system with territory control mechanics
+- Population estimation and income calculation based on building footprints
+- Gang wage system with recruitment mechanics tied to population
+- Territory expansion through influence radius visualization
+- Real-time building and road control with visual feedback
+- Expansion pack system for additional regional data
+
+**Technical Evolution:**
+- Migrated from online Overpass API queries to local PMTiles files for performance
+- Implemented complete offline map rendering using OpenMapTiles schema
+- Added 3D building extrusions with height data from OpenStreetMap
+- Created territory control and resource management systems
 
 ## Technical Implementation
 

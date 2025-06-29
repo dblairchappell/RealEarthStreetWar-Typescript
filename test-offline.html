@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Offline Map - Real Earth Street War</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://unpkg.com/maplibre-gl@4.5.2/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@4.5.2/dist/maplibre-gl.css" rel="stylesheet">
+    <script src="https://unpkg.com/pmtiles@3.0.7/dist/pmtiles.js"></script>
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        #info { position: absolute; top: 10px; left: 10px; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 5px; font-family: Arial, sans-serif; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div id="info">
+        <h3>Offline Map Test</h3>
+        <p>Using: nj-complete.pmtiles (116MB)</p>
+        <p>Status: <span id="status">Loading...</span></p>
+    </div>
+
+    <script>
+        // Set up PMTiles protocol
+        let protocol = new pmtiles.Protocol();
+        maplibregl.addProtocol("pmtiles", protocol.tile);
+
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: 'offline-map-style.json',
+            center: [-74.5, 40],
+            zoom: 10,
+            pitch: 0,
+            bearing: 0
+        });
+
+        const statusEl = document.getElementById('status');
+
+        map.on('load', () => {
+            statusEl.textContent = 'Map loaded successfully!';
+            statusEl.style.color = 'green';
+            
+            // Add some debug info
+            const sources = map.getStyle().sources;
+            console.log('Map sources:', sources);
+            
+            const layers = map.getStyle().layers;
+            console.log('Map layers:', layers.map(l => l.id));
+        });
+
+        map.on('error', (e) => {
+            statusEl.textContent = 'Error loading map: ' + e.error.message;
+            statusEl.style.color = 'red';
+            console.error('Map error:', e);
+        });
+
+        map.on('click', (e) => {
+            const features = map.queryRenderedFeatures(e.point);
+            console.log('Features at click:', features);
+        });
+    </script>
+</body>
+</html> 

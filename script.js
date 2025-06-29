@@ -7,8 +7,8 @@ maplibregl.addProtocol("pmtiles", protocol.tile);
 // MapLibre GL JS doesn't require an access token for open data sources
 const map = new maplibregl.Map({
     container: 'map', // container ID
-    // Using a local style file for full control and customization
-    style: 'map-style.json',
+    // Using complete offline style with local PMTiles data
+    style: 'offline-map-style.json',
     center: [-74.5, 40], // starting position [lng, lat]
     zoom: 13, // start a bit closer to see details
     pitch: 60, // tilt for 3-D perspective
@@ -53,59 +53,22 @@ map.on('load', () => {
     }
     console.log(`Using anchor layer for custom layers: ${anchorLayerId}`);
 
-    // Add New Jersey PMTiles building source (replacing Carto buildings)
-    map.addSource('nj-buildings', {
-        type: 'vector',
-        url: 'pmtiles://nj.pmtiles'
-    });
+    // Buildings are now included in the offline map style
+    // We'll add game-specific building interaction layers on top
     
-    // Add 2D building footprints using PMTiles data
+    // Add enhanced building outlines for game interaction
     map.addLayer({
-        id: 'building-footprints',
-        source: 'nj-buildings',
-        'source-layer': 'building',
-        type: 'fill',
-        minzoom: 13,
-        paint: {
-            'fill-color': '#cccccc',
-            'fill-opacity': 0.1
-        }
-    });
-
-    // Add 3D buildings on top of the footprints using PMTiles data
-    map.addLayer({
-        id: '3d-buildings',
-        source: 'nj-buildings',
-        'source-layer': 'building',
-        type: 'fill-extrusion',
-        minzoom: 14,
-        filter: ['==', ['geometry-type'], 'Polygon'],
-        paint: {
-            'fill-extrusion-color': '#dcdcdc',
-            'fill-extrusion-height': [
-                'case',
-                ['>', ['to-number', ['get', 'render_height']], 0],
-                ['to-number', ['get', 'render_height']],
-                8
-            ],
-            'fill-extrusion-base': ['to-number', ['get', 'render_min_height']],
-            'fill-extrusion-opacity': 1
-        }
-    }, 'building-footprints'); // Insert after footprints
-
-    // Add outlines on top of everything for a clean look.
-    map.addLayer({
-        id: 'building-outlines',
-        source: 'nj-buildings',
+        id: 'building-outlines-game',
+        source: 'nj-complete',
         'source-layer': 'building',
         type: 'line',
         minzoom: 13,
         paint: {
             'line-color': '#333333',
-            'line-width': 2,
-            'line-opacity': 1
+            'line-width': 1.5,
+            'line-opacity': 0.8
         }
-    }, '3d-buildings'); // Insert after 3D buildings
+    }, anchorLayerId); // Insert before labels
 
     const infoPanel = document.getElementById('info-panel');
     const roadNameEl = document.getElementById('road-name');
@@ -195,7 +158,7 @@ map.on('load', () => {
     map.addLayer({
         id: 'building-hit',
         type: 'fill',
-        source: 'nj-buildings',
+        source: 'nj-complete',
         'source-layer': 'building',
         paint: { 'fill-opacity': 0 }
     });
