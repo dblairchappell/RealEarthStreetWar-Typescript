@@ -132,7 +132,7 @@ map.on('load', () => {
     const controlledBuildingFeatures = [];
     let totalResidents = 0;
 
-    const INFLUENCE_RADIUS_KM = 0.2; // 200 meters
+    const INFLUENCE_RADIUS_KM = 0.6; // 600 meters
     const INCOME_PER_RESIDENT_PER_DAY = 1;
     const SECONDS_PER_DAY = 1; // 1 game day = 1 real second
     const AREA_PER_RESIDENT = 25; // m^2
@@ -211,6 +211,7 @@ map.on('load', () => {
 
     // Use this layer exclusively for hovering / clicks
     const buildingLayers = ['building-hit'];
+    let lastDebuggedBuildingId = null;
 
     // Add a single source and layer for highlighting the selected road.
     // This is simpler and more reliable than modifying map styles at runtime.
@@ -298,9 +299,7 @@ map.on('load', () => {
         minzoom: 15
     });
 
-    // Map from building id -> { count, marker }
-    const buildingGangData = {};
-    let totalGangMembers = 0;
+    // Removed building-specific gang tracking - now each HQ is independent
     // Hide previously defined label layer if exists (from earlier version)
     if (map.getLayer('hq-building-gang-labels')) {
         map.setLayoutProperty('hq-building-gang-labels', 'visibility', 'none');
@@ -320,17 +319,55 @@ map.on('load', () => {
         window.location.href = url;
     });
 
-    function buildingAllowed(feature) {
-        if (!playerUnion) return true; // first flag anywhere
-        const c = turf.centroid(feature).geometry.coordinates;
-        return turf.booleanPointInPolygon(turf.point(c), playerUnion);
+    function buildingAllowed(feature, mousePosition = null) {
+        if (hqMarkers.length === 0) {
+            return true; // first flag anywhere
+        }
+        
+        // Use mouse position if available, otherwise fall back to bounding box center
+        let checkPoint;
+        if (mousePosition) {
+            checkPoint = [mousePosition.lng, mousePosition.lat];
+        } else {
+            const bbox = turf.bbox(feature);
+            checkPoint = [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2];
+        }
+        
+        const radiusKm = INFLUENCE_RADIUS_KM;
+        
+        // Check if point is within influence radius of any existing HQ
+        for (let i = 0; i < hqMarkers.length; i++) {
+            const hqPos = hqMarkers[i].getLngLat();
+            const hqCenter = [hqPos.lng, hqPos.lat];
+            const distance = turf.distance(turf.point(checkPoint), turf.point(hqCenter), { units: 'kilometers' });
+            
+            if (distance <= radiusKm) {
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     map.on('mousemove', (e) => {
-        if (!isPlanting) return;
+        if (!isPlanting) {
+            return;
+        }
         const hits = map.queryRenderedFeatures(e.point, { layers: buildingLayers });
-        const allowed = hits.length > 0 && buildingAllowed(hits[0]);
-        map.getCanvas().style.cursor = allowed ? 'crosshair' : '';
+        if (hits.length > 0) {
+            const building = hits[0];
+            // Use mouse position for more intuitive distance checking
+            const mousePos = e.lngLat;
+            const allowed = buildingAllowed(building, mousePos);
+            
+            // Minimal debug for troubleshooting if needed
+            // (Remove this block entirely once satisfied with performance)
+            
+            map.getCanvas().style.cursor = allowed ? 'crosshair' : '';
+        } else {
+            lastDebuggedBuildingId = null; // Reset when not hovering over any building
+            map.getCanvas().style.cursor = '';
+        }
     });
 
     map.on('click', (e) => {
@@ -342,7 +379,7 @@ map.on('load', () => {
             return;
         }
         const buildingFeature = buildings[0];
-        if (!buildingAllowed(buildingFeature)) {
+        if (!buildingAllowed(buildingFeature, e.lngLat)) {
             return; // outside current territory
         }
         map.getSource('selected-building').setData(buildingFeature);
@@ -363,28 +400,14 @@ map.on('load', () => {
             alert('Not enough gang members. Increase wage offer to recruit more.');
             return;
         }
-        // 1) Add or update a marker for the building
-        const bId = buildingFeature.id || (buildingFeature.properties && buildingFeature.properties.id);
-        let marker;
-        if (bId != null && buildingGangData[bId]) {
-            // Existing marker – just update count
-            const data = buildingGangData[bId];
-            data.count += 1;
-            data.element.textContent = data.count;
-            marker = data.marker;
-        } else {
-            // First gang member in this building – create custom marker element
-            const el = document.createElement('div');
-            el.className = 'gang-marker';
-            el.textContent = '1';
-            marker = new maplibregl.Marker(el).setLngLat(coords).addTo(map);
-            if (bId != null) {
-                buildingGangData[bId] = { count: 1, marker, element: el };
-            }
-        }
+        
+        // Always create a new marker for each HQ at the exact click position
+        const el = document.createElement('div');
+        el.className = 'gang-marker';
+        el.textContent = (hqMarkers.length + 1).toString(); // Show HQ number
+        const marker = new maplibregl.Marker(el).setLngLat(coords).addTo(map);
 
         hqMarkers.push(marker);
-        totalGangMembers += 1;
 
         // 2) Build the circle polygon for this flag
         const center = [coords.lng, coords.lat];
@@ -606,9 +629,9 @@ map.on('load', () => {
 
     // Update bank balance every real second.
     setInterval(() => {
-        const payingResidents = Math.max(0, totalResidents - totalGangMembers);
+        const payingResidents = Math.max(0, totalResidents - hqMarkers.length);
         const incomePerSecond = (INCOME_PER_RESIDENT_PER_DAY / SECONDS_PER_DAY) * payingResidents;
-        const wagesPerSecond = Math.max(0, maxGangMembers - 1) * wageOffer; // first member (player) unpaid
+        const wagesPerSecond = Math.max(0, hqMarkers.length - 1) * wageOffer; // first member (player) unpaid
         bankBalance += incomePerSecond - wagesPerSecond;
         bankBalanceEl.textContent = bankBalance.toFixed(2);
     }, 1000);
