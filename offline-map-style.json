@@ -7,7 +7,7 @@
   "sources": {
     "nj-complete": {
       "type": "vector",
-      "url": "pmtiles://nj-complete.pmtiles"
+      "url": "pmtiles://tiles/nj-complete.pmtiles"
     }
   },
   "sprite": "https://tiles.basemaps.cartocdn.com/gl/voyager-gl-style/sprite",
