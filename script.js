@@ -53,22 +53,8 @@ map.on('load', () => {
     }
     console.log(`Using anchor layer for custom layers: ${anchorLayerId}`);
 
-    // Buildings are now included in the offline map style
-    // We'll add game-specific building interaction layers on top
-    
-    // Add enhanced building outlines for game interaction
-    map.addLayer({
-        id: 'building-outlines-game',
-        source: 'nj-complete',
-        'source-layer': 'building',
-        type: 'line',
-        minzoom: 13,
-        paint: {
-            'line-color': '#333333',
-            'line-width': 1.5,
-            'line-opacity': 0.8
-        }
-    }, anchorLayerId); // Insert before labels
+    // Buildings are already included in the offline map style
+    // The offline style uses nj-complete source, so we don't need to add building layers
 
     const infoPanel = document.getElementById('info-panel');
     const roadNameEl = document.getElementById('road-name');
