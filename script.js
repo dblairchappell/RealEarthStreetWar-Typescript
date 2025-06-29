@@ -1,5 +1,9 @@
 // Game logic will go here
 
+// Set up PMTiles protocol for loading .pmtiles files
+let protocol = new pmtiles.Protocol();
+maplibregl.addProtocol("pmtiles", protocol.tile);
+
 // MapLibre GL JS doesn't require an access token for open data sources
 const map = new maplibregl.Map({
     container: 'map', // container ID
@@ -49,19 +53,16 @@ map.on('load', () => {
     }
     console.log(`Using anchor layer for custom layers: ${anchorLayerId}`);
 
-    // Check what sources are actually available in the loaded style
-    const sources = map.getStyle().sources;
-    let buildingSourceName = 'carto'; // Default for the current style
-    if (!sources['carto']) {
-        // Fallback if the source name is different
-        const vectorSource = Object.keys(sources).find(s => sources[s].type === 'vector');
-        if (vectorSource) buildingSourceName = vectorSource;
-    }
+    // Add New Jersey PMTiles building source (replacing Carto buildings)
+    map.addSource('nj-buildings', {
+        type: 'vector',
+        url: 'pmtiles://nj.pmtiles'
+    });
     
-    // Add 2D building footprints first.
+    // Add 2D building footprints using PMTiles data
     map.addLayer({
         id: 'building-footprints',
-        source: buildingSourceName,
+        source: 'nj-buildings',
         'source-layer': 'building',
         type: 'fill',
         minzoom: 13,
@@ -71,10 +72,10 @@ map.on('load', () => {
         }
     });
 
-    // Add 3D buildings on top of the footprints.
+    // Add 3D buildings on top of the footprints using PMTiles data
     map.addLayer({
         id: '3d-buildings',
-        source: buildingSourceName,
+        source: 'nj-buildings',
         'source-layer': 'building',
         type: 'fill-extrusion',
         minzoom: 14,
@@ -83,11 +84,11 @@ map.on('load', () => {
             'fill-extrusion-color': '#dcdcdc',
             'fill-extrusion-height': [
                 'case',
-                ['>', ['to-number', ['get', 'height']], 0],
-                ['to-number', ['get', 'height']],
-                5
+                ['>', ['to-number', ['get', 'render_height']], 0],
+                ['to-number', ['get', 'render_height']],
+                8
             ],
-            'fill-extrusion-base': 0,
+            'fill-extrusion-base': ['to-number', ['get', 'render_min_height']],
             'fill-extrusion-opacity': 1
         }
     }, 'building-footprints'); // Insert after footprints
@@ -95,7 +96,7 @@ map.on('load', () => {
     // Add outlines on top of everything for a clean look.
     map.addLayer({
         id: 'building-outlines',
-        source: buildingSourceName,
+        source: 'nj-buildings',
         'source-layer': 'building',
         type: 'line',
         minzoom: 13,
@@ -190,26 +191,17 @@ map.on('load', () => {
     
     console.log('Road layers found:', roadLayers);
 
-    // Add an invisible fill layer dedicated to hit-testing buildings; this works regardless of style visibility
-    // Use the building source we detected earlier
-    if (buildingSourceName) {
-        try {
-            map.addLayer({
-                id: 'building-hit',
-                type: 'fill',
-                source: buildingSourceName,
-                'source-layer': 'building',
-                paint: { 'fill-opacity': 0 }
-            });
-            console.log(`Building layer added using source: ${buildingSourceName}`);
-        } catch (e) {
-            console.log('Building layer not available with this source:', e);
-        }
-    } else {
-        console.log('No suitable vector source found for buildings');
-    }
+    // Add an invisible fill layer dedicated to hit-testing buildings using PMTiles data
+    map.addLayer({
+        id: 'building-hit',
+        type: 'fill',
+        source: 'nj-buildings',
+        'source-layer': 'building',
+        paint: { 'fill-opacity': 0 }
+    });
+    console.log('Building hit-testing layer added using PMTiles source');
 
-    // Use this layer exclusively for hovering / clicks
+    // Use this layer for hovering / clicks
     const buildingLayers = ['building-hit'];
     let lastDebuggedBuildingId = null;
 
@@ -363,7 +355,7 @@ map.on('load', () => {
             // Minimal debug for troubleshooting if needed
             // (Remove this block entirely once satisfied with performance)
             
-            map.getCanvas().style.cursor = allowed ? 'crosshair' : '';
+        map.getCanvas().style.cursor = allowed ? 'crosshair' : '';
         } else {
             lastDebuggedBuildingId = null; // Reset when not hovering over any building
             map.getCanvas().style.cursor = '';
@@ -402,8 +394,8 @@ map.on('load', () => {
         }
         
         // Always create a new marker for each HQ at the exact click position
-        const el = document.createElement('div');
-        el.className = 'gang-marker';
+            const el = document.createElement('div');
+            el.className = 'gang-marker';
         el.textContent = (hqMarkers.length + 1).toString(); // Show HQ number
         const marker = new maplibregl.Marker(el).setLngLat(coords).addTo(map);
 
