@@ -282,7 +282,13 @@ map.on('load', () => {
         layout: {
             'text-field': ['to-string', ['get', 'pop_est']],
             'text-size': 12,
-            'text-font': ['sans-serif']
+            'text-font': [
+                "Montserrat Regular",
+                "Open Sans Regular",
+                "Noto Sans Regular",
+                "HanWangHeiLight Regular",
+                "NanumBarunGothic Regular"
+            ]
         },
         paint: {
             'text-color': '#111',
@@ -540,6 +546,7 @@ map.on('load', () => {
             const data = await resp.json();
             const geojson = osmtogeojson(data);
             let added = false;
+            
             geojson.features.forEach(f => {
                 const id = f.id || (f.properties && f.properties.id);
                 if (!id) return;
@@ -568,6 +575,7 @@ map.on('load', () => {
                 totalResidents += pop_est;
                 added = true;
             });
+            
             if (added) {
                 buildingCountEl.textContent = controlledBuildingIds.size;
                 map.getSource('controlled-buildings').setData({ type: 'FeatureCollection', features: controlledBuildingFeatures });
@@ -577,7 +585,7 @@ map.on('load', () => {
                 // totalResidents can be used in future for income calculations
             }
         } catch (err) {
-            console.error('Failed to fetch buildings from Overpass', err);
+            console.error('Failed to fetch buildings from Overpass:', err);
         }
     }
 
