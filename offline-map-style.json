@@ -10,7 +10,7 @@
       "url": "pmtiles://tiles/nj-complete.pmtiles"
     }
   },
-  "sprite": "https://tiles.basemaps.cartocdn.com/gl/voyager-gl-style/sprite",
+
   "glyphs": "/fonts/{fontstack}/{range}.pbf",
   "layers": [
     {

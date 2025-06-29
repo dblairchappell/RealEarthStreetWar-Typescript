@@ -28,12 +28,12 @@ map.on('styleimagemissing', (e) => {
 });
 
 map.on('error', (e) => {
-    // Suppress font loading errors. The map will fall back to other fonts.
-    if (e.error && e.error.message && e.error.message.includes('font')) {
-        console.warn('Font loading error (suppressed):', e.error.message);
+    // Suppress harmless tile loading errors
+    if (e.error?.message === 'Failed to fetch' && e.source?.url?.includes('pmtiles://')) {
+        console.warn('Tile not available (normal for PMTiles):', e.tile);
         return;
     }
-    console.error('A map error occurred:', e);
+    console.error('Map error:', e);
 });
 
 map.on('load', () => {
