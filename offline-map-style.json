@@ -7,7 +7,7 @@
   "sources": {
     "nj-complete": {
       "type": "vector",
-      "url": "pmtiles://tiles/nj-complete.pmtiles"
+      "url": "pmtiles://map_data/tiles/nj-complete.pmtiles"
     }
   },
 
