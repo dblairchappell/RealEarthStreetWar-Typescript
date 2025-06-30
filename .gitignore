@@ -20,4 +20,4 @@ yarn-debug.log*
 yarn-error.log*
 
 # PMTiles data files
-/tiles 
+/map_data
