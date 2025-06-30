@@ -1,6 +1,7 @@
 import GameState      from "./model/GameState";
 import MapView        from "./view/MapView";
 import GameController from "./controller/GameController";
+import * as turf from "@turf/turf";
 
 const state   = new GameState();
 const view    = new MapView();
@@ -80,53 +81,40 @@ map.on('load', () => {
     const gangCountEl = document.getElementById('gang-count');
     const gangMaxEl = document.getElementById('gang-max');
 
-    let bankBalance = 0;
-    let gameDate = new Date(2023, 0, 1); // Jan 1, 2023
-    let isPlanting = false;
-    const hqMarkers = [];            // array of MapLibre markers for visual reference
-    const playerFlags = [];          // array of { id, lngLat }
-    let playerUnion = null;          // GeoJSON Polygon/MultiPolygon representing union of all circles
-    let controlledFeatures = [];     // accumulated road segments already highlighted
-    const controlledBuildingIds = new Set();
-    const controlledBuildingFeatures = [];
-    let totalResidents = 0;
+    // Visual-only references (MapLibre markers don't belong in pure model)
+    const hqMarkers: maplibregl.Marker[] = [];            // array of MapLibre markers for visual reference
+    const playerFlags: { id: string; lngLat: { lng: number; lat: number } }[] = [];
+    
+    // All other game state now lives in the state object
 
-    const INFLUENCE_RADIUS_KM = 0.6; // 600 meters
-    const INCOME_PER_RESIDENT_PER_DAY = 1;
-    const SECONDS_PER_DAY = 1; // 1 game day = 1 real second
-    const AREA_PER_RESIDENT = 25; // m^2
-    const METERS_PER_FLOOR_DEFAULT = 3;
+    // Pull gameplay constants directly from GameState so we have a single source of truth
+    const {
+        INFLUENCE_RADIUS_KM,
+        INCOME_PER_RESIDENT_PER_DAY,
+        SECONDS_PER_DAY,
+        AREA_PER_RESIDENT,
+        METERS_PER_FLOOR_DEFAULT,
+        MIN_WAGE,
+        PERCENT_PER_INCREMENT
+    } = GameState;
 
-    // Gang wage offer (per member per day) & gang availability
-    const MIN_WAGE = 50; // $50 corresponds to 1% population willing
-    const PERCENT_PER_INCREMENT = 0.01; // 1% per $10 increment
-    let wageOffer = parseInt(wageSlider.value, 10); // initial wage per member per day
-    let maxGangMembers = 0; // will be computed based on totalResidents
-
-    function computeMaxGangMembers() {
-        if (wageOffer < MIN_WAGE) return 0;
-        const increments = Math.floor((wageOffer - MIN_WAGE) / 10) + 1; // 50->1, 60->2, etc.
-        const willingPercent = increments * PERCENT_PER_INCREMENT; // convert to fraction
-        const calc = Math.floor(totalResidents * willingPercent);
-        return Math.max(1, calc);
-    }
-
-    // Initialise max gang members at startup
-    maxGangMembers = computeMaxGangMembers();
+    // Initialize state from UI
+    state.wageOffer = parseInt((wageSlider as HTMLInputElement).value, 10);
+    state.maxGangMembers = state.computeMaxGangMembers();
 
     function updateGangUI() {
-        wageDisplayEl.textContent = wageOffer;
-        gangMaxEl.textContent = maxGangMembers;
-        gangCountEl.textContent = hqMarkers.length;
-        residentCountEl.textContent = totalResidents;
+        wageDisplayEl!.textContent = state.wageOffer.toString();
+        gangMaxEl!.textContent = state.maxGangMembers.toString();
+        gangCountEl!.textContent = hqMarkers.length.toString();
+        residentCountEl!.textContent = state.totalResidents.toString();
     }
     updateGangUI();
 
-    wageSlider.addEventListener('input', () => {
-        wageOffer = parseInt(wageSlider.value, 10);
-        maxGangMembers = computeMaxGangMembers();
+    wageSlider!.addEventListener('input', () => {
+        state.wageOffer = parseInt((wageSlider as HTMLInputElement).value, 10);
+        state.maxGangMembers = state.computeMaxGangMembers();
         updateGangUI();
-        plantHqBtn.disabled = hqMarkers.length >= maxGangMembers;
+        (plantHqBtn as HTMLButtonElement).disabled = hqMarkers.length >= state.maxGangMembers;
     });
 
     // Find all the road layers to make them interactive
@@ -251,50 +239,20 @@ map.on('load', () => {
 
     // --- UI EVENT LISTENERS ---
 
-    plantHqBtn.addEventListener('click', () => {
-        isPlanting = !isPlanting;
-        plantHqBtn.classList.toggle('active', isPlanting);
+    plantHqBtn!.addEventListener('click', () => {
+        state.isPlanting = !state.isPlanting;
+        plantHqBtn!.classList.toggle('active', state.isPlanting);
         // Leave cursor management to building-hover logic
     });
 
-    refreshBtn.addEventListener('click', () => {
+    refreshBtn!.addEventListener('click', () => {
         // Force a full page reload with a cache-busting query param so tiles and data are re-requested
         const url = window.location.pathname + '?r=' + Date.now();
         window.location.href = url;
     });
 
-    function buildingAllowed(feature, mousePosition = null) {
-        if (hqMarkers.length === 0) {
-            return true; // first flag anywhere
-        }
-        
-        // Use mouse position if available, otherwise fall back to bounding box center
-        let checkPoint;
-        if (mousePosition) {
-            checkPoint = [mousePosition.lng, mousePosition.lat];
-        } else {
-            const bbox = turf.bbox(feature);
-            checkPoint = [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2];
-        }
-        
-        const radiusKm = INFLUENCE_RADIUS_KM;
-        
-        // Check if point is within influence radius of any existing HQ
-        for (let i = 0; i < hqMarkers.length; i++) {
-            const hqPos = hqMarkers[i].getLngLat();
-            const hqCenter = [hqPos.lng, hqPos.lat];
-            const distance = turf.distance(turf.point(checkPoint), turf.point(hqCenter), { units: 'kilometers' });
-            
-            if (distance <= radiusKm) {
-                return true;
-            }
-        }
-        
-        return false;
-    }
-
     map.on('mousemove', (e) => {
-        if (!isPlanting) {
+        if (!state.isPlanting) {
             return;
         }
         const hits = map.queryRenderedFeatures(e.point, { layers: buildingLayers });
@@ -302,7 +260,8 @@ map.on('load', () => {
             const building = hits[0];
             // Use mouse position for more intuitive distance checking
             const mousePos = e.lngLat;
-            const allowed = buildingAllowed(building, mousePos);
+            const checkPoint: [number, number] = [mousePos.lng, mousePos.lat];
+            const allowed = state.buildingAllowed(checkPoint);
             
             // Minimal debug for troubleshooting if needed
             // (Remove this block entirely once satisfied with performance)
@@ -315,7 +274,7 @@ map.on('load', () => {
     });
 
     map.on('click', (e) => {
-        if (!isPlanting) return;
+        if (!state.isPlanting) return;
 
         // Require a building under the cursor
         const buildings = map.queryRenderedFeatures(e.point, { layers: buildingLayers });
@@ -323,47 +282,51 @@ map.on('load', () => {
             return;
         }
         const buildingFeature = buildings[0];
-        if (!buildingAllowed(buildingFeature, e.lngLat)) {
+        const checkPoint: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+        if (!state.buildingAllowed(checkPoint)) {
             return; // outside current territory
         }
-        map.getSource('selected-building').setData(buildingFeature);
+        (map.getSource('selected-building') as maplibregl.GeoJSONSource).setData(buildingFeature);
 
         // Use the exact click position instead of building centroid for better accuracy
         const coords = { lng: e.lngLat.lng, lat: e.lngLat.lat };
         plantHQ(coords, buildingFeature);
 
-        isPlanting = false;
-        plantHqBtn.classList.remove('active');
+        state.isPlanting = false;
+        plantHqBtn!.classList.remove('active');
         map.getCanvas().style.cursor = '';
     });
 
     // --- CORE LOGIC ---
 
-    function plantHQ(coords, buildingFeature) {
-        if (hqMarkers.length >= maxGangMembers) {
+    function plantHQ(coords: any, buildingFeature: any) {
+        if (hqMarkers.length >= state.maxGangMembers) {
             alert('Not enough gang members. Increase wage offer to recruit more.');
             return;
         }
         
         // Always create a new marker for each HQ at the exact click position
-            const el = document.createElement('div');
-            el.className = 'gang-marker';
+        const el = document.createElement('div');
+        el.className = 'gang-marker';
         el.textContent = (hqMarkers.length + 1).toString(); // Show HQ number
         const marker = new maplibregl.Marker(el).setLngLat(coords).addTo(map);
 
         hqMarkers.push(marker);
+        
+        // Add HQ position to state
+        state.hqs.push({ lng: coords.lng, lat: coords.lat });
 
         // 2) Build the circle polygon for this flag
         const center = [coords.lng, coords.lat];
         const radius = INFLUENCE_RADIUS_KM;
-        const options = { steps: 64, units: 'kilometers' };
+        const options = { steps: 64, units: 'kilometers' as const };
         const circle = turf.circle(center, radius, options);
 
         // 3) Compute the area that is truly new (circle minus current union)
         let incrementalArea;
-        if (playerUnion) {
+        if (state.playerUnion) {
             try {
-                incrementalArea = turf.difference(circle, playerUnion);
+                incrementalArea = turf.difference(circle, state.playerUnion);
             } catch (err) {
                 console.warn('turf.difference failed, falling back to full circle', err);
                 incrementalArea = circle;
@@ -373,17 +336,17 @@ map.on('load', () => {
         }
 
         // 4) Update the running union
-        playerUnion = playerUnion ? turf.union(playerUnion, circle) : circle;
+        state.playerUnion = state.playerUnion ? turf.union(state.playerUnion, circle) : circle;
 
         // 5) Update influence fill layer to show the full territory
-        map.getSource('influence-area').setData(playerUnion);
+        (map.getSource('influence-area') as maplibregl.GeoJSONSource).setData(state.playerUnion);
 
         // 6) Update controlled roads and buildings using local data
         if (incrementalArea) {
             updateControlledRoadsFromLocal(circle, coords);
             updateControlledBuildingsFromLocal(circle, coords);
         }
-        maxGangMembers = computeMaxGangMembers();
+        state.maxGangMembers = state.computeMaxGangMembers();
         updateGangUI();
     }
 
@@ -431,10 +394,10 @@ map.on('load', () => {
 
         console.log('Highlighted roads:', validRoads.length);
         if (validRoads.length > 0) {
-            controlledFeatures.push(...validRoads);
-            map.getSource('controlled-roads').setData({
+            state.controlledFeatures.push(...validRoads);
+            (map.getSource('controlled-roads') as maplibregl.GeoJSONSource).setData({
                 type: 'FeatureCollection',
-                features: controlledFeatures
+                features: state.controlledFeatures
             });
         }
     }
@@ -459,12 +422,12 @@ map.on('load', () => {
             const id = f.id || (f.properties && f.properties.id) || 
                       `building_${f.geometry.coordinates[0][0]}_${f.geometry.coordinates[0][1]}`;
             
-            if (controlledBuildingIds.has(id)) return; // already counted
+            if (state.controlledBuildingIds.has(id)) return; // already counted
             
             // Check if building is inside the circle
             try {
                 const centroid = turf.centroid(f).geometry.coordinates;
-                if (!(playerUnion && turf.booleanPointInPolygon(turf.point(centroid), playerUnion))) {
+                if (!(state.playerUnion && turf.booleanPointInPolygon(turf.point(centroid), state.playerUnion))) {
                     return; // skip if not actually inside
                 }
 
@@ -482,9 +445,9 @@ map.on('load', () => {
 
                 // Attach and store
                 f.properties = { ...f.properties, pop_est };
-                controlledBuildingIds.add(id);
-                controlledBuildingFeatures.push(f);
-                totalResidents += pop_est;
+                state.controlledBuildingIds.add(id);
+                state.controlledBuildingFeatures.push(f);
+                state.totalResidents += pop_est;
                 added = true;
             } catch (err) {
                 console.warn('Error processing building feature:', err);
@@ -492,10 +455,10 @@ map.on('load', () => {
         });
         
         if (added) {
-            buildingCountEl.textContent = controlledBuildingIds.size;
-            map.getSource('controlled-buildings').setData({ type: 'FeatureCollection', features: controlledBuildingFeatures });
+            buildingCountEl!.textContent = state.controlledBuildingIds.size.toString();
+            (map.getSource('controlled-buildings') as maplibregl.GeoJSONSource).setData({ type: 'FeatureCollection', features: state.controlledBuildingFeatures });
             // Recompute max gang members since population changed
-            maxGangMembers = computeMaxGangMembers();
+            state.maxGangMembers = state.computeMaxGangMembers();
             updateGangUI();
             // totalResidents can be used in future for income calculations
         }
@@ -505,12 +468,12 @@ map.on('load', () => {
     // For simplicity and stability, we'll remove the hover effect for now
     // to ensure the core click-to-select functionality is flawless.
     map.on('mousemove', roadLayers, (e) => {
-        if (isPlanting) return; // keep crosshair during placement mode
-        map.getCanvas().style.cursor = e.features.length > 0 ? 'pointer' : '';
+        if (state.isPlanting) return; // keep crosshair during placement mode
+        map.getCanvas().style.cursor = (e.features && e.features.length > 0) ? 'pointer' : '';
     });
 
     function updateDateDisplay() {
-        dateEl.textContent = gameDate.toLocaleDateString('en-US', {
+        dateEl!.textContent = state.gameDate.toLocaleDateString('en-US', {
             day: 'numeric', month: 'short', year: 'numeric'
         });
     }
@@ -518,37 +481,19 @@ map.on('load', () => {
 
     // Update bank balance every real second.
     setInterval(() => {
-        const payingResidents = Math.max(0, totalResidents - hqMarkers.length);
+        const payingResidents = Math.max(0, state.totalResidents - hqMarkers.length);
         const incomePerSecond = (INCOME_PER_RESIDENT_PER_DAY / SECONDS_PER_DAY) * payingResidents;
-        const wagesPerSecond = Math.max(0, hqMarkers.length - 1) * wageOffer; // first member (player) unpaid
-        bankBalance += incomePerSecond - wagesPerSecond;
-        bankBalanceEl.textContent = bankBalance.toFixed(2);
+        const wagesPerSecond = Math.max(0, hqMarkers.length - 1) * state.wageOffer; // first member (player) unpaid
+        state.bankBalance += incomePerSecond - wagesPerSecond;
+        bankBalanceEl!.textContent = state.bankBalance.toFixed(2);
     }, 1000);
 
     // Advance game date every game day (now every 1s)
     setInterval(() => {
         // add one day
-        gameDate.setDate(gameDate.getDate() + 1);
+        state.gameDate.setDate(state.gameDate.getDate() + 1);
         updateDateDisplay();
     }, SECONDS_PER_DAY * 1000);
 });
 
-// Helper function to check if two points are effectively equal
-function pointsEqual(p1, p2) {
-    const tolerance = 1e-9;
-    return Math.abs(p1[0] - p2[0]) < tolerance && Math.abs(p1[1] - p2[1]) < tolerance;
-}
-
-// Helper function to calculate the squared distance from a point to a line segment
-function pointToSegmentDistance(p, p1, p2) {
-    const l2 = dist2(p1, p2);
-    if (l2 === 0) return dist2(p, p1);
-    let t = ((p[0] - p1[0]) * (p2[0] - p1[0]) + (p[1] - p1[1]) * (p2[1] - p1[1])) / l2;
-    t = Math.max(0, Math.min(1, t));
-    const projection = [p1[0] + t * (p2[0] - p1[0]), p1[1] + t * (p2[1] - p1[1])];
-    return dist2(p, projection);
-}
-
-function dist2(p1, p2) {
-    return Math.pow(p1[0] - p2[0], 2) + Math.pow(p1[1] - p2[1], 2);
-} 
+// Helper functions moved to GameState.pointsEqual, GameState.dist2, GameState.pointToSegmentDistance 
