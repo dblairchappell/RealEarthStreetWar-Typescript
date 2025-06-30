@@ -1,5 +1,6 @@
 // model/GameState.ts
 import * as turf from '@turf/turf';
+import { Feature, LineString, Polygon, MultiPolygon } from 'geojson';
 
 export interface HQPosition { 
   lng: number; 
@@ -14,10 +15,10 @@ export default class GameState {
   maxGangMembers = 0;
   totalResidents = 0;
   hqs: HQPosition[] = [];
-  playerUnion: turf.helpers.Polygon | turf.helpers.MultiPolygon | null = null;
-  controlledFeatures: turf.helpers.Feature<turf.helpers.LineString>[] = [];
+  playerUnion: Polygon | MultiPolygon | null = null;
+  controlledFeatures: Feature<LineString>[] = [];
   controlledBuildingIds = new Set<string | number>();
-  controlledBuildingFeatures: turf.helpers.Feature<turf.helpers.Polygon>[] = [];
+  controlledBuildingFeatures: Feature<Polygon>[] = [];
   isPlanting = false;
 
   /* ----- constants ----- */

@@ -5,7 +5,7 @@ import * as turf from "@turf/turf";
 
 const state   = new GameState();
 const view    = new MapView('map');
-new GameController(state, view);
+const controller = new GameController(state, view);
 
 // Get the map instance from the view
 const map = view.mapInstance;
@@ -32,15 +32,8 @@ state.wageOffer = view.getInitialWage();
 state.maxGangMembers = state.computeMaxGangMembers();
 
 function updateHud() {
-    view.updateHud({
-        wageOffer: state.wageOffer,
-        maxGangMembers: state.maxGangMembers,
-        hqCount: hqMarkers.length,
-        totalResidents: state.totalResidents,
-        bankBalance: state.bankBalance,
-        gameDate: state.gameDate,
-        buildingCount: state.controlledBuildingIds.size
-    });
+    controller.setHqCount(hqMarkers.length);
+    controller.updateHud();
 }
 
 // Forward declare helper functions that will be defined inside map.on('load')
@@ -50,47 +43,71 @@ let updateControlledBuildingsFromLocal: (circle: any, coords: any) => void;
 // Declare plantHQ function before using it in callbacks
 function plantHQ(coords: any, buildingFeature: any) {
     if (hqMarkers.length >= state.maxGangMembers) {
-        alert('Not enough gang members. Increase wage offer to recruit more.');
-        return;
-    }
-    
+            alert('Not enough gang members. Increase wage offer to recruit more.');
+            return;
+        }
+        
     // Create HQ marker using MapView
     const marker = view.createHQMarker(coords, hqMarkers.length + 1);
-    hqMarkers.push(marker);
+        hqMarkers.push(marker);
     
     // Add HQ position to state
     state.hqs.push({ lng: coords.lng, lat: coords.lat });
 
-    // 2) Build the circle polygon for this flag
-    const center = [coords.lng, coords.lat];
-    const radius = INFLUENCE_RADIUS_KM;
+        // 2) Build the circle polygon for this flag
+        const center = [coords.lng, coords.lat];
+        const radius = INFLUENCE_RADIUS_KM;
     const options = { steps: 64, units: 'kilometers' as const };
-    const circle = turf.circle(center, radius, options);
+        const circle = turf.circle(center, radius, options);
 
-    // 3) Compute the area that is truly new (circle minus current union)
-    let incrementalArea;
+        // 3) Compute the area that is truly new (circle minus current union)
+        let incrementalArea;
     if (state.playerUnion) {
-        try {
-            incrementalArea = turf.difference(circle, state.playerUnion);
-        } catch (err) {
-            console.warn('turf.difference failed, falling back to full circle', err);
+            try {
+                const playerUnionFeature = turf.feature(state.playerUnion);
+                const fc = turf.featureCollection([circle, playerUnionFeature]);
+            incrementalArea = (turf as any).difference(fc);
+            } catch (err) {
+                console.warn('turf.difference failed, falling back to full circle', err);
+                incrementalArea = circle;
+            }
+        } else {
             incrementalArea = circle;
         }
+
+        // 4) Update the running union
+    if (state.playerUnion) {
+        try {
+            const playerUnionFeature = turf.feature(state.playerUnion);
+            const fc = turf.featureCollection([playerUnionFeature, circle]);
+            const unionResult = (turf as any).union(fc);
+            state.playerUnion = unionResult ? unionResult.geometry : circle.geometry;
+        } catch (e) {
+            console.warn('turf.union failed, falling back to simple combine', e);
+            try {
+                const playerUnionFeature = turf.feature(state.playerUnion);
+                const fc = turf.featureCollection([playerUnionFeature, circle]);
+                const combined = (turf as any).combine ? (turf as any).combine(fc) : null;
+                if (combined && combined.features && combined.features.length > 0) {
+                    state.playerUnion = combined.features[0].geometry;
+                }
+            } catch (err2) {
+                // give up – keep old union so game continues
+                console.warn('Fallback combine also failed, keeping existing territory');
+            }
+        }
     } else {
-        incrementalArea = circle;
+        state.playerUnion = circle.geometry;
     }
 
-    // 4) Update the running union
-    state.playerUnion = state.playerUnion ? turf.union(state.playerUnion, circle) : circle;
-
-    // 5) Update influence fill layer to show the full territory
+        // 5) Update influence fill layer to show the full territory
     view.updateInfluenceArea(state.playerUnion);
 
-    // 6) Update controlled roads and buildings using local data
+        // 6) Update controlled roads and buildings using local data
     if (incrementalArea && updateControlledRoadsFromLocal && updateControlledBuildingsFromLocal) {
-        updateControlledRoadsFromLocal(circle, coords);
-        updateControlledBuildingsFromLocal(circle, coords);
-    }
+            updateControlledRoadsFromLocal(circle, coords);
+            updateControlledBuildingsFromLocal(circle, coords);
+        }
     state.maxGangMembers = state.computeMaxGangMembers();
     updateHud();
 }
@@ -111,6 +128,9 @@ map.on('load', () => {
     // Set up MapView callbacks
     view.setCallbacks(mapCallbacks);
     
+    // Start controller timers now that map is ready
+    controller.startLoops();
+
     updateHud();
 
     view.wageSliderElement!.addEventListener('input', () => {
@@ -156,8 +176,8 @@ map.on('load', () => {
 
         console.log('Processing', roadFeatures.length, 'local roads...');
 
-        const validRoads = [];
-        roadFeatures.forEach(feature => {
+        const validRoads: any[] = [];
+        roadFeatures.forEach((feature: any) => {
             if (!feature.geometry || feature.geometry.type !== 'LineString') return;
             
             // Check if the road intersects with our circle
@@ -190,32 +210,29 @@ map.on('load', () => {
     }
 
     updateControlledBuildingsFromLocal = function(circle, coords) {
-        // Query buildings from local PMTiles using MapLibre's queryRenderedFeatures
-        const bbox = turf.bbox(circle);
-        const sw = map.project([bbox[0], bbox[1]]);
-        const ne = map.project([bbox[2], bbox[3]]);
+        // Query rendered features within the circle's bounding box.
+        const circleBbox = turf.bbox(circle);
+        const sw = map.project([circleBbox[0], circleBbox[1]]);
+        const ne = map.project([circleBbox[2], circleBbox[3]]);
         
-        const buildingFeatures = map.queryRenderedFeatures([
-            [sw.x, ne.y], // top-left
-            [ne.x, sw.y]  // bottom-right
-        ], {
-            layers: buildingLayers // Use building-hit layer
+        const buildingFeatures = map.queryRenderedFeatures([sw, ne], {
+            layers: buildingLayers
         });
 
         console.log('Processing', buildingFeatures.length, 'local buildings...');
         let added = false;
         
-        buildingFeatures.forEach(f => {
+        buildingFeatures.forEach((f: any) => {
             const id = f.id || (f.properties && f.properties.id) || 
                       `building_${f.geometry.coordinates[0][0]}_${f.geometry.coordinates[0][1]}`;
             
             if (state.controlledBuildingIds.has(id)) return; // already counted
             
-            // Check if building is inside the circle
+            // Check if building's centroid is inside the NEW circle, not the whole union
             try {
                 const centroid = turf.centroid(f).geometry.coordinates;
-                if (!(state.playerUnion && turf.booleanPointInPolygon(turf.point(centroid), state.playerUnion))) {
-                    return; // skip if not actually inside
+                if (!turf.booleanPointInPolygon(turf.point(centroid), circle)) {
+                    return; // skip if not actually inside the circle
                 }
 
                 // Estimate population using the same logic as before
@@ -252,21 +269,7 @@ map.on('load', () => {
 
     // Mouse hover interactions now handled by MapView
 
-    // Update bank balance every real second.
-    setInterval(() => {
-        const payingResidents = Math.max(0, state.totalResidents - hqMarkers.length);
-        const incomePerSecond = (INCOME_PER_RESIDENT_PER_DAY / SECONDS_PER_DAY) * payingResidents;
-        const wagesPerSecond = Math.max(0, hqMarkers.length - 1) * state.wageOffer; // first member (player) unpaid
-        state.bankBalance += incomePerSecond - wagesPerSecond;
-        updateHud();
-    }, 1000);
-
-    // Advance game date every game day (now every 1s)
-    setInterval(() => {
-        // add one day
-        state.gameDate.setDate(state.gameDate.getDate() + 1);
-        updateHud();
-    }, SECONDS_PER_DAY * 1000);
+    // Timers now handled by GameController
 });
 
 // Helper functions moved to GameState.pointsEqual, GameState.dist2, GameState.pointToSegmentDistance 
