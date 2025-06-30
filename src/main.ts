@@ -1,3 +1,11 @@
+import GameState      from "./model/GameState";
+import MapView        from "./view/MapView";
+import GameController from "./controller/GameController";
+
+const state   = new GameState();
+const view    = new MapView();
+new GameController(state, view);
+
 // Real-Earth Street War - Fully Offline Game Logic
 // Uses local PMTiles data for all map features and territory control
 
