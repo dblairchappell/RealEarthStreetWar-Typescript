@@ -18,6 +18,7 @@ export default class MapView {
   private hqCountEl!: HTMLElement | null;
   private commoditiesCountEl!: HTMLElement | null;
   private moneyCountEl!: HTMLElement | null;
+  private gameDateEl!: HTMLElement | null;
 
   // Callbacks for communicating with controller
   private callbacks: MapViewCallbacks | null = null;
@@ -73,6 +74,7 @@ export default class MapView {
     this.hqCountEl = document.getElementById('hq-count');
     this.commoditiesCountEl = document.getElementById('commodities-count');
     this.moneyCountEl = document.getElementById('money-count');
+    this.gameDateEl = document.getElementById('game-date');
   }
 
   private setupLayers() {
@@ -98,10 +100,16 @@ export default class MapView {
   }
 
   // Simple stats update
-  updateStats(hqCount: number, commodities: number, money: number) {
+  updateStats(hqCount: number, commodities: number, money: number, gameDate: Date) {
     if (this.hqCountEl) this.hqCountEl.textContent = hqCount.toString();
     if (this.commoditiesCountEl) this.commoditiesCountEl.textContent = commodities.toString();
     if (this.moneyCountEl) this.moneyCountEl.textContent = money.toFixed(2);
+    if (this.gameDateEl) {
+      this.gameDateEl.textContent = gameDate.toLocaleString('en-US', {
+        day: 'numeric', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', hour12: false
+      });
+    }
   }
 
   setCallbacks(callbacks: MapViewCallbacks) {

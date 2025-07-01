@@ -81,6 +81,7 @@ map.on('load', () => {
     
     // Initial view update
     controller.updateView();
+    controller.startClock(); // Start the game clock
 
     setupPlantingButton(view.plantProducerBtn, 'producer');
     setupPlantingButton(view.plantTraffickerBtn, 'trafficker');
