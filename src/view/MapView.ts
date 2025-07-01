@@ -190,19 +190,17 @@ export default class MapView {
 
   // Method to create HQ marker (called from controller)
   createHQMarker(coords: { lng: number; lat: number }, type: HQType): any {
-    console.log('Creating marker at coordinates:', coords);
-    
     // Create a simple marker element for testing
     const el = document.createElement('div');
     el.style.width = '30px';
     el.style.height = '30px';
-    el.style.borderRadius = '50%';
     el.style.border = '2px solid white';
     el.style.boxShadow = '0 0 10px rgba(0,0,0,0.5)';
     el.style.cursor = 'pointer';
     el.style.display = 'flex';
     el.style.justifyContent = 'center';
     el.style.alignItems = 'center';
+    el.style.clipPath = 'polygon(50% 100%, 0% 0%, 100% 0%)'; // Triangle pointing down
     
     // Set background color based on type
     if (type === 'producer') {
@@ -222,10 +220,10 @@ export default class MapView {
     img.style.pointerEvents = 'none';
     el.appendChild(img);
 
-    // Create marker with simple center anchor
+    // Create marker with bottom anchor
     const marker = new (window as any).maplibregl.Marker({ 
       element: el, 
-      anchor: 'center'
+      anchor: 'bottom'
     })
       .setLngLat(coords)
       .addTo(this.map);
