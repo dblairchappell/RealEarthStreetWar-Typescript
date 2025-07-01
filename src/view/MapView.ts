@@ -8,6 +8,13 @@ export interface MapViewCallbacks {
   isPlanting: () => boolean;
 }
 
+// Map HQ types to their icon images (relative to public root)
+const ICON_MAP: Record<HQType, string> = {
+  producer: 'icons/drug_farm.svg',
+  trafficker: 'icons/foot_trafficker.svg',
+  retailer: 'icons/trade v3.svg'
+};
+
 export default class MapView {
   private map: any;
   private buildingLayers: string[] = ['building-hit', 'building-footprints', 'building-3d'];
@@ -183,9 +190,43 @@ export default class MapView {
 
   // Method to create HQ marker (called from controller)
   createHQMarker(coords: { lng: number; lat: number }, type: HQType): any {
+    console.log('Creating marker at coordinates:', coords);
+    
+    // Create a simple marker element for testing
     const el = document.createElement('div');
-    el.className = `gang-marker ${type}`; // e.g. 'gang-marker producer'
-    const marker = new (window as any).maplibregl.Marker(el)
+    el.style.width = '30px';
+    el.style.height = '30px';
+    el.style.borderRadius = '50%';
+    el.style.border = '2px solid white';
+    el.style.boxShadow = '0 0 10px rgba(0,0,0,0.5)';
+    el.style.cursor = 'pointer';
+    el.style.display = 'flex';
+    el.style.justifyContent = 'center';
+    el.style.alignItems = 'center';
+    
+    // Set background color based on type
+    if (type === 'producer') {
+      el.style.backgroundColor = '#4CAF50';
+    } else if (type === 'trafficker') {
+      el.style.backgroundColor = '#FFC107';
+    } else if (type === 'retailer') {
+      el.style.backgroundColor = '#2196F3';
+    }
+
+    // Add the icon image
+    const img = document.createElement('img');
+    img.src = ICON_MAP[type];
+    img.alt = type;
+    img.style.width = '18px';
+    img.style.height = '18px';
+    img.style.pointerEvents = 'none';
+    el.appendChild(img);
+
+    // Create marker with simple center anchor
+    const marker = new (window as any).maplibregl.Marker({ 
+      element: el, 
+      anchor: 'center'
+    })
       .setLngLat(coords)
       .addTo(this.map);
     return marker;
@@ -193,6 +234,15 @@ export default class MapView {
 
   // Method to update map sources with game data
   updateInfluenceArea(territoryData: any) {
-    (this.map.getSource('influence-area') as any).setData(territoryData);
+    console.log('Updating influence area with data:', territoryData);
+    const geoJsonData = {
+      type: 'FeatureCollection',
+      features: territoryData ? [{
+        type: 'Feature',
+        geometry: territoryData,
+        properties: {}
+      }] : []
+    };
+    (this.map.getSource('influence-area') as any).setData(geoJsonData);
   }
 }

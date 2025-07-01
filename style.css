@@ -81,30 +81,55 @@ body {
 }
 
 .gang-marker {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    border: 2px solid white;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    /* total height = head (32px) + pointer (10px) */
+    width: 32px;
+    height: 42px;
+    position: relative;
     cursor: pointer;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    font-size: 14px;
-    font-weight: bold;
-    color: white;
 }
 
-.gang-marker.producer {
-    background-color: #4CAF50; /* Green */
+/* Set pin color via CSS variable so both head & pointer match */
+.gang-marker { --pin-col: #666; }
+.gang-marker.producer   { --pin-col: #4CAF50; }
+.gang-marker.trafficker { --pin-col: #FFC107; }
+.gang-marker.retailer   { --pin-col: #2196F3; }
+
+/* circular head */
+.gang-marker::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background-color: var(--pin-col);
+    border: 2px solid #fff;
+    box-shadow: 0 0 6px rgba(0,0,0,.4);
 }
 
-.gang-marker.trafficker {
-    background-color: #FFC107; /* Amber */
+/* pointer - using absolute positioning instead of transform */
+.gang-marker::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 12px; /* (32px - 16px) / 2 = 8px border + 4px to center the 16px triangle */
+    width: 0; 
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-top: 10px solid var(--pin-col);
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,.3));
 }
 
-.gang-marker.retailer {
-    background-color: #2196F3; /* Blue */
+/* icon inside the circular head - using absolute positioning instead of transform */
+.gang-marker img {
+    position: absolute;
+    top: 6px; /* (32px - 20px) / 2 = 6px to center vertically */
+    left: 6px; /* (32px - 20px) / 2 = 6px to center horizontally */
+    width: 20px; /* 60% of 32px ≈ 20px */
+    height: 20px;
+    pointer-events: none; /* allow clicks to hit the marker */
 }
 
 #controls button.active {
