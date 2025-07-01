@@ -49,14 +49,19 @@ function plantHQ(coords: { lng: number; lat: number }, type: HQType) {
 // Set up callbacks for MapView to communicate back to controller
 const mapCallbacks: MapViewCallbacks = {
     isPlanting: () => state.plantingType !== null,
-    onMapClick: (coords: { lng: number; lat: number }, buildingFeature?: any) => {
+    onMapClick: (coords: { lng: number; lat: number }, features: { building?: any, transport?: any }) => {
         if (!state.plantingType) return;
 
         // Retailers must be placed on a building
-        if (state.plantingType === 'retailer' && !buildingFeature) {
+        if (state.plantingType === 'retailer' && !features.building) {
             console.log("Retailers must be placed on a building.");
-            // Optionally, provide user feedback here (e.g., a small, temporary message on the screen)
-            return; // Abort if no building is under the cursor
+            return;
+        }
+
+        // Traffickers must be placed on a road or river
+        if (state.plantingType === 'trafficker' && !features.transport) {
+            console.log("Traffickers must be placed on a road or river.");
+            return;
         }
 
         plantHQ(coords, state.plantingType);

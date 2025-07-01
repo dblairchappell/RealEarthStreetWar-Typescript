@@ -4,13 +4,14 @@ import { HQType } from "../model/GameState";
 
 // Callback interface for MapView to communicate with controller
 export interface MapViewCallbacks {
-  onMapClick: (coords: { lng: number; lat: number }, buildingFeature?: any) => void;
+  onMapClick: (coords: { lng: number; lat: number }, features: { building?: any, transport?: any }) => void;
   isPlanting: () => boolean;
 }
 
 export default class MapView {
   private map: any;
   private buildingLayers: string[] = ['building-hit', 'building-footprints', 'building-3d'];
+  private transportLayers: string[] = [];
   
   // HUD elements
   public plantProducerBtn!: HTMLElement | null;
@@ -64,6 +65,7 @@ export default class MapView {
 
     this.map.on('load', () => {
       this.setupLayers();
+      this.identifyInteractiveLayers();
       this.setupMapEventHandlers();
     });
   }
@@ -105,6 +107,23 @@ export default class MapView {
     });
   }
 
+  private identifyInteractiveLayers() {
+    const layers = this.map.getStyle().layers;
+    this.transportLayers = layers
+      .filter((layer: any) => {
+        const layerId = layer.id || '';
+        return layer.type === 'line' && (
+          layerId.includes('road') ||
+          layerId.includes('street') ||
+          layerId.includes('highway') ||
+          layerId.includes('transportation') ||
+          layerId.includes('waterway')
+        );
+      })
+      .map((layer: any) => layer.id);
+    console.log('Found transportation layers:', this.transportLayers);
+  }
+
   // Getter to expose the map instance to the controller
   get mapInstance(): any {
     return this.map;
@@ -134,12 +153,15 @@ export default class MapView {
 
       const coords = { lng: e.lngLat.lng, lat: e.lngLat.lat };
       
-      // Check if a building was clicked
-      const features = this.map.queryRenderedFeatures(e.point, { layers: this.buildingLayers });
-      const buildingFeature = features.length > 0 ? features[0] : undefined;
+      const point = e.point;
+      const buildingFeatures = this.map.queryRenderedFeatures(point, { layers: this.buildingLayers });
+      const transportFeatures = this.map.queryRenderedFeatures(point, { layers: this.transportLayers });
 
-      // Notify controller about click, including building info
-      this.callbacks?.onMapClick(coords, buildingFeature);
+      // Notify controller about click, including any features found
+      this.callbacks?.onMapClick(coords, {
+        building: buildingFeatures.length > 0 ? buildingFeatures[0] : undefined,
+        transport: transportFeatures.length > 0 ? transportFeatures[0] : undefined,
+      });
 
       // Reset cursor
       this.map.getCanvas().style.cursor = '';
