@@ -7,8 +7,10 @@ export default class GameController {
   }
 
   updateView() {
-    // Simply update the HQ count display
-    const hqCount = this.state.hqs.length;
-    this.view.updateHQCount(hqCount);
+    this.view.updateStats(
+      this.state.hqs.length,
+      this.state.commodities,
+      this.state.money
+    );
   }
 }

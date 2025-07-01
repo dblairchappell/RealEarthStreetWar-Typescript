@@ -1,18 +1,23 @@
 // view/MapView.ts
 import * as turf from "@turf/turf";
+import { HQType } from "../model/GameState";
 
 // Callback interface for MapView to communicate with controller
 export interface MapViewCallbacks {
-  onBuildingClick: (coords: { lng: number; lat: number }) => void;
-  isPlantingMode: () => boolean;
+  onMapClick: (coords: { lng: number; lat: number }) => void;
+  isPlanting: () => boolean;
 }
 
 export default class MapView {
   private map: any;
   
   // HUD elements
-  private plantHqBtn!: HTMLElement | null;
+  public plantProducerBtn!: HTMLElement | null;
+  public plantTraffickerBtn!: HTMLElement | null;
+  public plantRetailerBtn!: HTMLElement | null;
   private hqCountEl!: HTMLElement | null;
+  private commoditiesCountEl!: HTMLElement | null;
+  private moneyCountEl!: HTMLElement | null;
 
   // Callbacks for communicating with controller
   private callbacks: MapViewCallbacks | null = null;
@@ -62,8 +67,12 @@ export default class MapView {
   }
 
   private queryHudElements() {
-    this.plantHqBtn = document.getElementById('plant-hq-btn');
-    this.hqCountEl = document.getElementById('gang-count');
+    this.plantProducerBtn = document.getElementById('plant-producer-btn');
+    this.plantTraffickerBtn = document.getElementById('plant-trafficker-btn');
+    this.plantRetailerBtn = document.getElementById('plant-retailer-btn');
+    this.hqCountEl = document.getElementById('hq-count');
+    this.commoditiesCountEl = document.getElementById('commodities-count');
+    this.moneyCountEl = document.getElementById('money-count');
   }
 
   private setupLayers() {
@@ -88,17 +97,13 @@ export default class MapView {
     return this.map;
   }
 
-  // Simple HQ count update
-  updateHQCount(count: number) {
-    if (this.hqCountEl) {
-      this.hqCountEl.textContent = count.toString();
-    }
+  // Simple stats update
+  updateStats(hqCount: number, commodities: number, money: number) {
+    if (this.hqCountEl) this.hqCountEl.textContent = hqCount.toString();
+    if (this.commoditiesCountEl) this.commoditiesCountEl.textContent = commodities.toString();
+    if (this.moneyCountEl) this.moneyCountEl.textContent = money.toFixed(2);
   }
 
-  // Getter for HUD elements
-  get plantHqButton(): HTMLElement | null { return this.plantHqBtn; }
-
-  // Set callbacks for communication with controller
   setCallbacks(callbacks: MapViewCallbacks) {
     this.callbacks = callbacks;
   }
@@ -106,12 +111,12 @@ export default class MapView {
   private setupMapEventHandlers() {
     // Click handler for placing HQs
     this.map.on('click', (e: any) => {
-      if (!this.callbacks?.isPlantingMode()) return;
+      if (!this.callbacks?.isPlanting()) return;
 
       const coords = { lng: e.lngLat.lng, lat: e.lngLat.lat };
       
       // Notify controller about click
-      this.callbacks?.onBuildingClick(coords);
+      this.callbacks?.onMapClick(coords);
 
       // Reset cursor
       this.map.getCanvas().style.cursor = '';
@@ -119,27 +124,22 @@ export default class MapView {
 
     // Change cursor when in planting mode
     this.map.on('mousemove', (e: any) => {
-      if (this.callbacks?.isPlantingMode()) {
-        this.map.getCanvas().style.cursor = 'crosshair';
-      } else {
-        this.map.getCanvas().style.cursor = '';
-      }
+      this.map.getCanvas().style.cursor = this.callbacks?.isPlanting() ? 'crosshair' : '';
     });
   }
 
   // Method to exit planting mode (called from controller)
   exitPlantingMode() {
-    if (this.plantHqBtn) {
-      this.plantHqBtn.classList.remove('active');
-    }
+    this.plantProducerBtn?.classList.remove('active');
+    this.plantTraffickerBtn?.classList.remove('active');
+    this.plantRetailerBtn?.classList.remove('active');
     this.map.getCanvas().style.cursor = '';
   }
 
   // Method to create HQ marker (called from controller)
-  createHQMarker(coords: { lng: number; lat: number }, hqNumber: number): any {
+  createHQMarker(coords: { lng: number; lat: number }, type: HQType): any {
     const el = document.createElement('div');
-    el.className = 'gang-marker';
-    el.textContent = hqNumber.toString();
+    el.className = `gang-marker ${type}`; // e.g. 'gang-marker producer'
     const marker = new (window as any).maplibregl.Marker(el).setLngLat(coords).addTo(this.map);
     return marker;
   }

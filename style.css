@@ -81,17 +81,34 @@ body {
 }
 
 .gang-marker {
-    width: 26px;
-    height: 26px;
+    width: 30px;
+    height: 30px;
     border-radius: 50%;
-    background: #e91e63;
-    color: #fff;
+    border: 2px solid white;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    cursor: pointer;
     display: flex;
-    align-items: center;
     justify-content: center;
+    align-items: center;
     font-size: 14px;
     font-weight: bold;
-    border: 2px solid #fff;
-    box-shadow: 0 0 2px rgba(0,0,0,0.5);
-    pointer-events: none;
+    color: white;
+}
+
+.gang-marker.producer {
+    background-color: #4CAF50; /* Green */
+}
+
+.gang-marker.trafficker {
+    background-color: #FFC107; /* Amber */
+}
+
+.gang-marker.retailer {
+    background-color: #2196F3; /* Blue */
+}
+
+#controls button.active {
+    background-color: #ff4500;
+    color: white;
+    border-color: #ff4500;
 } 
