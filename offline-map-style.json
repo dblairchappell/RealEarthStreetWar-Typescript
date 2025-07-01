@@ -92,7 +92,14 @@
       "filter": ["==", "class", "path"],
       "paint": {
         "line-color": "#d0d0d0",
-        "line-width": 1,
+        "line-width": {
+          "type": "exponential",
+          "base": 2,
+          "stops": [
+            [10, 0.0234375],
+            [24, 384]
+          ]
+        },
         "line-dasharray": [2, 2]
       }
     },
@@ -105,7 +112,12 @@
       "paint": {
         "line-color": "#ffffff",
         "line-width": {
-          "stops": [[12, 1], [16, 4]]
+          "type": "exponential",
+          "base": 2,
+          "stops": [
+            [10, 0.09375],
+            [24, 1536]
+          ]
         }
       }
     },
@@ -118,7 +130,12 @@
       "paint": {
         "line-color": "#ffffff",
         "line-width": {
-          "stops": [[10, 1], [16, 6]]
+          "type": "exponential",
+          "base": 2,
+          "stops": [
+            [8, 0.03125],
+            [24, 2048]
+          ]
         }
       }
     },
@@ -131,7 +148,12 @@
       "paint": {
         "line-color": "#ffffff",
         "line-width": {
-          "stops": [[8, 1], [16, 8]]
+          "type": "exponential",
+          "base": 2,
+          "stops": [
+            [6, 0.15625],
+            [24, 2560]
+          ]
         }
       }
     },
@@ -144,7 +166,12 @@
       "paint": {
         "line-color": "#ffd700",
         "line-width": {
-          "stops": [[6, 1], [16, 10]]
+          "type": "exponential",
+          "base": 2,
+          "stops": [
+            [4, 0.21875],
+            [24, 3584]
+          ]
         }
       }
     },
@@ -157,7 +184,12 @@
       "paint": {
         "line-color": "#ff6b6b",
         "line-width": {
-          "stops": [[4, 1], [16, 12]]
+          "type": "exponential",
+          "base": 2,
+          "stops": [
+            [2, 0.375],
+            [24, 6144]
+          ]
         }
       }
     },
@@ -169,7 +201,14 @@
       "filter": ["==", "class", "rail"],
       "paint": {
         "line-color": "#888888",
-        "line-width": 2,
+        "line-width": {
+          "type": "exponential",
+          "base": 2,
+          "stops": [
+            [8, 0.01171875],
+            [24, 768]
+          ]
+        },
         "line-dasharray": [3, 3]
       }
     },
@@ -181,7 +220,12 @@
       "paint": {
         "line-color": "#7bb3f0",
         "line-width": {
-          "stops": [[10, 1], [16, 4]]
+          "type": "exponential",
+          "base": 2,
+          "stops": [
+            [8, 0.01953125],
+            [24, 1280]
+          ]
         }
       }
     },
@@ -206,7 +250,12 @@
       "paint": {
         "line-color": "#dddddd",
         "line-width": {
-          "stops": [[10, 2], [16, 20]]
+          "type": "exponential",
+          "base": 2,
+          "stops": [
+            [8, 0.17578125],
+            [24, 11520]
+          ]
         }
       }
     },
