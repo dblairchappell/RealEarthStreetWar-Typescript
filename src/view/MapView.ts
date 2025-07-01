@@ -4,12 +4,13 @@ import { HQType } from "../model/GameState";
 
 // Callback interface for MapView to communicate with controller
 export interface MapViewCallbacks {
-  onMapClick: (coords: { lng: number; lat: number }) => void;
+  onMapClick: (coords: { lng: number; lat: number }, buildingFeature?: any) => void;
   isPlanting: () => boolean;
 }
 
 export default class MapView {
   private map: any;
+  private buildingLayers: string[] = ['building-hit', 'building-footprints', 'building-3d'];
   
   // HUD elements
   public plantProducerBtn!: HTMLElement | null;
@@ -92,6 +93,16 @@ export default class MapView {
         'fill-opacity': 0.2
       }
     });
+
+    // Add an invisible fill layer dedicated to hit-testing buildings.
+    // This can be added without a 'before' ID, which is safer.
+    this.map.addLayer({
+      id: 'building-hit',
+      type: 'fill',
+      source: 'nj-complete',
+      'source-layer': 'building',
+      paint: { 'fill-opacity': 0 }
+    });
   }
 
   // Getter to expose the map instance to the controller
@@ -123,8 +134,12 @@ export default class MapView {
 
       const coords = { lng: e.lngLat.lng, lat: e.lngLat.lat };
       
-      // Notify controller about click
-      this.callbacks?.onMapClick(coords);
+      // Check if a building was clicked
+      const features = this.map.queryRenderedFeatures(e.point, { layers: this.buildingLayers });
+      const buildingFeature = features.length > 0 ? features[0] : undefined;
+
+      // Notify controller about click, including building info
+      this.callbacks?.onMapClick(coords, buildingFeature);
 
       // Reset cursor
       this.map.getCanvas().style.cursor = '';
@@ -148,7 +163,9 @@ export default class MapView {
   createHQMarker(coords: { lng: number; lat: number }, type: HQType): any {
     const el = document.createElement('div');
     el.className = `gang-marker ${type}`; // e.g. 'gang-marker producer'
-    const marker = new (window as any).maplibregl.Marker(el).setLngLat(coords).addTo(this.map);
+    const marker = new (window as any).maplibregl.Marker(el)
+      .setLngLat(coords)
+      .addTo(this.map);
     return marker;
   }
 

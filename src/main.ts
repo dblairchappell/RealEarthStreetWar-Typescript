@@ -49,12 +49,19 @@ function plantHQ(coords: { lng: number; lat: number }, type: HQType) {
 // Set up callbacks for MapView to communicate back to controller
 const mapCallbacks: MapViewCallbacks = {
     isPlanting: () => state.plantingType !== null,
-    onMapClick: (coords: { lng: number; lat: number }) => {
-        if (state.plantingType) {
-            plantHQ(coords, state.plantingType);
-            state.plantingType = null;
-            view.exitPlantingMode();
+    onMapClick: (coords: { lng: number; lat: number }, buildingFeature?: any) => {
+        if (!state.plantingType) return;
+
+        // Retailers must be placed on a building
+        if (state.plantingType === 'retailer' && !buildingFeature) {
+            console.log("Retailers must be placed on a building.");
+            // Optionally, provide user feedback here (e.g., a small, temporary message on the screen)
+            return; // Abort if no building is under the cursor
         }
+
+        plantHQ(coords, state.plantingType);
+        state.plantingType = null;
+        view.exitPlantingMode();
     }
 };
 
