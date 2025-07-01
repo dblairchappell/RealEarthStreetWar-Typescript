@@ -194,21 +194,24 @@ export default class MapView {
     const el = document.createElement('div');
     el.style.width = '30px';
     el.style.height = '30px';
-    el.style.border = '2px solid white';
+    // el.style.border = '2px solid white';
     el.style.boxShadow = '0 0 10px rgba(0,0,0,0.5)';
     el.style.cursor = 'pointer';
     el.style.display = 'flex';
     el.style.justifyContent = 'center';
-    el.style.alignItems = 'center';
+    el.style.alignItems = 'top';
     el.style.clipPath = 'polygon(50% 100%, 0% 0%, 100% 0%)'; // Triangle pointing down
     
     // Set background color based on type
     if (type === 'producer') {
       el.style.backgroundColor = '#4CAF50';
+      el.style.border = '10px solid #4CAF50';
     } else if (type === 'trafficker') {
       el.style.backgroundColor = '#FFC107';
+      el.style.border = '10px solid #FFC107';
     } else if (type === 'retailer') {
       el.style.backgroundColor = '#2196F3';
+      el.style.border = '10px solid #2196F3';
     }
 
     // Add the icon image
