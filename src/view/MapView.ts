@@ -200,7 +200,7 @@ export default class MapView {
     el.style.display = 'flex';
     el.style.justifyContent = 'center';
     el.style.alignItems = 'top';
-    el.style.clipPath = 'polygon(50% 100%, 0% 0%, 100% 0%)'; // Triangle pointing down
+    el.style.clipPath = 'polygon(50% 100%, 15% 60%, 0% 0%, 100% 0%, 85% 60%)';
     
     // Set background color based on type
     if (type === 'producer') {
