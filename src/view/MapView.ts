@@ -17,7 +17,8 @@ const ICON_MAP: Record<HQType, string> = {
 
 export default class MapView {
   private map: any;
-  private buildingLayers: string[] = ['building-hit', 'building-footprints', 'building-3d'];
+  // Use only the 2-D footprint polygons for hit-testing
+  private buildingLayers: string[] = ['building-footprints'];
   private transportLayers: string[] = [];
   private markers: Array<{ marker: any, element: HTMLElement, baseSize: number }> = [];
   
@@ -185,7 +186,7 @@ export default class MapView {
       this.map.getCanvas().style.cursor = '';
     });
 
-    // Change cursor when in planting mode
+    // Change cursor when in planting mode and log building info
     this.map.on('mousemove', (e: any) => {
       this.map.getCanvas().style.cursor = this.callbacks?.isPlanting() ? 'crosshair' : '';
     });

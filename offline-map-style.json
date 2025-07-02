@@ -423,6 +423,7 @@
       "source-layer": "poi",
       "minzoom": 14,
       "layout": {
+        "visibility": "none",
         "text-field": ["get", "name"],
         "text-font": ["Noto Sans Regular"],
         "text-size": 10,

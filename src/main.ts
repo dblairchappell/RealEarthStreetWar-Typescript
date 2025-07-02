@@ -63,7 +63,7 @@ const mapCallbacks: MapViewCallbacks = {
             console.log("Traffickers must be placed on a road or river.");
             return;
         }
-
+        
         plantHQ(coords, state.plantingType);
         state.plantingType = null;
         view.exitPlantingMode();
