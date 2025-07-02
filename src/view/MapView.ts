@@ -19,6 +19,7 @@ export default class MapView {
   private map: any;
   private buildingLayers: string[] = ['building-hit', 'building-footprints', 'building-3d'];
   private transportLayers: string[] = [];
+  private markers: Array<{ marker: any, element: HTMLElement, baseSize: number }> = [];
   
   // HUD elements
   public plantProducerBtn!: HTMLElement | null;
@@ -74,6 +75,16 @@ export default class MapView {
       this.setupLayers();
       this.identifyInteractiveLayers();
       this.setupMapEventHandlers();
+      
+      // Use 'zoomend' instead of 'zoom' for smoother performance
+      // But also add 'zoom' for real-time updates
+      this.map.on('zoom', () => {
+        this.updateMarkerSizes(false); // No transition during zoom
+      });
+      
+      this.map.on('zoomend', () => {
+        this.updateMarkerSizes(true); // Enable transition when zoom stops
+      });
     });
   }
 
@@ -188,13 +199,54 @@ export default class MapView {
     this.map.getCanvas().style.cursor = '';
   }
 
+  // Helper function to calculate marker size based on zoom
+  private calculateMarkerSize(baseSize: number, zoom?: number): number {
+    const currentZoom = zoom ?? this.map.getZoom();
+    const scale = Math.pow(2, (currentZoom - 10) / 1.2);
+    return Math.max(1, Math.min(200, baseSize * scale));
+  }
+
+  private updateMarkerSizes(enableTransition: boolean = false) {
+    const zoom = this.map.getZoom();
+    
+    this.markers.forEach(({ element, baseSize }) => {
+      const size = this.calculateMarkerSize(baseSize, zoom);
+      
+      // Control transition based on whether we're actively zooming
+      if (enableTransition) {
+        element.style.transition = 'width 0.1s ease, height 0.1s ease';
+      } else {
+        element.style.transition = 'none'; // No transition during zoom
+      }
+      
+      // Apply size to element
+      element.style.width = `${size}px`;
+      element.style.height = `${size}px`;
+      
+      // Scale the icon inside too
+      const img = element.querySelector('img');
+      if (img) {
+        const iconSize = size * 0.6;
+        if (enableTransition) {
+          img.style.transition = 'width 0.1s ease, height 0.1s ease';
+        } else {
+          img.style.transition = 'none';
+        }
+        img.style.width = `${iconSize}px`;
+        img.style.height = `${iconSize}px`;
+      }
+    });
+  }
+
   // Method to create HQ marker (called from controller)
   createHQMarker(coords: { lng: number; lat: number }, type: HQType): any {
-    // Create a simple marker element for testing
+    const baseSize = 1;
+    const size = this.calculateMarkerSize(baseSize);
+    
+    // Create marker element
     const el = document.createElement('div');
-    el.style.width = '30px';
-    el.style.height = '30px';
-    // el.style.border = '2px solid white';
+    el.style.width = `${size}px`;
+    el.style.height = `${size}px`;
     el.style.boxShadow = '0 0 10px rgba(0,0,0,0.5)';
     el.style.cursor = 'pointer';
     el.style.display = 'flex';
@@ -205,31 +257,36 @@ export default class MapView {
     // Set background color based on type
     if (type === 'producer') {
       el.style.backgroundColor = '#4CAF50';
-      el.style.border = '10px solid #4CAF50';
+      el.style.border = '4px solid #4CAF50';
     } else if (type === 'trafficker') {
       el.style.backgroundColor = '#FFC107';
-      el.style.border = '10px solid #FFC107';
+      el.style.border = '4px solid #FFC107';
     } else if (type === 'retailer') {
       el.style.backgroundColor = '#2196F3';
-      el.style.border = '10px solid #2196F3';
+      el.style.border = '4px solid #2196F3';
     }
 
     // Add the icon image
     const img = document.createElement('img');
     img.src = ICON_MAP[type];
     img.alt = type;
-    img.style.width = '18px';
-    img.style.height = '18px';
+    const iconSize = size * 0.6;
+    img.style.width = `${iconSize}px`;
+    img.style.height = `${iconSize}px`;
     img.style.pointerEvents = 'none';
     el.appendChild(img);
 
-    // Create marker with bottom anchor
+    // Create marker
     const marker = new (window as any).maplibregl.Marker({ 
       element: el, 
       anchor: 'bottom'
     })
       .setLngLat(coords)
       .addTo(this.map);
+    
+    // Store marker info for zoom-based scaling
+    this.markers.push({ marker, element: el, baseSize });
+    
     return marker;
   }
 
