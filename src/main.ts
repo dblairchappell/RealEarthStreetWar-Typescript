@@ -67,6 +67,9 @@ const mapCallbacks: MapViewCallbacks = {
         plantHQ(coords, state.plantingType);
         state.plantingType = null;
         view.exitPlantingMode();
+    },
+    onPlayerInput: (input) => {
+        controller.handlePlayerInput(input);
     }
 };
 
@@ -91,11 +94,16 @@ map.on('load', () => {
     // Set up MapView callbacks
     view.setCallbacks(mapCallbacks);
     
-    // Create player character at map center
-    view.createPlayerCharacter({ lng: -74.05682, lat: 40.69337 }); // Liberty State Park )
+    // Create player character at the player's starting position
+    view.createPlayerCharacter(
+        { lng: state.player.lng, lat: state.player.lat }, 
+        state.player.rotation
+    );
+    
     // Initial view update
     controller.updateView();
     controller.startClock(); // Start the game clock
+    controller.startMovementLoop(); // Start the movement update loop
 
     setupPlantingButton(view.plantProducerBtn, 'producer');
     setupPlantingButton(view.plantTraffickerBtn, 'trafficker');

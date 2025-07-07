@@ -11,11 +11,26 @@ export interface HQ {
   type: HQType;
 }
 
+export interface PlayerCharacter {
+  lng: number;
+  lat: number;
+  rotation: number; // degrees, 0 = north, 90 = east, 180 = south, 270 = west
+  isMoving: boolean;
+}
+
 export default class GameState {
   /* ----- persistent data ----- */
   hqs: HQ[] = [];
   playerUnion: Polygon | MultiPolygon | null = null;
   plantingType: HQType | null = null;
+  
+  // Player character state
+  player: PlayerCharacter = {
+    lng: -74.05682,
+    lat: 40.69337,
+    rotation: 0,
+    isMoving: false
+  };
 
   gameDate = new Date('2100-01-01T00:00:00');
   commodities = 0;
@@ -25,4 +40,8 @@ export default class GameState {
   static readonly INFLUENCE_RADIUS_KM = 0.08;
   static readonly GAME_TICK_MS = 1000; // 1 second per game tick
   static readonly MINUTES_PER_TICK = 15; // 15 game minutes per tick
+  
+  // Player movement constants
+  static readonly PLAYER_MOVE_SPEED = 0.000002; // degrees per frame (very small for map coordinates)
+  static readonly PLAYER_ROTATION_SPEED = 3; // degrees per frame
 }

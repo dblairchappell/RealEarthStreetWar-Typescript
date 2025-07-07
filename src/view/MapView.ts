@@ -6,6 +6,7 @@ import { HQType } from "../model/GameState";
 export interface MapViewCallbacks {
   onMapClick: (coords: { lng: number; lat: number }, features: { building?: any, transport?: any }) => void;
   isPlanting: () => boolean;
+  onPlayerInput: (input: { forward: boolean, backward: boolean, left: boolean, right: boolean }) => void;
 }
 
 // Map HQ types to their icon images (relative to public root)
@@ -21,9 +22,17 @@ export default class MapView {
   private buildingLayers: string[] = ['building-footprints'];
   private transportLayers: string[] = [];
   private markers: Array<{ marker: any, element: HTMLElement, baseSize: number }> = [];
-  private playerMarker: any = null; // Add this line
+  private playerMarker: any = null;
   private playerElement: HTMLElement | null = null;
   private playerBaseSize: number = 0.15;
+  
+  // Input state tracking
+  private inputState = {
+    forward: false,
+    backward: false,
+    left: false,
+    right: false
+  };
 
   // HUD elements
   public plantProducerBtn!: HTMLElement | null;
@@ -47,13 +56,16 @@ export default class MapView {
       container: containerId,
       style: 'offline-map-style.json',
       center: [-74.05682, 40.69337], // starting position [lng, lat]
-      zoom: 14, // start a bit further out, ready for initial zoom in
+      zoom: 14, // Start zoomed out for cinematic effect
       pitch: 0, // tilt for 3-D perspective
       bearing: 0, // slight rotation for depth perception
       antialias: true,
       dragRotate: false, // prevents mouse drag rotation,
       touchZoomRotate: false // prevents touch zoom rotation
     });
+
+    // Set up input handlers
+    this.setupInputHandlers();
 
     // Query HUD elements
     this.queryHudElements();
@@ -92,6 +104,94 @@ export default class MapView {
         this.updateMarkerSizes(true); // Enable transition when zoom stops
       });
     });
+  }
+
+  private setupInputHandlers(): void {
+    // Focus management - make sure the document can receive key events
+    document.addEventListener('keydown', (e) => {
+      this.handleKeyDown(e);
+      e.preventDefault(); // Prevent page scrolling
+    });
+
+    document.addEventListener('keyup', (e) => {
+      this.handleKeyUp(e);
+      e.preventDefault();
+    });
+
+    // Make sure the page is focusable
+    if (document.body.tabIndex === -1) {
+      document.body.tabIndex = 0;
+    }
+  }
+
+  private handleKeyDown(e: KeyboardEvent): void {
+    let inputChanged = false;
+
+    switch(e.code) {
+      case 'ArrowUp':
+        if (!this.inputState.forward) {
+          this.inputState.forward = true;
+          inputChanged = true;
+        }
+        break;
+      case 'ArrowDown':
+        if (!this.inputState.backward) {
+          this.inputState.backward = true;
+          inputChanged = true;
+        }
+        break;
+      case 'ArrowLeft':
+        if (!this.inputState.left) {
+          this.inputState.left = true;
+          inputChanged = true;
+        }
+        break;
+      case 'ArrowRight':
+        if (!this.inputState.right) {
+          this.inputState.right = true;
+          inputChanged = true;
+        }
+        break;
+    }
+
+    if (inputChanged && this.callbacks) {
+      this.callbacks.onPlayerInput(this.inputState);
+    }
+  }
+
+  private handleKeyUp(e: KeyboardEvent): void {
+    let inputChanged = false;
+
+    switch(e.code) {
+      case 'ArrowUp':
+        if (this.inputState.forward) {
+          this.inputState.forward = false;
+          inputChanged = true;
+        }
+        break;
+      case 'ArrowDown':
+        if (this.inputState.backward) {
+          this.inputState.backward = false;
+          inputChanged = true;
+        }
+        break;
+      case 'ArrowLeft':
+        if (this.inputState.left) {
+          this.inputState.left = false;
+          inputChanged = true;
+        }
+        break;
+      case 'ArrowRight':
+        if (this.inputState.right) {
+          this.inputState.right = false;
+          inputChanged = true;
+        }
+        break;
+    }
+
+    if (inputChanged && this.callbacks) {
+      this.callbacks.onPlayerInput(this.inputState);
+    }
   }
 
   private queryHudElements() {
@@ -246,7 +346,7 @@ export default class MapView {
 
     // Update player character size
     if (this.playerElement) {
-      const playerBaseSize = this.playerBaseSize; // Same as in createPlayerCharacter
+      const playerBaseSize = this.playerBaseSize;
       const playerSize = this.calculateMarkerSize(playerBaseSize, zoom);
       
       if (enableTransition) {
@@ -338,8 +438,7 @@ export default class MapView {
   }
 
   // Method to create player character
-  createPlayerCharacter(coords: { lng: number; lat: number }): void {
-    // Person should be much smaller than buildings - use a tiny base size
+  createPlayerCharacter(coords: { lng: number; lat: number }, rotation: number = 0): void {
     const baseSize = this.playerBaseSize;
     const size = this.calculateMarkerSize(baseSize);
     
@@ -353,14 +452,16 @@ export default class MapView {
     el.style.backgroundColor = 'transparent';
     el.style.zIndex = '1000'; // Keep player on top
     
-    // Add the player icon
+    // Add the player icon (triangle that shows direction)
     const img = document.createElement('img');
-    img.src = 'icons/foot_trafficker.svg';
+    img.src = 'icons/player_triangle.svg';
     img.alt = 'player';
     img.style.width = `${size}px`;
     img.style.height = `${size}px`;
     img.style.pointerEvents = 'none';
-    img.style.filter = 'drop-shadow(0 1px 2px rgba(0,0,0,0.8))'; // Add shadow for visibility
+    img.style.filter = 'drop-shadow(0 1px 2px rgba(0,0,0,0.8))';
+    img.style.transform = `rotate(${rotation}deg)`;
+    img.style.transition = 'transform 0.1s ease'; // Smooth rotation
     el.appendChild(img);
 
     // Create player marker
@@ -374,7 +475,7 @@ export default class MapView {
     // Store player element for zoom updates
     this.playerElement = el;
     
-    // Center camera on player with smooth animation
+    // Cinematic zoom-in effect
     this.map.easeTo({
       center: coords,
       zoom: 19,
@@ -382,14 +483,27 @@ export default class MapView {
     });
   }
 
+  // Method to update player position and rotation
+  updatePlayerPosition(coords: { lng: number; lat: number }, rotation: number): void {
+    if (this.playerMarker) {
+      this.playerMarker.setLngLat(coords);
+      
+      // Update rotation
+      const img = this.playerElement?.querySelector('img');
+      if (img) {
+        img.style.transform = `rotate(${rotation}deg)`;
+      }
+      
+      // Update camera to follow player
+      this.centerCameraOnPlayer();
+    }
+  }
+
   // Method to center camera on player
   centerCameraOnPlayer(): void {
     if (this.playerMarker) {
       const playerPos = this.playerMarker.getLngLat();
-      this.map.easeTo({
-        center: [playerPos.lng, playerPos.lat],
-        duration: 1000
-      });
+      this.map.setCenter([playerPos.lng, playerPos.lat]); // Instant follow for smooth movement
     }
   }
 }

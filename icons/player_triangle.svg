@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+  <!-- Triangle pointing upward to show direction -->
+  <polygon points="12,2 20,18 4,18" 
+           fill="#FF4444" 
+           stroke="#FFFFFF" 
+           stroke-width="2" 
+           stroke-linejoin="round"/>
+  <!-- Small circle in center for better visibility -->
+  <circle cx="12" cy="14" r="2" fill="#FFFFFF"/>
+</svg> 
