@@ -91,6 +91,8 @@ map.on('load', () => {
     // Set up MapView callbacks
     view.setCallbacks(mapCallbacks);
     
+    // Create player character at map center
+    view.createPlayerCharacter({ lng: -74.05682, lat: 40.69337 }); // Liberty State Park )
     // Initial view update
     controller.updateView();
     controller.startClock(); // Start the game clock
@@ -98,4 +100,4 @@ map.on('load', () => {
     setupPlantingButton(view.plantProducerBtn, 'producer');
     setupPlantingButton(view.plantTraffickerBtn, 'trafficker');
     setupPlantingButton(view.plantRetailerBtn, 'retailer');
-}); 
+});

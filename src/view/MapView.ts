@@ -21,7 +21,10 @@ export default class MapView {
   private buildingLayers: string[] = ['building-footprints'];
   private transportLayers: string[] = [];
   private markers: Array<{ marker: any, element: HTMLElement, baseSize: number }> = [];
-  
+  private playerMarker: any = null; // Add this line
+  private playerElement: HTMLElement | null = null;
+  private playerBaseSize: number = 0.15;
+
   // HUD elements
   public plantProducerBtn!: HTMLElement | null;
   public plantTraffickerBtn!: HTMLElement | null;
@@ -43,8 +46,8 @@ export default class MapView {
     this.map = new (window as any).maplibregl.Map({
       container: containerId,
       style: 'offline-map-style.json',
-      center: [-74.5, 40], // starting position [lng, lat]
-      zoom: 13, // start a bit closer to see details
+      center: [-74.05682, 40.69337], // starting position [lng, lat]
+      zoom: 14, // start a bit further out, ready for initial zoom in
       pitch: 0, // tilt for 3-D perspective
       bearing: 0, // slight rotation for depth perception
       antialias: true,
@@ -212,6 +215,7 @@ export default class MapView {
   private updateMarkerSizes(enableTransition: boolean = false) {
     const zoom = this.map.getZoom();
     
+    // Update HQ markers
     this.markers.forEach(({ element, baseSize }) => {
       const size = this.calculateMarkerSize(baseSize, zoom);
       
@@ -239,6 +243,32 @@ export default class MapView {
         img.style.height = `${iconSize}px`;
       }
     });
+
+    // Update player character size
+    if (this.playerElement) {
+      const playerBaseSize = this.playerBaseSize; // Same as in createPlayerCharacter
+      const playerSize = this.calculateMarkerSize(playerBaseSize, zoom);
+      
+      if (enableTransition) {
+        this.playerElement.style.transition = 'width 0.1s ease, height 0.1s ease';
+      } else {
+        this.playerElement.style.transition = 'none';
+      }
+      
+      this.playerElement.style.width = `${playerSize}px`;
+      this.playerElement.style.height = `${playerSize}px`;
+      
+      const playerImg = this.playerElement.querySelector('img');
+      if (playerImg) {
+        if (enableTransition) {
+          playerImg.style.transition = 'width 0.1s ease, height 0.1s ease';
+        } else {
+          playerImg.style.transition = 'none';
+        }
+        playerImg.style.width = `${playerSize}px`;
+        playerImg.style.height = `${playerSize}px`;
+      }
+    }
   }
 
   // Method to create HQ marker (called from controller)
@@ -305,5 +335,61 @@ export default class MapView {
       }] : []
     };
     (this.map.getSource('influence-area') as any).setData(geoJsonData);
+  }
+
+  // Method to create player character
+  createPlayerCharacter(coords: { lng: number; lat: number }): void {
+    // Person should be much smaller than buildings - use a tiny base size
+    const baseSize = this.playerBaseSize;
+    const size = this.calculateMarkerSize(baseSize);
+    
+    // Create player element
+    const el = document.createElement('div');
+    el.style.width = `${size}px`;
+    el.style.height = `${size}px`;
+    el.style.display = 'flex';
+    el.style.justifyContent = 'center';
+    el.style.alignItems = 'center';
+    el.style.backgroundColor = 'transparent';
+    el.style.zIndex = '1000'; // Keep player on top
+    
+    // Add the player icon
+    const img = document.createElement('img');
+    img.src = 'icons/foot_trafficker.svg';
+    img.alt = 'player';
+    img.style.width = `${size}px`;
+    img.style.height = `${size}px`;
+    img.style.pointerEvents = 'none';
+    img.style.filter = 'drop-shadow(0 1px 2px rgba(0,0,0,0.8))'; // Add shadow for visibility
+    el.appendChild(img);
+
+    // Create player marker
+    this.playerMarker = new (window as any).maplibregl.Marker({ 
+      element: el, 
+      anchor: 'center'
+    })
+      .setLngLat(coords)
+      .addTo(this.map);
+    
+    // Store player element for zoom updates
+    this.playerElement = el;
+    
+    // Center camera on player with smooth animation
+    this.map.easeTo({
+      center: coords,
+      zoom: 19,
+      duration: 3000
+    });
+  }
+
+  // Method to center camera on player
+  centerCameraOnPlayer(): void {
+    if (this.playerMarker) {
+      const playerPos = this.playerMarker.getLngLat();
+      this.map.easeTo({
+        center: [playerPos.lng, playerPos.lat],
+        duration: 1000
+      });
+    }
   }
 }
