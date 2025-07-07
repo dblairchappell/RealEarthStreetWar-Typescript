@@ -45,9 +45,11 @@ export default class MapView {
       style: 'offline-map-style.json',
       center: [-74.5, 40], // starting position [lng, lat]
       zoom: 13, // start a bit closer to see details
-      pitch: 60, // tilt for 3-D perspective
-      bearing: -20, // slight rotation for depth perception
-      antialias: true
+      pitch: 0, // tilt for 3-D perspective
+      bearing: 0, // slight rotation for depth perception
+      antialias: true,
+      dragRotate: false, // prevents mouse drag rotation,
+      touchZoomRotate: false // prevents touch zoom rotation
     });
 
     // Query HUD elements
