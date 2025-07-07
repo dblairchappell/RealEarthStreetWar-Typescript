@@ -61,7 +61,8 @@ export default class MapView {
       bearing: 0, // slight rotation for depth perception
       antialias: true,
       dragRotate: false, // prevents mouse drag rotation,
-      touchZoomRotate: false // prevents touch zoom rotation
+      touchZoomRotate: false, // prevents touch zoom rotation
+      keyboard: false // Disable built-in keyboard navigation to prevent conflicts
     });
 
     // Set up input handlers
@@ -503,7 +504,7 @@ export default class MapView {
   centerCameraOnPlayer(): void {
     if (this.playerMarker) {
       const playerPos = this.playerMarker.getLngLat();
-      this.map.setCenter([playerPos.lng, playerPos.lat]); // Instant follow for smooth movement
+      this.map.setCenter([playerPos.lng, playerPos.lat]); // Instant follow - no jitter now that keyboard conflict is resolved
     }
   }
 }
