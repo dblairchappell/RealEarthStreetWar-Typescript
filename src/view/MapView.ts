@@ -6,7 +6,14 @@ import { HQType } from "../model/GameState";
 export interface MapViewCallbacks {
   onMapClick: (coords: { lng: number; lat: number }, features: { building?: any, transport?: any }) => void;
   isPlanting: () => boolean;
-  onPlayerInput: (input: { forward: boolean, backward: boolean, left: boolean, right: boolean }) => void;
+  onPlayerInput: (input: { 
+    forward: boolean, 
+    backward: boolean, 
+    left: boolean, 
+    right: boolean,
+    rotateLeft: boolean,
+    rotateRight: boolean 
+  }) => void;
 }
 
 // Map HQ types to their icon images (relative to public root)
@@ -32,8 +39,10 @@ export default class MapView {
   private inputState = {
     forward: false,
     backward: false,
-    left: false,
-    right: false
+    left: false,        // Now for strafing left
+    right: false,       // Now for strafing right
+    rotateLeft: false,  // New: for rotation left (shift+left)
+    rotateRight: false  // New: for rotation right (shift+right)
   };
 
   // HUD elements
@@ -127,6 +136,7 @@ export default class MapView {
     }
   }
 
+  // Update the key handling methods to reverse the behavior
   private handleKeyDown(e: KeyboardEvent): void {
     let inputChanged = false;
 
@@ -144,15 +154,33 @@ export default class MapView {
         }
         break;
       case 'ArrowLeft':
-        if (!this.inputState.left) {
-          this.inputState.left = true;
-          inputChanged = true;
+        if (e.shiftKey) {
+          // Shift+Left = Strafe left
+          if (!this.inputState.left) {
+            this.inputState.left = true;
+            inputChanged = true;
+          }
+        } else {
+          // Left = Rotate left (default behavior)
+          if (!this.inputState.rotateLeft) {
+            this.inputState.rotateLeft = true;
+            inputChanged = true;
+          }
         }
         break;
       case 'ArrowRight':
-        if (!this.inputState.right) {
-          this.inputState.right = true;
-          inputChanged = true;
+        if (e.shiftKey) {
+          // Shift+Right = Strafe right
+          if (!this.inputState.right) {
+            this.inputState.right = true;
+            inputChanged = true;
+          }
+        } else {
+          // Right = Rotate right (default behavior)
+          if (!this.inputState.rotateRight) {
+            this.inputState.rotateRight = true;
+            inputChanged = true;
+          }
         }
         break;
     }
@@ -179,14 +207,32 @@ export default class MapView {
         }
         break;
       case 'ArrowLeft':
+        // Reset both strafe and rotate for left arrow
+        let leftChanged = false;
         if (this.inputState.left) {
           this.inputState.left = false;
+          leftChanged = true;
+        }
+        if (this.inputState.rotateLeft) {
+          this.inputState.rotateLeft = false;
+          leftChanged = true;
+        }
+        if (leftChanged) {
           inputChanged = true;
         }
         break;
       case 'ArrowRight':
+        // Reset both strafe and rotate for right arrow
+        let rightChanged = false;
         if (this.inputState.right) {
           this.inputState.right = false;
+          rightChanged = true;
+        }
+        if (this.inputState.rotateRight) {
+          this.inputState.rotateRight = false;
+          rightChanged = true;
+        }
+        if (rightChanged) {
           inputChanged = true;
         }
         break;

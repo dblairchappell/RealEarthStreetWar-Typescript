@@ -42,6 +42,6 @@ export default class GameState {
   static readonly MINUTES_PER_TICK = 15; // 15 game minutes per tick
   
   // Player movement constants
-  static readonly PLAYER_MOVE_SPEED = 0.000002; // degrees per frame (very small for map coordinates)
-  static readonly PLAYER_ROTATION_SPEED = 3; // degrees per frame
+  static readonly PLAYER_MOVE_SPEED = 0.000003; // degrees per frame (very small for map coordinates)
+  static readonly PLAYER_ROTATION_SPEED = 4; // degrees per frame
 }

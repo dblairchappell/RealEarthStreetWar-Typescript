@@ -5,11 +5,14 @@ import MapView from "../view/MapView";
 export default class GameController {
   private gameClockTimer: number | null = null;
   private movementTimer: number | null = null;
+  // Update the input handling method
   private currentInput = {
     forward: false,
     backward: false,
     left: false,
-    right: false
+    right: false,
+    rotateLeft: false,
+    rotateRight: false
   };
 
   constructor(private state: GameState, private view: MapView) {
@@ -36,17 +39,25 @@ export default class GameController {
     this.updateView();
   }
 
-  public handlePlayerInput(input: { forward: boolean, backward: boolean, left: boolean, right: boolean }) {
+  public handlePlayerInput(input: { 
+    forward: boolean, 
+    backward: boolean, 
+    left: boolean, 
+    right: boolean,
+    rotateLeft: boolean,
+    rotateRight: boolean 
+  }) {
     this.currentInput = { ...input };
     this.state.player.isMoving = input.forward || input.backward || input.left || input.right;
   }
 
+  // Update the movement logic
   private updatePlayerMovement() {
     let positionChanged = false;
     let rotationChanged = false;
 
-    // Handle rotation (left/right arrows)
-    if (this.currentInput.left) {
+    // Handle rotation (shift+left/right arrows)
+    if (this.currentInput.rotateLeft) {
       this.state.player.rotation -= GameState.PLAYER_ROTATION_SPEED;
       if (this.state.player.rotation < 0) {
         this.state.player.rotation += 360;
@@ -54,7 +65,7 @@ export default class GameController {
       rotationChanged = true;
     }
     
-    if (this.currentInput.right) {
+    if (this.currentInput.rotateRight) {
       this.state.player.rotation += GameState.PLAYER_ROTATION_SPEED;
       if (this.state.player.rotation >= 360) {
         this.state.player.rotation -= 360;
@@ -62,15 +73,38 @@ export default class GameController {
       rotationChanged = true;
     }
 
-    // Handle movement (forward/backward arrows)
-    if (this.currentInput.forward || this.currentInput.backward) {
-      const direction = this.currentInput.forward ? 1 : -1;
+    // Handle movement (forward/backward and strafing)
+    if (this.currentInput.forward || this.currentInput.backward || this.currentInput.left || this.currentInput.right) {
       const radians = (this.state.player.rotation * Math.PI) / 180;
       
-      // Calculate movement in lng/lat coordinates
-      // Note: longitude movement needs to be adjusted for latitude (cos correction)
-      const deltaLat = Math.cos(radians) * GameState.PLAYER_MOVE_SPEED * direction;
-      const deltaLng = Math.sin(radians) * GameState.PLAYER_MOVE_SPEED * direction;
+      let deltaLat = 0;
+      let deltaLng = 0;
+      
+      // Forward/backward movement
+      if (this.currentInput.forward) {
+        deltaLat += Math.cos(radians) * GameState.PLAYER_MOVE_SPEED;
+        deltaLng += Math.sin(radians) * GameState.PLAYER_MOVE_SPEED;
+      }
+      
+      if (this.currentInput.backward) {
+        deltaLat -= Math.cos(radians) * GameState.PLAYER_MOVE_SPEED;
+        deltaLng -= Math.sin(radians) * GameState.PLAYER_MOVE_SPEED;
+      }
+      
+      // Strafing movement (perpendicular to facing direction)
+      if (this.currentInput.left) {
+        // Strafe left is 90 degrees counter-clockwise from facing direction
+        const strafeRadians = radians - Math.PI / 2;
+        deltaLat += Math.cos(strafeRadians) * GameState.PLAYER_MOVE_SPEED;
+        deltaLng += Math.sin(strafeRadians) * GameState.PLAYER_MOVE_SPEED;
+      }
+      
+      if (this.currentInput.right) {
+        // Strafe right is 90 degrees clockwise from facing direction
+        const strafeRadians = radians + Math.PI / 2;
+        deltaLat += Math.cos(strafeRadians) * GameState.PLAYER_MOVE_SPEED;
+        deltaLng += Math.sin(strafeRadians) * GameState.PLAYER_MOVE_SPEED;
+      }
       
       // Apply latitude correction for longitude movement
       const latRadians = (this.state.player.lat * Math.PI) / 180;
