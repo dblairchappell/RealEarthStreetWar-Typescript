@@ -24,6 +24,8 @@ export default class MapView {
   private markers: Array<{ marker: any, element: HTMLElement, baseSize: number }> = [];
   private playerMarker: any = null;
   private playerElement: HTMLElement | null = null;
+  private playerPosition: { lng: number; lat: number } | null = null;
+  private playerRotation: number = 0;
   private playerBaseSize: number = 0.15;
   
   // Input state tracking
@@ -443,17 +445,20 @@ export default class MapView {
     const baseSize = this.playerBaseSize;
     const size = this.calculateMarkerSize(baseSize);
     
-    // Create player element
+    // Create player element as fixed position overlay
     const el = document.createElement('div');
+    el.style.position = 'absolute';
     el.style.width = `${size}px`;
     el.style.height = `${size}px`;
     el.style.display = 'flex';
     el.style.justifyContent = 'center';
     el.style.alignItems = 'center';
     el.style.backgroundColor = 'transparent';
-    el.style.zIndex = '1000'; // Keep player on top
+    el.style.zIndex = '1000';
+    el.style.pointerEvents = 'none';
+    el.style.willChange = 'transform';
     
-    // Add the player icon (triangle that shows direction)
+    // Add the player icon
     const img = document.createElement('img');
     img.src = 'icons/player_triangle.svg';
     img.alt = 'player';
@@ -462,19 +467,25 @@ export default class MapView {
     img.style.pointerEvents = 'none';
     img.style.filter = 'drop-shadow(0 1px 2px rgba(0,0,0,0.8))';
     img.style.transform = `rotate(${rotation}deg)`;
-    img.style.transition = 'transform 0.1s ease'; // Smooth rotation
+    img.style.transformOrigin = 'center';
+    img.style.willChange = 'transform';
     el.appendChild(img);
 
-    // Create player marker
-    this.playerMarker = new (window as any).maplibregl.Marker({ 
-      element: el, 
-      anchor: 'center'
-    })
-      .setLngLat(coords)
-      .addTo(this.map);
+    // Add to map container (not as MapLibre marker)
+    const mapContainer = this.map.getContainer();
+    mapContainer.appendChild(el);
     
-    // Store player element for zoom updates
+    // Store references
     this.playerElement = el;
+    this.playerPosition = coords;
+    this.playerRotation = rotation;
+    
+    // Update position immediately
+    this.updatePlayerScreenPosition();
+    
+    // Listen for map move/zoom events to update position
+    this.map.on('move', () => this.updatePlayerScreenPosition());
+    this.map.on('zoom', () => this.updatePlayerScreenPosition());
     
     // Cinematic zoom-in effect
     this.map.easeTo({
@@ -484,27 +495,51 @@ export default class MapView {
     });
   }
 
-  // Method to update player position and rotation
-  updatePlayerPosition(coords: { lng: number; lat: number }, rotation: number): void {
-    if (this.playerMarker) {
-      this.playerMarker.setLngLat(coords);
-      
-      // Update rotation
-      const img = this.playerElement?.querySelector('img');
-      if (img) {
-        img.style.transform = `rotate(${rotation}deg)`;
-      }
-      
-      // Update camera to follow player
-      this.centerCameraOnPlayer();
+  // Add this new method for screen position updates:
+  private updatePlayerScreenPosition(): void {
+    if (!this.playerElement || !this.playerPosition) return;
+    
+    // Convert geographic coordinates to screen coordinates
+    const point = this.map.project(this.playerPosition);
+    
+    // Update size based on zoom level
+    const size = this.calculateMarkerSize(this.playerBaseSize);
+    this.playerElement.style.width = `${size}px`;
+    this.playerElement.style.height = `${size}px`;
+    
+    const img = this.playerElement.querySelector('img');
+    if (img) {
+      img.style.width = `${size}px`;
+      img.style.height = `${size}px`;
     }
+    
+    // Position using CSS transform (smooth, no jitter)
+    this.playerElement.style.transform = `translate(${point.x - size/2}px, ${point.y - size/2}px)`;
   }
 
-  // Method to center camera on player
+  // Replace the updatePlayerPosition method:
+  updatePlayerPosition(coords: { lng: number; lat: number }, rotation: number): void {
+    // Store new position and rotation
+    this.playerPosition = coords;
+    this.playerRotation = rotation;
+    
+    // Update rotation immediately
+    const img = this.playerElement?.querySelector('img');
+    if (img) {
+      img.style.transform = `rotate(${rotation}deg)`;
+    }
+    
+    // Update screen position
+    this.updatePlayerScreenPosition();
+    
+    // Update camera to follow player
+    this.centerCameraOnPlayer();
+  }
+
+  // Update the centerCameraOnPlayer method:
   centerCameraOnPlayer(): void {
-    if (this.playerMarker) {
-      const playerPos = this.playerMarker.getLngLat();
-      this.map.setCenter([playerPos.lng, playerPos.lat]); // Instant follow - no jitter now that keyboard conflict is resolved
+    if (this.playerPosition) {
+      this.map.setCenter([this.playerPosition.lng, this.playerPosition.lat]);
     }
   }
 }
