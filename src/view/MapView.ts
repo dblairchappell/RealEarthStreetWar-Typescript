@@ -39,7 +39,7 @@ export default class MapView {
   // Camera properties
   private cameraBearing: number = 0; // Camera rotation in degrees
   private lastCameraRotationTime: number = 0;
-  private cameraRotationCooldownMs: number = 150; // Throttle camera rotation
+  private cameraRotationCooldownMs: number = 50; // Throttle camera rotation
   private isCameraRotating: boolean = false; // Flag to prevent movement from interrupting rotation
   
   // Animation properties
@@ -748,7 +748,7 @@ export default class MapView {
       this.map.easeTo({
         center: [this.playerPosition.lng, this.playerPosition.lat],
         bearing: this.cameraBearing,
-        duration: 200 // Smooth rotation animation
+        duration: 150 // Smooth rotation animation
       });
 
       // Update character animation direction and reset flag after camera rotation
@@ -778,7 +778,7 @@ export default class MapView {
       this.map.easeTo({
         center: [this.playerPosition.lng, this.playerPosition.lat],
         bearing: this.cameraBearing,
-        duration: 200 // Smooth rotation animation
+        duration: 150 // Smooth rotation animation
       });
 
       // Update character animation direction and reset flag after camera rotation
