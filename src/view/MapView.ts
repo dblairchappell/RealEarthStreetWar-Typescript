@@ -68,11 +68,11 @@ export default class MapView {
       style: 'offline-map-style.json',
       center: [-74.05682, 40.69337], // starting position [lng, lat]
       zoom: 14, // Start zoomed out for cinematic effect
-      pitch: 0, // tilt for 3-D perspective
+      pitch: 45, // tilt for 3-D perspective
       bearing: 0, // slight rotation for depth perception
       antialias: true,
-      // dragRotate: false, // prevents mouse drag rotation,
-      // touchZoomRotate: false, // prevents touch zoom rotation
+      dragRotate: false, // prevents mouse drag rotation,
+      touchZoomRotate: false, // prevents touch zoom rotation
       keyboard: false // Disable built-in keyboard navigation to prevent conflicts
     });
 
