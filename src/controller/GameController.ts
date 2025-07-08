@@ -12,7 +12,8 @@ export default class GameController {
     left: false,
     right: false,
     rotateLeft: false,
-    rotateRight: false
+    rotateRight: false,
+    running: false
   };
 
   constructor(private state: GameState, private view: MapView) {
@@ -45,7 +46,8 @@ export default class GameController {
     left: boolean, 
     right: boolean,
     rotateLeft: boolean,
-    rotateRight: boolean 
+    rotateRight: boolean,
+    running: boolean
   }) {
     this.currentInput = { ...input };
     this.state.player.isMoving = input.forward || input.backward || input.left || input.right;
@@ -77,33 +79,36 @@ export default class GameController {
     if (this.currentInput.forward || this.currentInput.backward || this.currentInput.left || this.currentInput.right) {
       const radians = (this.state.player.rotation * Math.PI) / 180;
       
+      // Choose speed based on whether player is running
+      const moveSpeed = this.currentInput.running ? GameState.PLAYER_RUN_SPEED : GameState.PLAYER_MOVE_SPEED;
+      
       let deltaLat = 0;
       let deltaLng = 0;
       
       // Forward/backward movement
       if (this.currentInput.forward) {
-        deltaLat += Math.cos(radians) * GameState.PLAYER_MOVE_SPEED;
-        deltaLng += Math.sin(radians) * GameState.PLAYER_MOVE_SPEED;
+        deltaLat += Math.cos(radians) * moveSpeed;
+        deltaLng += Math.sin(radians) * moveSpeed;
       }
       
       if (this.currentInput.backward) {
-        deltaLat -= Math.cos(radians) * GameState.PLAYER_MOVE_SPEED;
-        deltaLng -= Math.sin(radians) * GameState.PLAYER_MOVE_SPEED;
+        deltaLat -= Math.cos(radians) * moveSpeed;
+        deltaLng -= Math.sin(radians) * moveSpeed;
       }
       
       // Strafing movement (perpendicular to facing direction)
       if (this.currentInput.left) {
         // Strafe left is 90 degrees counter-clockwise from facing direction
         const strafeRadians = radians - Math.PI / 2;
-        deltaLat += Math.cos(strafeRadians) * GameState.PLAYER_MOVE_SPEED;
-        deltaLng += Math.sin(strafeRadians) * GameState.PLAYER_MOVE_SPEED;
+        deltaLat += Math.cos(strafeRadians) * moveSpeed;
+        deltaLng += Math.sin(strafeRadians) * moveSpeed;
       }
       
       if (this.currentInput.right) {
         // Strafe right is 90 degrees clockwise from facing direction
         const strafeRadians = radians + Math.PI / 2;
-        deltaLat += Math.cos(strafeRadians) * GameState.PLAYER_MOVE_SPEED;
-        deltaLng += Math.sin(strafeRadians) * GameState.PLAYER_MOVE_SPEED;
+        deltaLat += Math.cos(strafeRadians) * moveSpeed;
+        deltaLng += Math.sin(strafeRadians) * moveSpeed;
       }
       
       // Apply latitude correction for longitude movement

@@ -12,7 +12,8 @@ export interface MapViewCallbacks {
     left: boolean, 
     right: boolean,
     rotateLeft: boolean,
-    rotateRight: boolean 
+    rotateRight: boolean,
+    running: boolean
   }) => void;
 }
 
@@ -42,7 +43,7 @@ export default class MapView {
   private frameRate: number = 12; // frames per second
   private playerSprite: HTMLElement | null = null;
   private isPlayerMoving: boolean = false;
-  private currentAnimationType: 'idle' | 'walking' = 'idle';
+  private currentAnimationType: 'idle' | 'walking' | 'running' = 'idle';
   
   // Input state tracking
   private inputState = {
@@ -51,7 +52,8 @@ export default class MapView {
     left: false,        // Now for strafing left
     right: false,       // Now for strafing right
     rotateLeft: false,  // New: for rotation left (shift+left)
-    rotateRight: false  // New: for rotation right (shift+right)
+    rotateRight: false, // New: for rotation right (shift+right)
+    running: false      // New: for running (control+movement)
   };
 
   // HUD elements
@@ -149,6 +151,15 @@ export default class MapView {
   private handleKeyDown(e: KeyboardEvent): void {
     let inputChanged = false;
 
+    // Check for Control key for running
+    if (e.ctrlKey && !this.inputState.running) {
+      this.inputState.running = true;
+      inputChanged = true;
+    } else if (!e.ctrlKey && this.inputState.running) {
+      this.inputState.running = false;
+      inputChanged = true;
+    }
+
     switch(e.code) {
       case 'ArrowUp':
         if (!this.inputState.forward) {
@@ -207,7 +218,21 @@ export default class MapView {
   private handleKeyUp(e: KeyboardEvent): void {
     let inputChanged = false;
 
+    // Handle Control key release for stopping running
+    if (!e.ctrlKey && this.inputState.running) {
+      this.inputState.running = false;
+      inputChanged = true;
+    }
+
     switch(e.code) {
+      case 'ControlLeft':
+      case 'ControlRight':
+        // Explicit control key release
+        if (this.inputState.running) {
+          this.inputState.running = false;
+          inputChanged = true;
+        }
+        break;
       case 'ArrowUp':
         if (this.inputState.forward) {
           this.inputState.forward = false;
@@ -733,7 +758,14 @@ export default class MapView {
     this.currentFrame = 0;
     
     // Get frame count based on animation type
-    const frameCount = this.currentAnimationType === 'idle' ? 8 : 12;
+    let frameCount: number;
+    if (this.currentAnimationType === 'idle') {
+      frameCount = 8;
+    } else if (this.currentAnimationType === 'running') {
+      frameCount = 6; // Running sprite has 6 frames
+    } else {
+      frameCount = 12; // walking
+    }
     
     console.log('Using row:', row, 'frameCount:', frameCount);
     
@@ -750,7 +782,14 @@ export default class MapView {
   private updateSpriteFrame(row: number, frame: number): void {
     if (this.playerSprite) {
       // Calculate background position based on animation type
-      const columnCount = this.currentAnimationType === 'idle' ? 8 : 12;
+      let columnCount: number;
+      if (this.currentAnimationType === 'idle') {
+        columnCount = 8;
+      } else if (this.currentAnimationType === 'running') {
+        columnCount = 6; // Running sprite has 6 columns
+      } else {
+        columnCount = 12; // walking
+      }
       
       // Convert frame and row to percentages with better precision
       const x = Math.round((frame * 100) / (columnCount - 1) * 100) / 100; // Round to 2 decimal places
@@ -780,18 +819,25 @@ export default class MapView {
     const wasMoving = this.isPlayerMoving;
     this.isPlayerMoving = this.checkIfPlayerMoving();
     
-    // Switch animation type if movement state changed
-    if (this.isPlayerMoving && !wasMoving) {
-      // Started moving - switch to walking animation
-      this.switchToAnimation('walking');
-    } else if (!this.isPlayerMoving && wasMoving) {
-      // Stopped moving - switch to idle animation
-      this.switchToAnimation('idle');
+    // Determine the correct animation type
+    let targetAnimation: 'idle' | 'walking' | 'running';
+    
+    if (!this.isPlayerMoving) {
+      targetAnimation = 'idle';
+    } else if (this.inputState.running) {
+      targetAnimation = 'running';
+    } else {
+      targetAnimation = 'walking';
+    }
+    
+    // Switch animation if it changed
+    if (this.currentAnimationType !== targetAnimation) {
+      this.switchToAnimation(targetAnimation);
     }
   }
 
   // Method to switch between animation types
-  private switchToAnimation(animationType: 'idle' | 'walking', forceRestart: boolean = false): void {
+  private switchToAnimation(animationType: 'idle' | 'walking' | 'running', forceRestart: boolean = false): void {
     console.log('switchToAnimation called with:', animationType, 'current direction:', this.currentPlayerDirection);
     
     if (this.currentAnimationType === animationType && !forceRestart) return;
@@ -803,6 +849,9 @@ export default class MapView {
       if (animationType === 'idle') {
         this.playerSprite.style.backgroundImage = 'url(sprites/isometric_character_pack/isometric_character_idle.png)';
         this.playerSprite.style.backgroundSize = '800% 800%'; // 8 columns, 8 rows
+      } else if (animationType === 'running') {
+        this.playerSprite.style.backgroundImage = 'url(sprites/isometric_character_pack/isometric_character_run.png)';
+        this.playerSprite.style.backgroundSize = '600% 800%'; // 6 columns, 8 rows
       } else {
         this.playerSprite.style.backgroundImage = 'url(sprites/isometric_character_pack/isometric_character_walk.png)';
         this.playerSprite.style.backgroundSize = '1200% 800%'; // 12 columns, 8 rows
