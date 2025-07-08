@@ -46,12 +46,15 @@ export default class MapView {
   private lastArrowUpPressTime: number = 0;
   private lastArrowUpReleaseTime: number = 0;
   private doubleTapThresholdMs: number = 300; // Threshold for double-tap in ms
-  private tapDurationThresholdMs: number = 200; // Max duration of a press to be a "tap"
+  private tapDurationThresholdMs: number = 500; // Max duration of a press to be a "tap"
 
   // Zoom control state
   private lastZoomTime: number = 0;
   private zoomCooldownMs: number = 100;
   private isCameraZooming: boolean = false;
+  private wKeyDownTime: number = 0;
+  private sKeyDownTime: number = 0;
+  private holdZoomActive: boolean = false;
 
   // Animation properties
   private currentPlayerDirection: string = 'south';
@@ -179,11 +182,19 @@ export default class MapView {
         break;
       case 'KeyW':
         // W key - zoom in
-        this.zoomIn();
+        if (!this.wKeyDownTime) { // Prevent re-triggering if held
+          this.wKeyDownTime = Date.now();
+          this.zoomIn(); // Perform initial zoom immediately
+          this.handleZoomHold('in');
+        }
         break;
       case 'KeyS':
         // S key - zoom out
-        this.zoomOut();
+        if (!this.sKeyDownTime) { // Prevent re-triggering if held
+          this.sKeyDownTime = Date.now();
+          this.zoomOut(); // Perform initial zoom immediately
+          this.handleZoomHold('out');
+        }
         break;
       case 'ArrowUp':
         if (!this.inputState.forward) { // Only trigger on initial press
@@ -253,6 +264,14 @@ export default class MapView {
     let inputChanged = false;
 
     switch(e.code) {
+      case 'KeyW':
+        this.wKeyDownTime = 0;
+        this.holdZoomActive = false;
+        break;
+      case 'KeyS':
+        this.sKeyDownTime = 0;
+        this.holdZoomActive = false;
+        break;
       case 'ArrowUp':
         // On release, stop moving/running, and record times for double-tap check
         if (this.inputState.forward) {
@@ -760,11 +779,9 @@ export default class MapView {
         duration: 150 // Smooth rotation animation
       });
 
-      // Update character animation direction and reset flag after camera rotation
-      this.map.once('moveend', () => {
-        this.updateCharacterDirectionAfterCameraRotation();
-        this.isCameraRotating = false;
-      });
+      // Update character animation direction immediately, not on 'moveend'
+      this.updateCharacterDirectionAfterCameraRotation();
+      this.map.once('moveend', () => this.isCameraRotating = false);
 
     } else {
       this.map.setBearing(this.cameraBearing);
@@ -790,11 +807,9 @@ export default class MapView {
         duration: 150 // Smooth rotation animation
       });
 
-      // Update character animation direction and reset flag after camera rotation
-      this.map.once('moveend', () => {
-        this.updateCharacterDirectionAfterCameraRotation();
-        this.isCameraRotating = false;
-      });
+      // Update character animation direction immediately, not on 'moveend'
+      this.updateCharacterDirectionAfterCameraRotation();
+      this.map.once('moveend', () => this.isCameraRotating = false);
 
     } else {
       this.map.setBearing(this.cameraBearing);
@@ -808,7 +823,7 @@ export default class MapView {
 
     this.isCameraZooming = true;
     this.map.easeTo({
-        zoom: Math.min(22, this.map.getZoom() + 0.5),
+        zoom: Math.min(22, this.map.getZoom() + 1),
         duration: 200
     });
     this.lastZoomTime = currentTime;
@@ -821,11 +836,34 @@ export default class MapView {
 
     this.isCameraZooming = true;
     this.map.easeTo({
-        zoom: Math.max(14, this.map.getZoom() - 0.5),
+        zoom: Math.max(14, this.map.getZoom() - 1),
         duration: 200
     });
     this.lastZoomTime = currentTime;
     this.map.once('moveend', () => this.isCameraZooming = false);
+  }
+
+  private handleZoomHold(direction: 'in' | 'out'): void {
+    this.holdZoomActive = true;
+    
+    const continuousZoom = () => {
+      if (!this.holdZoomActive) return;
+
+      const zoomFactor = direction === 'in' ? 0.05 : -0.05;
+      const currentZoom = this.map.getZoom();
+      const newZoom = Math.max(14, Math.min(22, currentZoom + zoomFactor));
+      
+      this.map.setZoom(newZoom);
+      
+      requestAnimationFrame(continuousZoom);
+    };
+
+    // Wait for the hold threshold before starting the continuous zoom
+    setTimeout(() => {
+      if ((direction === 'in' && this.wKeyDownTime) || (direction === 'out' && this.sKeyDownTime)) {
+        requestAnimationFrame(continuousZoom);
+      }
+    }, this.tapDurationThresholdMs);
   }
 
   // Method to update character animation direction after camera rotation
