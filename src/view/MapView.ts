@@ -407,15 +407,27 @@ export default class MapView {
       this.playerElement.style.width = `${playerSize}px`;
       this.playerElement.style.height = `${playerSize}px`;
       
-      const playerImg = this.playerElement.querySelector('img');
-      if (playerImg) {
+      // Update billboard and screen sizes
+      const billboard = this.playerElement.querySelector('div');
+      const screen = billboard?.querySelector('div');
+      if (billboard) {
         if (enableTransition) {
-          playerImg.style.transition = 'width 0.1s ease, height 0.1s ease';
+          billboard.style.transition = 'width 0.1s ease, height 0.1s ease';
         } else {
-          playerImg.style.transition = 'none';
+          billboard.style.transition = 'none';
         }
-        playerImg.style.width = `${playerSize}px`;
-        playerImg.style.height = `${playerSize}px`;
+        billboard.style.width = `${playerSize}px`;
+        billboard.style.height = `${playerSize}px`;
+      }
+      if (screen) {
+        if (enableTransition) {
+          screen.style.transition = 'width 0.1s ease, height 0.1s ease, font-size 0.1s ease';
+        } else {
+          screen.style.transition = 'none';
+        }
+        screen.style.width = `${playerSize}px`;
+        screen.style.height = `${playerSize}px`;
+        screen.style.fontSize = `${Math.max(6, playerSize * 0.15)}px`;
       }
     }
   }
@@ -491,38 +503,56 @@ export default class MapView {
     const baseSize = this.playerBaseSize;
     const size = this.calculateMarkerSize(baseSize);
     
-    // Create player element as fixed position overlay
-    const el = document.createElement('div');
-    el.style.position = 'absolute';
-    el.style.width = `${size}px`;
-    el.style.height = `${size}px`;
-    el.style.display = 'flex';
-    el.style.justifyContent = 'center';
-    el.style.alignItems = 'center';
-    el.style.backgroundColor = 'transparent';
-    el.style.zIndex = '1000';
-    el.style.pointerEvents = 'none';
-    el.style.willChange = 'transform';
+    // Create 3D container with perspective
+    const container = document.createElement('div');
+    container.style.position = 'absolute';
+    container.style.width = `${size}px`;
+    container.style.height = `${size}px`;
+    container.style.transformStyle = 'preserve-3d';
+    container.style.perspective = '1000px';
+    container.style.zIndex = '1000';
+    container.style.pointerEvents = 'none';
+    container.style.willChange = 'transform';
     
-    // Add the player icon
-    const img = document.createElement('img');
-    img.src = 'icons/player_triangle.svg';
-    img.alt = 'player';
-    img.style.width = `${size}px`;
-    img.style.height = `${size}px`;
-    img.style.pointerEvents = 'none';
-    img.style.filter = 'drop-shadow(0 1px 2px rgba(0,0,0,0.8))';
-    img.style.transform = `rotate(${rotation}deg)`;
-    img.style.transformOrigin = 'center';
-    img.style.willChange = 'transform';
-    el.appendChild(img);
+    // Create billboard that always faces the camera
+    const billboard = document.createElement('div');
+    billboard.style.position = 'absolute';
+    billboard.style.width = `${size}px`;
+    billboard.style.height = `${size}px`;
+    billboard.style.transformStyle = 'preserve-3d';
+    billboard.style.willChange = 'transform';
+    
+    // Create the screen/surface for the animation
+    const screen = document.createElement('div');
+    screen.style.position = 'absolute';
+    screen.style.width = `${size}px`;
+    screen.style.height = `${size}px`;
+    screen.style.backgroundColor = '#ff4444';
+    screen.style.border = '2px solid #ffffff';
+    screen.style.borderRadius = '4px';
+    screen.style.display = 'flex';
+    screen.style.justifyContent = 'center';
+    screen.style.alignItems = 'center';
+    screen.style.boxShadow = '0 4px 8px rgba(0,0,0,0.3)';
+    screen.style.fontSize = '8px';
+    screen.style.color = 'white';
+    screen.style.fontWeight = 'bold';
+    screen.style.textAlign = 'center';
+    screen.textContent = 'PLAYER';
+    
+    // Make the billboard tilt to match the map's 45-degree perspective
+    // and always face the viewer
+    billboard.style.transform = 'rotateX(45deg) rotateY(0deg)';
+    
+    billboard.appendChild(screen);
+    container.appendChild(billboard);
 
-    // Add to map container (not as MapLibre marker)
+    // Add to map container
     const mapContainer = this.map.getContainer();
-    mapContainer.appendChild(el);
+    mapContainer.appendChild(container);
     
     // Store references
-    this.playerElement = el;
+    this.playerElement = container;
     this.playerPosition = coords;
     this.playerRotation = rotation;
     
@@ -553,10 +583,17 @@ export default class MapView {
     this.playerElement.style.width = `${size}px`;
     this.playerElement.style.height = `${size}px`;
     
-    const img = this.playerElement.querySelector('img');
-    if (img) {
-      img.style.width = `${size}px`;
-      img.style.height = `${size}px`;
+    // Update billboard and screen sizes
+    const billboard = this.playerElement.querySelector('div');
+    const screen = billboard?.querySelector('div');
+    if (billboard) {
+      billboard.style.width = `${size}px`;
+      billboard.style.height = `${size}px`;
+    }
+    if (screen) {
+      screen.style.width = `${size}px`;
+      screen.style.height = `${size}px`;
+      screen.style.fontSize = `${Math.max(6, size * 0.15)}px`;
     }
     
     // Position using CSS transform (smooth, no jitter)
@@ -569,11 +606,8 @@ export default class MapView {
     this.playerPosition = coords;
     this.playerRotation = rotation;
     
-    // Update rotation immediately
-    const img = this.playerElement?.querySelector('img');
-    if (img) {
-      img.style.transform = `rotate(${rotation}deg)`;
-    }
+    // For now, we'll just store the rotation - later we'll use it to choose animations
+    // TODO: Use rotation to determine which animation to show on the screen
     
     // Update screen position
     this.updatePlayerScreenPosition();
