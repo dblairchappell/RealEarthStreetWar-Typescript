@@ -40,6 +40,7 @@ export default class MapView {
   private cameraBearing: number = 0; // Camera rotation in degrees
   private lastCameraRotationTime: number = 0;
   private cameraRotationCooldownMs: number = 150; // Throttle camera rotation
+  private isCameraRotating: boolean = false; // Flag to prevent movement from interrupting rotation
   
   // Animation properties
   private currentPlayerDirection: string = 'south';
@@ -723,6 +724,8 @@ export default class MapView {
 
   // Update the centerCameraOnPlayer method:
   centerCameraOnPlayer(): void {
+    if (this.isCameraRotating) return; // Don't recenter if camera is rotating
+    
     if (this.playerPosition) {
       this.map.setCenter([this.playerPosition.lng, this.playerPosition.lat]);
     }
@@ -735,9 +738,28 @@ export default class MapView {
       return; // Throttle rotation
     }
     
+    this.isCameraRotating = true;
     this.cameraBearing = (this.cameraBearing - 45 + 360) % 360;
     this.lastCameraRotationTime = currentTime;
-    this.map.setBearing(this.cameraBearing);
+    
+    // Rotate around the player's position
+    if (this.playerPosition) {
+      this.map.easeTo({
+        center: [this.playerPosition.lng, this.playerPosition.lat],
+        bearing: this.cameraBearing,
+        duration: 200 // Smooth rotation animation
+      });
+
+      // Update character animation direction and reset flag after camera rotation
+      this.map.once('moveend', () => {
+        this.updateCharacterDirectionAfterCameraRotation();
+        this.isCameraRotating = false;
+      });
+
+    } else {
+      this.map.setBearing(this.cameraBearing);
+      this.isCameraRotating = false;
+    }
   }
 
   private rotateCameraRight(): void {
@@ -746,15 +768,49 @@ export default class MapView {
       return; // Throttle rotation
     }
     
+    this.isCameraRotating = true;
     this.cameraBearing = (this.cameraBearing + 45) % 360;
     this.lastCameraRotationTime = currentTime;
-    this.map.setBearing(this.cameraBearing);
+    
+    // Rotate around the player's position
+    if (this.playerPosition) {
+      this.map.easeTo({
+        center: [this.playerPosition.lng, this.playerPosition.lat],
+        bearing: this.cameraBearing,
+        duration: 200 // Smooth rotation animation
+      });
+
+      // Update character animation direction and reset flag after camera rotation
+      this.map.once('moveend', () => {
+        this.updateCharacterDirectionAfterCameraRotation();
+        this.isCameraRotating = false;
+      });
+
+    } else {
+      this.map.setBearing(this.cameraBearing);
+      this.isCameraRotating = false;
+    }
+  }
+
+  // Method to update character animation direction after camera rotation
+  private updateCharacterDirectionAfterCameraRotation(): void {
+    // Recalculate the character's visual direction relative to the new camera bearing
+    const newDirection = this.getDirectionFromRotation(this.playerRotation);
+    
+    // Update animation if direction changed
+    if (newDirection !== this.currentPlayerDirection) {
+      this.currentPlayerDirection = newDirection;
+      this.startDirectionalAnimation(newDirection);
+    }
   }
 
   // Animation methods
   private getDirectionFromRotation(rotation: number): string {
+    // Calculate the character's visual direction relative to the camera
+    const relativeRotation = rotation - this.cameraBearing;
+    
     // Normalize rotation to 0-360
-    const normalizedRotation = ((rotation % 360) + 360) % 360;
+    const normalizedRotation = ((relativeRotation % 360) + 360) % 360;
     
     // Map to 8 directions
     if (normalizedRotation >= 337.5 || normalizedRotation < 22.5) return 'north';
