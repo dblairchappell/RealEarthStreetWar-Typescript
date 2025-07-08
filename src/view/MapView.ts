@@ -35,6 +35,15 @@ export default class MapView {
   private playerRotation: number = 0;
   private playerBaseSize: number = 0.15;
   
+  // Animation properties
+  private currentPlayerDirection: string = 'south';
+  private currentFrame: number = 0;
+  private animationTimer: number | null = null;
+  private frameRate: number = 10; // frames per second
+  private playerSprite: HTMLElement | null = null;
+  private isPlayerMoving: boolean = false;
+  private currentAnimationType: 'idle' | 'walking' = 'idle';
+  
   // Input state tracking
   private inputState = {
     forward: false,
@@ -185,8 +194,13 @@ export default class MapView {
         break;
     }
 
-    if (inputChanged && this.callbacks) {
-      this.callbacks.onPlayerInput(this.inputState);
+    if (inputChanged) {
+      // Update movement state and switch animations if needed
+      this.updateMovementState();
+      
+      if (this.callbacks) {
+        this.callbacks.onPlayerInput(this.inputState);
+      }
     }
   }
 
@@ -238,8 +252,13 @@ export default class MapView {
         break;
     }
 
-    if (inputChanged && this.callbacks) {
-      this.callbacks.onPlayerInput(this.inputState);
+    if (inputChanged) {
+      // Update movement state and switch animations if needed
+      this.updateMovementState();
+      
+      if (this.callbacks) {
+        this.callbacks.onPlayerInput(this.inputState);
+      }
     }
   }
 
@@ -421,13 +440,19 @@ export default class MapView {
       }
       if (screen) {
         if (enableTransition) {
-          screen.style.transition = 'width 0.1s ease, height 0.1s ease, font-size 0.1s ease';
+          screen.style.transition = 'width 0.1s ease, height 0.1s ease';
         } else {
           screen.style.transition = 'none';
         }
         screen.style.width = `${playerSize}px`;
         screen.style.height = `${playerSize}px`;
-        screen.style.fontSize = `${Math.max(6, playerSize * 0.15)}px`;
+        
+        // Update the sprite size too
+        const sprite = screen.querySelector('div');
+        if (sprite) {
+          sprite.style.width = '100%';
+          sprite.style.height = '100%';
+        }
       }
     }
   }
@@ -527,22 +552,29 @@ export default class MapView {
     screen.style.position = 'absolute';
     screen.style.width = `${size}px`;
     screen.style.height = `${size}px`;
-    screen.style.backgroundColor = '#ff4444';
-    screen.style.border = '2px solid #ffffff';
-    screen.style.borderRadius = '4px';
-    screen.style.display = 'flex';
-    screen.style.justifyContent = 'center';
-    screen.style.alignItems = 'center';
-    screen.style.boxShadow = '0 4px 8px rgba(0,0,0,0.3)';
-    screen.style.fontSize = '8px';
-    screen.style.color = 'white';
-    screen.style.fontWeight = 'bold';
-    screen.style.textAlign = 'center';
-    screen.textContent = 'PLAYER';
-    
-    // Make the billboard tilt to match the map's 45-degree perspective
-    // and always face the viewer
-    billboard.style.transform = 'rotateX(45deg) rotateY(0deg)';
+    screen.style.backgroundColor = 'transparent'; // Remove red background
+    screen.style.border = 'none'; // Remove border
+    screen.style.borderRadius = '0'; // Remove border radius
+    screen.style.overflow = 'hidden'; // Clip any overflow
+    screen.style.boxShadow = 'none'; // Remove shadow
+
+    // Add character sprite instead of image
+    const characterSprite = document.createElement('div');
+    characterSprite.style.width = '100%';
+    characterSprite.style.height = '100%';
+    characterSprite.style.backgroundImage = 'url(sprites/isometric_character_pack/isometric_character_idle.png)';
+    characterSprite.style.backgroundSize = '800% 800%'; // 8 columns, 8 rows (idle)
+    characterSprite.style.backgroundRepeat = 'no-repeat';
+    characterSprite.style.backgroundPosition = '0% 0%'; // Start at top-left
+    characterSprite.style.filter = 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))';
+    characterSprite.style.imageRendering = 'auto'; // Better scaling at different sizes
+    screen.appendChild(characterSprite);
+
+    // Store reference to sprite
+    this.playerSprite = characterSprite;
+
+    // Debug: add a background color to see the actual sprite container
+    // characterSprite.style.backgroundColor = 'rgba(255, 0, 0, 0.1)';
     
     billboard.appendChild(screen);
     container.appendChild(billboard);
@@ -551,10 +583,20 @@ export default class MapView {
     const mapContainer = this.map.getContainer();
     mapContainer.appendChild(container);
     
-    // Store references
+    // Store references FIRST
     this.playerElement = container;
     this.playerPosition = coords;
     this.playerRotation = rotation;
+    
+    // Debug: Log the rotation and direction
+    console.log('Creating player with rotation:', rotation);
+    
+    // THEN set the correct direction based on rotation
+    this.currentPlayerDirection = this.getDirectionFromRotation(rotation);
+    console.log('Calculated direction:', this.currentPlayerDirection);
+    
+    // FINALLY start the animation with the correct direction (force restart for initial setup)
+    this.switchToAnimation('idle', true);
     
     // Update position immediately
     this.updatePlayerScreenPosition();
@@ -566,7 +608,7 @@ export default class MapView {
     // Cinematic zoom-in effect
     this.map.easeTo({
       center: coords,
-      zoom: 19,
+      zoom: 20, // zoom target
       duration: 3000
     });
   }
@@ -578,8 +620,10 @@ export default class MapView {
     // Convert geographic coordinates to screen coordinates
     const point = this.map.project(this.playerPosition);
     
-    // Update size based on zoom level
-    const size = this.calculateMarkerSize(this.playerBaseSize);
+    // Update size based on zoom level with a minimum size for better visibility
+    const rawSize = this.calculateMarkerSize(this.playerBaseSize);
+    const size = Math.max(8, rawSize); // Minimum 8px for visibility when zoomed out
+    
     this.playerElement.style.width = `${size}px`;
     this.playerElement.style.height = `${size}px`;
     
@@ -593,11 +637,28 @@ export default class MapView {
     if (screen) {
       screen.style.width = `${size}px`;
       screen.style.height = `${size}px`;
-      screen.style.fontSize = `${Math.max(6, size * 0.15)}px`;
+      
+      // Update the sprite size and optimize rendering
+      const sprite = screen.querySelector('div') as HTMLElement;
+      if (sprite) {
+        sprite.style.width = '100%';
+        sprite.style.height = '100%';
+        
+        // Adjust image rendering based on size for optimal quality
+        if (size < 16) {
+          sprite.style.imageRendering = 'auto'; // Smooth scaling for very small sizes
+        } else if (size < 32) {
+          sprite.style.imageRendering = 'auto'; // Still smooth for small sizes  
+        } else {
+          sprite.style.imageRendering = 'pixelated'; // Crisp pixels for larger sizes
+        }
+      }
     }
     
-    // Position using CSS transform (smooth, no jitter)
-    this.playerElement.style.transform = `translate(${point.x - size/2}px, ${point.y - size/2}px)`;
+    // Use rounded pixel values for crisp positioning
+    const x = Math.round(point.x - size/2);
+    const y = Math.round(point.y - size/2);
+    this.playerElement.style.transform = `translate(${x}px, ${y}px)`;
   }
 
   // Replace the updatePlayerPosition method:
@@ -606,8 +667,14 @@ export default class MapView {
     this.playerPosition = coords;
     this.playerRotation = rotation;
     
-    // For now, we'll just store the rotation - later we'll use it to choose animations
-    // TODO: Use rotation to determine which animation to show on the screen
+    // Determine current direction
+    const newDirection = this.getDirectionFromRotation(rotation);
+    
+    // Update animation if direction changed
+    if (newDirection !== this.currentPlayerDirection) {
+      this.currentPlayerDirection = newDirection;
+      this.startDirectionalAnimation(newDirection);
+    }
     
     // Update screen position
     this.updatePlayerScreenPosition();
@@ -621,5 +688,128 @@ export default class MapView {
     if (this.playerPosition) {
       this.map.setCenter([this.playerPosition.lng, this.playerPosition.lat]);
     }
+  }
+
+  // Animation methods
+  private getDirectionFromRotation(rotation: number): string {
+    // Normalize rotation to 0-360
+    const normalizedRotation = ((rotation % 360) + 360) % 360;
+    
+    // Map to 8 directions
+    if (normalizedRotation >= 337.5 || normalizedRotation < 22.5) return 'north';
+    if (normalizedRotation >= 22.5 && normalizedRotation < 67.5) return 'northeast';
+    if (normalizedRotation >= 67.5 && normalizedRotation < 112.5) return 'east';
+    if (normalizedRotation >= 112.5 && normalizedRotation < 157.5) return 'southeast';
+    if (normalizedRotation >= 157.5 && normalizedRotation < 202.5) return 'south';
+    if (normalizedRotation >= 202.5 && normalizedRotation < 247.5) return 'southwest';
+    if (normalizedRotation >= 247.5 && normalizedRotation < 292.5) return 'west';
+    if (normalizedRotation >= 292.5 && normalizedRotation < 337.5) return 'northwest';
+    
+    return 'south'; // fallback
+  }
+
+  private startDirectionalAnimation(direction: string): void {
+    console.log('startDirectionalAnimation called with direction:', direction, 'animation type:', this.currentAnimationType);
+    
+    // Stop current animation
+    if (this.animationTimer) {
+      clearInterval(this.animationTimer);
+      this.animationTimer = null;
+    }
+    
+    // Map direction to sprite sheet row (based on your layout)
+    const rowMap: {[key: string]: number} = {
+      'south': 0,      // Row 1
+      'southeast': 1,  // Row 2
+      'southwest': 2,  // Row 3
+      'west': 3,       // Row 4
+      'northwest': 4,  // Row 5
+      'north': 5,      // Row 6
+      'northeast': 6,  // Row 7
+      'east': 7        // Row 8
+    };
+    
+    const row = rowMap[direction] || 0;
+    this.currentFrame = 0;
+    
+    // Get frame count based on animation type
+    const frameCount = this.currentAnimationType === 'idle' ? 8 : 12;
+    
+    console.log('Using row:', row, 'frameCount:', frameCount);
+    
+    // Set initial frame
+    this.updateSpriteFrame(row, this.currentFrame);
+    
+    // Start animation loop
+    this.animationTimer = window.setInterval(() => {
+      this.currentFrame = (this.currentFrame + 1) % frameCount;
+      this.updateSpriteFrame(row, this.currentFrame);
+    }, 1000 / this.frameRate);
+  }
+
+  private updateSpriteFrame(row: number, frame: number): void {
+    if (this.playerSprite) {
+      // Calculate background position based on animation type
+      const columnCount = this.currentAnimationType === 'idle' ? 8 : 12;
+      
+      // Convert frame and row to percentages with better precision
+      const x = Math.round((frame * 100) / (columnCount - 1) * 100) / 100; // Round to 2 decimal places
+      const y = Math.round((row * 100) / (8 - 1) * 100) / 100;             // Round to 2 decimal places
+      
+      this.playerSprite.style.backgroundPosition = `${x}% ${y}%`;
+    }
+  }
+
+  private stopPlayerAnimation(): void {
+    if (this.animationTimer) {
+      clearInterval(this.animationTimer);
+      this.animationTimer = null;
+    }
+  }
+
+  // Method to check if player is currently moving
+  private checkIfPlayerMoving(): boolean {
+    return this.inputState.forward || 
+           this.inputState.backward || 
+           this.inputState.left || 
+           this.inputState.right;
+  }
+
+  // Method to update movement state and switch animations
+  private updateMovementState(): void {
+    const wasMoving = this.isPlayerMoving;
+    this.isPlayerMoving = this.checkIfPlayerMoving();
+    
+    // Switch animation type if movement state changed
+    if (this.isPlayerMoving && !wasMoving) {
+      // Started moving - switch to walking animation
+      this.switchToAnimation('walking');
+    } else if (!this.isPlayerMoving && wasMoving) {
+      // Stopped moving - switch to idle animation
+      this.switchToAnimation('idle');
+    }
+  }
+
+  // Method to switch between animation types
+  private switchToAnimation(animationType: 'idle' | 'walking', forceRestart: boolean = false): void {
+    console.log('switchToAnimation called with:', animationType, 'current direction:', this.currentPlayerDirection);
+    
+    if (this.currentAnimationType === animationType && !forceRestart) return;
+    
+    this.currentAnimationType = animationType;
+    
+    // Update sprite sheet source and configuration
+    if (this.playerSprite) {
+      if (animationType === 'idle') {
+        this.playerSprite.style.backgroundImage = 'url(sprites/isometric_character_pack/isometric_character_idle.png)';
+        this.playerSprite.style.backgroundSize = '800% 800%'; // 8 columns, 8 rows
+      } else {
+        this.playerSprite.style.backgroundImage = 'url(sprites/isometric_character_pack/isometric_character_walk.png)';
+        this.playerSprite.style.backgroundSize = '1200% 800%'; // 12 columns, 8 rows
+      }
+    }
+    
+    // Restart animation with current direction
+    this.startDirectionalAnimation(this.currentPlayerDirection);
   }
 }
