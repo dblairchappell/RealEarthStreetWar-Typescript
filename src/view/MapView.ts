@@ -42,6 +42,12 @@ export default class MapView {
   private cameraRotationCooldownMs: number = 50; // Throttle camera rotation
   private isCameraRotating: boolean = false; // Flag to prevent movement from interrupting rotation
   
+  // Double-tap running state
+  private lastArrowUpPressTime: number = 0;
+  private lastArrowUpReleaseTime: number = 0;
+  private doubleTapThresholdMs: number = 300; // Threshold for double-tap in ms
+  private tapDurationThresholdMs: number = 200; // Max duration of a press to be a "tap"
+
   // Animation properties
   private currentPlayerDirection: string = 'south';
   private currentFrame: number = 0;
@@ -157,15 +163,6 @@ export default class MapView {
   private handleKeyDown(e: KeyboardEvent): void {
     let inputChanged = false;
 
-    // Check for Control key for running
-    if (e.ctrlKey && !this.inputState.running) {
-      this.inputState.running = true;
-      inputChanged = true;
-    } else if (!e.ctrlKey && this.inputState.running) {
-      this.inputState.running = false;
-      inputChanged = true;
-    }
-
     switch(e.code) {
       case 'KeyX':
         // Z key - rotate camera left 45 degrees
@@ -176,8 +173,18 @@ export default class MapView {
         this.rotateCameraRight();
         break;
       case 'ArrowUp':
-        if (!this.inputState.forward) {
+        if (!this.inputState.forward) { // Only trigger on initial press
+          const currentTime = Date.now();
+          const timeSinceLastRelease = currentTime - this.lastArrowUpReleaseTime;
+          const lastPressDuration = this.lastArrowUpReleaseTime - this.lastArrowUpPressTime;
+
+          if (timeSinceLastRelease < this.doubleTapThresholdMs && lastPressDuration < this.tapDurationThresholdMs) {
+            // Double-tap detected
+            this.inputState.running = true;
+          }
+          
           this.inputState.forward = true;
+          this.lastArrowUpPressTime = currentTime; // Record press time
           inputChanged = true;
         }
         break;
@@ -232,24 +239,13 @@ export default class MapView {
   private handleKeyUp(e: KeyboardEvent): void {
     let inputChanged = false;
 
-    // Handle Control key release for stopping running
-    if (!e.ctrlKey && this.inputState.running) {
-      this.inputState.running = false;
-      inputChanged = true;
-    }
-
     switch(e.code) {
-      case 'ControlLeft':
-      case 'ControlRight':
-        // Explicit control key release
-        if (this.inputState.running) {
-          this.inputState.running = false;
-          inputChanged = true;
-        }
-        break;
       case 'ArrowUp':
+        // On release, stop moving/running, and record times for double-tap check
         if (this.inputState.forward) {
           this.inputState.forward = false;
+          this.inputState.running = false; // Always stop running on release
+          this.lastArrowUpReleaseTime = Date.now();
           inputChanged = true;
         }
         break;
