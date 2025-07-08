@@ -33,13 +33,13 @@ export default class MapView {
   private playerElement: HTMLElement | null = null;
   private playerPosition: { lng: number; lat: number } | null = null;
   private playerRotation: number = 0;
-  private playerBaseSize: number = 0.15;
+  private playerBaseSize: number = 0.075;
   
   // Animation properties
   private currentPlayerDirection: string = 'south';
   private currentFrame: number = 0;
   private animationTimer: number | null = null;
-  private frameRate: number = 10; // frames per second
+  private frameRate: number = 12; // frames per second
   private playerSprite: HTMLElement | null = null;
   private isPlayerMoving: boolean = false;
   private currentAnimationType: 'idle' | 'walking' = 'idle';
@@ -608,7 +608,7 @@ export default class MapView {
     // Cinematic zoom-in effect
     this.map.easeTo({
       center: coords,
-      zoom: 20, // zoom target
+      zoom: 21.5, // zoom target
       duration: 3000
     });
   }
