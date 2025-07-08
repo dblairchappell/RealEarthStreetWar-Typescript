@@ -5,6 +5,9 @@ import MapView from "../view/MapView";
 export default class GameController {
   private gameClockTimer: number | null = null;
   private movementTimer: number | null = null;
+  private lastRotationTime: number = 0;
+  private rotationCooldownMs: number = 150; // Throttle rotation changes
+  
   // Update the input handling method
   private currentInput = {
     forward: false,
@@ -17,6 +20,8 @@ export default class GameController {
   };
 
   constructor(private state: GameState, private view: MapView) {
+    // Ensure player starts with a valid direction
+    this.state.player.rotation = GameState.snapToValidDirection(this.state.player.rotation);
   }
 
   public startClock() {
@@ -58,21 +63,26 @@ export default class GameController {
     let positionChanged = false;
     let rotationChanged = false;
 
-    // Handle rotation (shift+left/right arrows)
-    if (this.currentInput.rotateLeft) {
-      this.state.player.rotation -= GameState.PLAYER_ROTATION_SPEED;
-      if (this.state.player.rotation < 0) {
-        this.state.player.rotation += 360;
+    // Handle rotation (shift+left/right arrows) - discrete 8-direction system
+    const currentTime = Date.now();
+    const canRotate = currentTime - this.lastRotationTime >= this.rotationCooldownMs;
+    
+    if (canRotate && this.currentInput.rotateLeft) {
+      const newDirection = GameState.getNextDirection(this.state.player.rotation, false);
+      if (newDirection !== this.state.player.rotation) {
+        this.state.player.rotation = newDirection;
+        this.lastRotationTime = currentTime;
+        rotationChanged = true;
       }
-      rotationChanged = true;
     }
     
-    if (this.currentInput.rotateRight) {
-      this.state.player.rotation += GameState.PLAYER_ROTATION_SPEED;
-      if (this.state.player.rotation >= 360) {
-        this.state.player.rotation -= 360;
+    if (canRotate && this.currentInput.rotateRight) {
+      const newDirection = GameState.getNextDirection(this.state.player.rotation, true);
+      if (newDirection !== this.state.player.rotation) {
+        this.state.player.rotation = newDirection;
+        this.lastRotationTime = currentTime;
+        rotationChanged = true;
       }
-      rotationChanged = true;
     }
 
     // Handle movement (forward/backward and strafing)

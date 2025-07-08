@@ -44,5 +44,57 @@ export default class GameState {
   // Player movement constants
   static readonly PLAYER_MOVE_SPEED = 0.0000004; // degrees per frame
   static readonly PLAYER_RUN_SPEED = 0.0000010; // degrees per frame (2x walking speed)
-  static readonly PLAYER_ROTATION_SPEED = 4; // degrees per frame
+  static readonly PLAYER_ROTATION_SPEED = 0.5; // degrees per frame
+  
+  // 8-direction system constants
+  static readonly VALID_DIRECTIONS = [
+    0,    // North
+    45,   // Northeast
+    90,   // East
+    135,  // Southeast
+    180,  // South
+    225,  // Southwest
+    270,  // West
+    315   // Northwest
+  ];
+  
+  // Helper method to snap rotation to nearest valid direction
+  static snapToValidDirection(rotation: number): number {
+    // Normalize rotation to 0-360
+    const normalizedRotation = ((rotation % 360) + 360) % 360;
+    
+    // Find the closest valid direction
+    let closestDirection = GameState.VALID_DIRECTIONS[0];
+    let closestDistance = Math.abs(normalizedRotation - closestDirection);
+    
+    for (const direction of GameState.VALID_DIRECTIONS) {
+      const distance = Math.min(
+        Math.abs(normalizedRotation - direction),
+        Math.abs(normalizedRotation - direction - 360),
+        Math.abs(normalizedRotation - direction + 360)
+      );
+      
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestDirection = direction;
+      }
+    }
+    
+    return closestDirection;
+  }
+  
+  // Helper method to get next direction when rotating
+  static getNextDirection(currentDirection: number, clockwise: boolean): number {
+    const currentIndex = GameState.VALID_DIRECTIONS.indexOf(currentDirection);
+    if (currentIndex === -1) {
+      // If current direction is not valid, snap to nearest
+      return GameState.snapToValidDirection(currentDirection);
+    }
+    
+    if (clockwise) {
+      return GameState.VALID_DIRECTIONS[(currentIndex + 1) % GameState.VALID_DIRECTIONS.length];
+    } else {
+      return GameState.VALID_DIRECTIONS[(currentIndex - 1 + GameState.VALID_DIRECTIONS.length) % GameState.VALID_DIRECTIONS.length];
+    }
+  }
 }

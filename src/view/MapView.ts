@@ -36,6 +36,11 @@ export default class MapView {
   private playerRotation: number = 0;
   private playerBaseSize: number = 0.075;
   
+  // Camera properties
+  private cameraBearing: number = 0; // Camera rotation in degrees
+  private lastCameraRotationTime: number = 0;
+  private cameraRotationCooldownMs: number = 150; // Throttle camera rotation
+  
   // Animation properties
   private currentPlayerDirection: string = 'south';
   private currentFrame: number = 0;
@@ -161,6 +166,14 @@ export default class MapView {
     }
 
     switch(e.code) {
+      case 'KeyX':
+        // Z key - rotate camera left 45 degrees
+        this.rotateCameraLeft();
+        break;
+      case 'KeyZ':
+        // X key - rotate camera right 45 degrees
+        this.rotateCameraRight();
+        break;
       case 'ArrowUp':
         if (!this.inputState.forward) {
           this.inputState.forward = true;
@@ -713,6 +726,29 @@ export default class MapView {
     if (this.playerPosition) {
       this.map.setCenter([this.playerPosition.lng, this.playerPosition.lat]);
     }
+  }
+
+  // Camera rotation methods
+  private rotateCameraLeft(): void {
+    const currentTime = Date.now();
+    if (currentTime - this.lastCameraRotationTime < this.cameraRotationCooldownMs) {
+      return; // Throttle rotation
+    }
+    
+    this.cameraBearing = (this.cameraBearing - 45 + 360) % 360;
+    this.lastCameraRotationTime = currentTime;
+    this.map.setBearing(this.cameraBearing);
+  }
+
+  private rotateCameraRight(): void {
+    const currentTime = Date.now();
+    if (currentTime - this.lastCameraRotationTime < this.cameraRotationCooldownMs) {
+      return; // Throttle rotation
+    }
+    
+    this.cameraBearing = (this.cameraBearing + 45) % 360;
+    this.lastCameraRotationTime = currentTime;
+    this.map.setBearing(this.cameraBearing);
   }
 
   // Animation methods
