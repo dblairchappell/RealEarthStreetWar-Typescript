@@ -1,107 +1,222 @@
 # Real-Earth Street War
 
-## Project Vision
+## Project Overview
 
-This project is a prototype for a massively multiplayer online strategy game inspired by the classic board game *Risk*. The game world is a 1:1 representation of the real Earth, where players, organized into gangs or factions, fight to capture and control real-world streets and territories.
+**Real-Earth Street War** is a web-based strategy game prototype inspired by the classic board game *Risk*. The game uses a 1:1 representation of real Earth, where players control territories by placing headquarters and expanding their influence across real-world streets and buildings.
 
-The core gameplay loop is intended to be:
-- **Territory Control:** Every street segment is a distinct, conquerable territory.
-- **Resource Generation:** Owning territories generates resources based on properties like population density and building footprints.
-- **Strategic Depth:** A street's defensibility is determined by how many other streets it connects to, creating natural choke points and strategic fronts.
+The game features:
+- **Real-world map data** with authentic building heights and street layouts
+- **Territory control mechanics** with visual influence areas
+- **Player character movement** with WASD-style controls
+- **Strategic HQ placement** with different types (producers, traffickers, retailers)
+- **Complete offline operation** using local map data
 
-## Current Status
+## Current Implementation Status
 
-This repository contains a **fully offline, frontend-only prototype** built with vanilla HTML, CSS, and JavaScript. The application runs entirely without internet connectivity using local map data and assets.
+This repository contains a **TypeScript-based web application** with a modern development workflow. The current implementation includes:
 
-**Current features include:**
-- **Complete Offline Operation**: 116MB New Jersey map data with all layers (buildings, roads, water, terrain, labels)
-- **3D Building Visualization**: Interactive building rendering with height data from local PMTiles
-- **HQ Placement System**: Territory control mechanics with influence radius visualization
-- **Population & Income Calculation**: Based on building footprints and density analysis
-- **Gang Recruitment System**: Wage-based recruitment tied to local population
-- **Territory Expansion**: Visual feedback for building and road control
-- **Local Asset Management**: All JavaScript libraries, fonts, and map data stored locally
+### ✅ Implemented Features
+- **Player Character System**: Real-time movement with arrow key controls and rotation
+- **HQ Placement Mechanics**: Three types of headquarters with location-based placement rules
+- **Territory Visualization**: Dynamic influence areas using geospatial calculations
+- **Real-time Game Clock**: Time-based progression with configurable tick system
+- **Interactive Map**: 3D building rendering with zoom-responsive UI elements
+- **Complete Offline Operation**: 116MB New Jersey dataset with all map layers
 
-## Technical Implementation
+### 🚧 In Development
+- Resource generation and economic systems
+- Combat mechanics between players
+- Multiplayer backend integration
+- Additional regions beyond New Jersey
 
-### Tech Stack
-- **HTML5, CSS3, JavaScript (ES6+):** Core web technologies for the client
-- **MapLibre GL JS (`v3.6.2`):** Open-source mapping library for high-performance map rendering
-- **PMTiles:** Vector tile format for efficient offline map data storage
-- **Local Assets:** All dependencies stored in `libs/` directory for offline operation
+## Technical Architecture
 
-### Data Sources
-- **Map Data**: Complete New Jersey dataset generated using Planetiler from OpenStreetMap
-- **Building Heights**: Extracted from OpenStreetMap `building:levels` and `height` tags
-- **Fonts**: Noto Sans font family in PBF format for offline text rendering
-- **No External Dependencies**: Zero network requests during normal operation
+### Technology Stack
+- **TypeScript 5.8** with strict type checking
+- **Vite** for development server and production builds
+- **MapLibre GL JS** for high-performance map rendering
+- **PMTiles** for efficient vector tile storage and delivery
+- **Turf.js** for geospatial calculations and territory management
 
 ### Project Structure
-- `index.html`: Main application entry point
-- `style.css`: UI styling and layout
-- `script.js`: Core game logic and map interaction
-- `offline-map-style.json`: MapLibre style definition using local data sources
-- `libs/`: Local JavaScript libraries (MapLibre GL, PMTiles, Turf.js, etc.)
-- `fonts/`: Local font files in PBF format for map text rendering
-- `tiles/nj-complete.pmtiles`: Complete New Jersey map data (116MB)
+```
+src/
+├── controller/
+│   └── GameController.ts    # Game logic and input handling
+├── model/
+│   └── GameState.ts         # Data model and game state
+├── view/
+│   └── MapView.ts           # Map rendering and UI interactions
+├── types/
+│   └── global.d.ts          # TypeScript type definitions
+└── main.ts                  # Application entry point
 
-### Key Features
-- **Territory Control**: Click buildings to claim them for your gang
-- **Population Analysis**: Real-time calculation based on building footprints
-- **Resource Management**: Income generation tied to controlled territories
-- **3D Visualization**: Buildings rendered with realistic heights
-- **Offline First**: No internet connection required after initial setup
+Public Assets:
+├── index.html               # Main application HTML
+├── style.css                # UI styling and layout
+├── offline-map-style.json   # MapLibre map style definition
+├── icons/                   # SVG icons for HQ types
+├── fonts/                   # Local font files (PBF format)
+├── libs/                    # Local JavaScript libraries
+└── map_data/                # PMTiles map data (116MB)
+```
 
-## How to Run the Project
+### Architecture Pattern
+The application follows a **Model-View-Controller (MVC)** architecture:
 
-This is a completely offline application with no build process required.
+- **GameState** (Model): Manages player data, HQ locations, territory ownership, and game progression
+- **MapView** (View): Handles map rendering, UI interactions, and visual feedback
+- **GameController** (Controller): Coordinates game logic, input handling, and updates between model and view
 
-1. **No internet connection needed** - all assets are local
-2. **Start a local web server** in the project directory:
+## Getting Started
+
+### Prerequisites
+- **Node.js** 18+ and npm
+- A modern web browser with WebGL support
+- ~200MB disk space for map data and dependencies
+
+### Installation & Setup
+
+1. **Clone the repository**
    ```bash
-   python -m http.server 8000
+   git clone <repository-url>
+   cd RealEarthStreetWar
    ```
-   Or use any other local server (Live Server extension in VS Code, etc.)
-3. **Open your browser** to `http://localhost:8000`
-4. **Start playing** - click buildings to claim territory and build your gang
 
-## Technical Evolution
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
 
-The project has evolved through several phases:
+3. **Development mode**
+   ```bash
+   npm run dev
+   ```
+   This starts the Vite development server at `http://localhost:5173`
 
-1. **Online Prototype**: Originally used Carto CDN and Overpass API for live data
-2. **Hybrid Approach**: Migrated to local PMTiles for building data while keeping online base map
-3. **Full Offline**: Complete migration to local assets including:
-   - Local PMTiles data for all map layers
-   - Local JavaScript libraries
-   - Local font files
-   - Removed sprite dependencies (not needed)
-   - Clean error handling for missing tiles
+4. **Production build**
+   ```bash
+   npm run build
+   ```
+   Creates optimized files in the `dist/` directory
 
-## Performance & Data
+5. **Type checking**
+   ```bash
+   npm run typecheck
+   ```
 
-- **Map Data Size**: 116MB for complete New Jersey coverage
-- **Zoom Levels**: Supports zoom levels 0-14 with detailed building data
-- **Coverage Area**: All of New Jersey with building heights, roads, water, and terrain
-- **Load Time**: Fast initial load due to local assets
-- **Memory Usage**: Efficient vector tile rendering with on-demand loading
+### Map Data Setup
+The game includes complete New Jersey map data in PMTiles format:
+- **File**: `map_data/tiles/nj-complete.pmtiles` (116MB)
+- **Coverage**: All of New Jersey with buildings, roads, water, and terrain
+- **Zoom levels**: 0-14 with detailed building data
+- **Source**: Generated from OpenStreetMap using Planetiler
 
-## Next Steps
+## How to Play
 
-The project is ready for the next phase of development:
+### Controls
+- **Arrow Keys**: Move player character
+  - ↑/↓: Forward/backward movement
+  - ←/→: Rotate left/right
+  - Shift + ←/→: Strafe left/right
 
-1. **Backend Development**:
-   - Node.js server with PostgreSQL + PostGIS
-   - Real-time multiplayer functionality
-   - Persistent territory ownership
+### Gameplay
+1. **Place Headquarters**: Use the control panel buttons to place different HQ types:
+   - **Producers** (Farms): Must be placed on buildings
+   - **Traffickers**: Must be placed on roads or rivers
+   - **Retailers** (Dealers): Must be placed on buildings
 
-2. **Additional Regions**:
-   - Expand beyond New Jersey using the same PMTiles approach
-   - Multi-region gameplay mechanics
+2. **Expand Territory**: Each HQ creates an influence area that merges with your existing territory
 
-3. **Enhanced Features**:
-   - Combat system between gangs
-   - Resource trading and economics
-   - Strategic alliance mechanics
+3. **Manage Resources**: Track your commodities, money, and territory expansion over time
 
-The offline foundation is solid and ready to support multiplayer backend integration.
+## Data Sources & Technical Details
+
+### Map Data Generation
+- **Source**: OpenStreetMap via Planetiler
+- **Profile**: OpenMapTiles schema
+- **Command**: 
+  ```bash
+  docker run --rm -it -v ${PWD}:/data ghcr.io/onthegomap/planetiler:latest \
+    --download=true \
+    --osm-path=/data/new-jersey-latest.osm.pbf \
+    --output=/data/nj-complete.pmtiles \
+    --output-format=pmtiles
+  ```
+
+### Performance Characteristics
+- **Initial Load**: Fast startup due to local assets
+- **Memory Usage**: Efficient vector tile streaming
+- **Map Data**: 116MB compressed PMTiles file
+- **Frame Rate**: 60fps movement with smooth map interactions
+
+## Development
+
+### Key Dependencies
+```json
+{
+  "dependencies": {
+    "@turf/turf": "^7.2.0"
+  },
+  "devDependencies": {
+    "@types/maplibre-gl": "^1.14.0",
+    "@types/node": "^24.0.7",
+    "typescript": "^5.8.3",
+    "vite": "^5.4.19"
+  }
+}
+```
+
+### File Organization
+- **TypeScript Source**: All game logic in `src/` with strict typing
+- **Local Libraries**: Offline copies in `libs/` (MapLibre, PMTiles, Turf)
+- **Assets**: Icons, fonts, and styles for complete offline operation
+- **Map Data**: PMTiles format for efficient vector tile delivery
+
+### Build Configuration
+- **Target**: ES2020 for modern browser features
+- **Module**: ES2020 modules with bundler resolution
+- **Output**: Clean distribution build in `dist/` directory
+- **Type Checking**: Strict TypeScript with comprehensive error checking
+
+## Planned Features
+
+### Near-term Development
+1. **Resource Economics**: Implement commodity generation and trading
+2. **Combat System**: Player vs player territory conflicts  
+3. **Backend Integration**: Real-time multiplayer with persistence
+4. **Mobile Support**: Touch controls and responsive design
+
+### Expansion Roadmap
+The `expansion-packs.json` file outlines planned regions:
+- **New York City**: Manhattan, Brooklyn, Queens, Bronx, Staten Island (~200MB)
+- **Philadelphia Metro**: Philadelphia and surrounding counties (~150MB)  
+- **Greater Boston**: Boston metropolitan area (~120MB)
+
+### Technical Evolution
+- **Multi-region Support**: Seamless switching between geographic areas
+- **Plugin Architecture**: Modular system for expansion packs
+- **Performance Optimization**: Streaming and caching for larger datasets
+- **Advanced Features**: Real-time collaboration, alliance systems, economic modeling
+
+## Contributing
+
+### Development Workflow
+1. Use `npm run typecheck` for continuous type checking
+2. Follow the MVC architecture patterns established in the codebase
+3. Maintain strict TypeScript typing (avoid `any` types)
+4. Test with both development and production builds
+
+### Code Style
+- **Interfaces**: Clear separation between model, view, and controller
+- **Type Safety**: Comprehensive TypeScript definitions
+- **Modularity**: Small, focused classes and functions
+- **Documentation**: Clear comments for complex geospatial operations
+
+## License
+
+ISC License - See package.json for details.
+
+---
+
+**Note**: This project represents a sophisticated foundation for a real-world strategy game. The offline-first architecture and authentic geographic data provide a unique gaming experience grounded in real geography.
