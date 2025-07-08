@@ -85,7 +85,7 @@ export default class MapView {
       style: 'offline-map-style.json',
       center: [-74.05682, 40.69337], // starting position [lng, lat]
       zoom: 14, // Start zoomed out for cinematic effect
-      pitch: 45, // tilt for 3-D perspective
+      pitch: 55, // tilt for 3-D perspective
       bearing: 0, // slight rotation for depth perception
       antialias: true,
       dragRotate: false, // prevents mouse drag rotation,
@@ -352,7 +352,7 @@ export default class MapView {
         );
       })
       .map((layer: any) => layer.id);
-    console.log('Found transportation layers:', this.transportLayers);
+    // console.log('Found transportation layers:', this.transportLayers);
   }
 
   // Getter to expose the map instance to the controller
@@ -550,7 +550,7 @@ export default class MapView {
 
   // Method to update map sources with game data
   updateInfluenceArea(territoryData: any) {
-    console.log('Updating influence area with data:', territoryData);
+    // console.log('Updating influence area with data:', territoryData);
     const geoJsonData = {
       type: 'FeatureCollection',
       features: territoryData ? [{
@@ -564,6 +564,7 @@ export default class MapView {
 
   // Method to create player character
   createPlayerCharacter(coords: { lng: number; lat: number }, rotation: number = 0): void {
+    // console.log('Creating player with rotation:', rotation);
     const baseSize = this.playerBaseSize;
     const size = this.calculateMarkerSize(baseSize);
     
@@ -628,11 +629,11 @@ export default class MapView {
     this.playerRotation = rotation;
     
     // Debug: Log the rotation and direction
-    console.log('Creating player with rotation:', rotation);
+    // console.log('Creating player with rotation:', rotation);
     
     // THEN set the correct direction based on rotation
     this.currentPlayerDirection = this.getDirectionFromRotation(rotation);
-    console.log('Calculated direction:', this.currentPlayerDirection);
+    // console.log('Calculated direction:', this.currentPlayerDirection);
     
     // FINALLY start the animation with the correct direction (force restart for initial setup)
     this.switchToAnimation('idle', true);
@@ -826,7 +827,7 @@ export default class MapView {
   }
 
   private startDirectionalAnimation(direction: string): void {
-    console.log('startDirectionalAnimation called with direction:', direction, 'animation type:', this.currentAnimationType);
+    // console.log('startDirectionalAnimation called with direction:', direction, 'animation type:', this.currentAnimationType);
     
     // Stop current animation
     if (this.animationTimer) {
@@ -859,7 +860,7 @@ export default class MapView {
       frameCount = 12; // walking
     }
     
-    console.log('Using row:', row, 'frameCount:', frameCount);
+    // console.log('Using row:', row, 'frameCount:', frameCount);
     
     // Set initial frame
     this.updateSpriteFrame(row, this.currentFrame);
@@ -930,7 +931,7 @@ export default class MapView {
 
   // Method to switch between animation types
   private switchToAnimation(animationType: 'idle' | 'walking' | 'running', forceRestart: boolean = false): void {
-    console.log('switchToAnimation called with:', animationType, 'current direction:', this.currentPlayerDirection);
+    // console.log('switchToAnimation called with:', animationType, 'current direction:', this.currentPlayerDirection);
     
     if (this.currentAnimationType === animationType && !forceRestart) return;
     

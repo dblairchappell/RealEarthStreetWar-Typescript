@@ -54,13 +54,13 @@ const mapCallbacks: MapViewCallbacks = {
 
         // Retailers must be placed on a building
         if (state.plantingType === 'retailer' && !features.building) {
-            console.log("Retailers must be placed on a building.");
+            // console.log("Retailers must be placed on a building.");
             return;
         }
 
         // Traffickers must be placed on a road or river
         if (state.plantingType === 'trafficker' && !features.transport) {
-            console.log("Traffickers must be placed on a road or river.");
+            // console.log("Traffickers must be placed on a road or river.");
             return;
         }
         
