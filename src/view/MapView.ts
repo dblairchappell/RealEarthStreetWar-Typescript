@@ -48,6 +48,11 @@ export default class MapView {
   private doubleTapThresholdMs: number = 300; // Threshold for double-tap in ms
   private tapDurationThresholdMs: number = 200; // Max duration of a press to be a "tap"
 
+  // Zoom control state
+  private lastZoomTime: number = 0;
+  private zoomCooldownMs: number = 100;
+  private isCameraZooming: boolean = false;
+
   // Animation properties
   private currentPlayerDirection: string = 'south';
   private currentFrame: number = 0;
@@ -164,13 +169,21 @@ export default class MapView {
     let inputChanged = false;
 
     switch(e.code) {
-      case 'KeyX':
-        // Z key - rotate camera left 45 degrees
+      case 'KeyD':
+        // D key - rotate camera left 45 degrees
         this.rotateCameraLeft();
         break;
-      case 'KeyZ':
-        // X key - rotate camera right 45 degrees
+      case 'KeyA':
+        // A key - rotate camera right 45 degrees
         this.rotateCameraRight();
+        break;
+      case 'KeyW':
+        // W key - zoom in
+        this.zoomIn();
+        break;
+      case 'KeyS':
+        // S key - zoom out
+        this.zoomOut();
         break;
       case 'ArrowUp':
         if (!this.inputState.forward) { // Only trigger on initial press
@@ -721,7 +734,7 @@ export default class MapView {
 
   // Update the centerCameraOnPlayer method:
   centerCameraOnPlayer(): void {
-    if (this.isCameraRotating) return; // Don't recenter if camera is rotating
+    if (this.isCameraRotating || this.isCameraZooming) return; // Don't recenter if camera is rotating or zooming
     
     if (this.playerPosition) {
       this.map.setCenter([this.playerPosition.lng, this.playerPosition.lat]);
@@ -787,6 +800,32 @@ export default class MapView {
       this.map.setBearing(this.cameraBearing);
       this.isCameraRotating = false;
     }
+  }
+
+  private zoomIn(): void {
+    const currentTime = Date.now();
+    if (currentTime - this.lastZoomTime < this.zoomCooldownMs) return;
+
+    this.isCameraZooming = true;
+    this.map.easeTo({
+        zoom: Math.min(22, this.map.getZoom() + 0.5),
+        duration: 200
+    });
+    this.lastZoomTime = currentTime;
+    this.map.once('moveend', () => this.isCameraZooming = false);
+  }
+
+  private zoomOut(): void {
+    const currentTime = Date.now();
+    if (currentTime - this.lastZoomTime < this.zoomCooldownMs) return;
+
+    this.isCameraZooming = true;
+    this.map.easeTo({
+        zoom: Math.max(14, this.map.getZoom() - 0.5),
+        duration: 200
+    });
+    this.lastZoomTime = currentTime;
+    this.map.once('moveend', () => this.isCameraZooming = false);
   }
 
   // Method to update character animation direction after camera rotation
