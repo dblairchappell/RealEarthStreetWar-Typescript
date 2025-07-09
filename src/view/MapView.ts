@@ -707,17 +707,17 @@ export default class MapView {
     
     // Rotate around the player's position
     if (this.playerPosition) {
+      if (this.characterView) {
+        this.characterView.setCameraBearing(this.cameraBearing);
+        this.updateCharacterDirectionAfterCameraRotation();
+      }
+
       this.map.easeTo({
         center: [this.playerPosition.lng, this.playerPosition.lat],
         bearing: this.cameraBearing,
         duration: 150 // Smooth rotation animation
       });
 
-      if (this.characterView) {
-        this.characterView.setCameraBearing(this.cameraBearing);
-      }
-      // Update character animation direction immediately, not on 'moveend'
-      this.updateCharacterDirectionAfterCameraRotation();
       this.map.once('moveend', () => this.isCameraRotating = false);
 
     } else {
@@ -738,17 +738,17 @@ export default class MapView {
     
     // Rotate around the player's position
     if (this.playerPosition) {
+      if (this.characterView) {
+        this.characterView.setCameraBearing(this.cameraBearing);
+        this.updateCharacterDirectionAfterCameraRotation();
+      }
+
       this.map.easeTo({
         center: [this.playerPosition.lng, this.playerPosition.lat],
         bearing: this.cameraBearing,
         duration: 150 // Smooth rotation animation
       });
 
-      if (this.characterView) {
-        this.characterView.setCameraBearing(this.cameraBearing);
-      }
-      // Update character animation direction immediately, not on 'moveend'
-      this.updateCharacterDirectionAfterCameraRotation();
       this.map.once('moveend', () => this.isCameraRotating = false);
 
     } else {
