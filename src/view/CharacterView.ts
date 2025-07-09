@@ -1,5 +1,3 @@
-import type maplibregl from "maplibre-gl";
-
 /**
  * CharacterView handles all character rendering, animation, and sprite management.
  * This component is responsible for the visual representation of the player character

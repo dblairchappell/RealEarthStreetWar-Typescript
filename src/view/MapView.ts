@@ -47,8 +47,6 @@ export default class MapView {
   private lastZoomTime: number = 0;
   private zoomCooldownMs: number = 100;
   private isCameraZooming: boolean = false;
-  private wKeyDownTime: number = 0;
-  private sKeyDownTime: number = 0;
   private holdZoomActive: boolean = false;
 
   // HUD elements
@@ -483,7 +481,6 @@ export default class MapView {
     const currentTime = Date.now();
     if (currentTime - this.lastZoomTime < this.zoomCooldownMs) return;
 
-    this.wKeyDownTime = currentTime; // Set the key down time
     this.isCameraZooming = true;
     this.map.easeTo({
         zoom: Math.min(22, this.map.getZoom() + 1),
@@ -497,7 +494,6 @@ export default class MapView {
     const currentTime = Date.now();
     if (currentTime - this.lastZoomTime < this.zoomCooldownMs) return;
 
-    this.sKeyDownTime = currentTime; // Set the key down time
     this.isCameraZooming = true;
     this.map.easeTo({
         zoom: Math.max(14, this.map.getZoom() - 1),
@@ -512,12 +508,6 @@ export default class MapView {
     
     const continuousZoom = () => {
       if (!this.holdZoomActive) return;
-      
-      // Check if the key is still being held
-      if ((direction === 'in' && !this.wKeyDownTime) || (direction === 'out' && !this.sKeyDownTime)) {
-        this.holdZoomActive = false;
-        return;
-      }
 
       const zoomFactor = direction === 'in' ? 0.05 : -0.05;
       const currentZoom = this.map.getZoom();
@@ -531,18 +521,13 @@ export default class MapView {
     // Wait for the hold threshold before starting the continuous zoom
     const tapDurationThresholdMs = 500; // Local constant
     setTimeout(() => {
-      if ((direction === 'in' && this.wKeyDownTime) || (direction === 'out' && this.sKeyDownTime)) {
+      if (this.holdZoomActive) {
         requestAnimationFrame(continuousZoom);
       }
     }, tapDurationThresholdMs);
   }
 
   private handleZoomRelease(direction: 'in' | 'out'): void {
-    if (direction === 'in') {
-      this.wKeyDownTime = 0;
-    } else {
-      this.sKeyDownTime = 0;
-    }
     this.holdZoomActive = false;
   }
 
