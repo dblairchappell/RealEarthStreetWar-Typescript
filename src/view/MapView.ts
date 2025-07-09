@@ -43,12 +43,6 @@ export default class MapView {
   private lastCameraRotationTime: number = 0;
   private cameraRotationCooldownMs: number = 50; // Throttle camera rotation
   private isCameraRotating: boolean = false; // Flag to prevent movement from interrupting rotation
-  
-  // Double-tap running state
-  private lastArrowUpPressTime: number = 0;
-  private lastArrowUpReleaseTime: number = 0;
-  private doubleTapThresholdMs: number = 300; // Threshold for double-tap in ms
-  private tapDurationThresholdMs: number = 500; // Max duration of a press to be a "tap"
 
   // Zoom control state
   private lastZoomTime: number = 0;
@@ -59,9 +53,6 @@ export default class MapView {
   private holdZoomActive: boolean = false;
 
   // Animation properties
-  private currentFrame: number = 0;
-  private animationTimer: number | null = null;
-  private frameRate: number = 12; // frames per second
   private playerSprite: HTMLElement | null = null;
 
   // HUD elements
@@ -571,11 +562,13 @@ export default class MapView {
     };
 
     // Wait for the hold threshold before starting the continuous zoom
+    // Use a fixed threshold since we no longer store it locally
+    const tapDurationThresholdMs = 500; // Local constant
     setTimeout(() => {
       if ((direction === 'in' && this.wKeyDownTime) || (direction === 'out' && this.sKeyDownTime)) {
         requestAnimationFrame(continuousZoom);
       }
-    }, this.tapDurationThresholdMs);
+    }, tapDurationThresholdMs);
   }
 
   // Method to update character animation direction after camera rotation
