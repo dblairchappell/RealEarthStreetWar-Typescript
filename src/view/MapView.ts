@@ -1,6 +1,7 @@
 // view/MapView.ts
 import * as turf from "@turf/turf";
 import { HQType } from "../model/GameState";
+import CharacterView from "./CharacterView";
 
 // Callback interface for MapView to communicate with controller
 export interface MapViewCallbacks {
@@ -30,6 +31,7 @@ export default class MapView {
   private buildingLayers: string[] = ['building-footprints'];
   private transportLayers: string[] = [];
   private markers: Array<{ marker: any, element: HTMLElement, baseSize: number }> = [];
+  private characterView: CharacterView | null = null;
   private playerMarker: any = null;
   private playerElement: HTMLElement | null = null;
   private playerPosition: { lng: number; lat: number } | null = null;
@@ -106,6 +108,8 @@ export default class MapView {
       touchZoomRotate: false, // prevents touch zoom rotation
       keyboard: false // Disable built-in keyboard navigation to prevent conflicts
     });
+
+    this.characterView = new CharacterView(this.map);
 
     // Set up input handlers
     this.setupInputHandlers();
@@ -251,7 +255,12 @@ export default class MapView {
     }
 
     if (inputChanged) {
-      // Update movement state and switch animations if needed
+      // First, sync state WITH CharacterView
+      if (this.characterView) {
+        this.characterView.inputState = { ...this.inputState };
+      }
+      
+      // THEN, trigger the update, which uses that state
       this.updateMovementState();
       
       if (this.callbacks) {
@@ -320,7 +329,12 @@ export default class MapView {
     }
 
     if (inputChanged) {
-      // Update movement state and switch animations if needed
+      // First, sync state WITH CharacterView
+      if (this.characterView) {
+        this.characterView.inputState = { ...this.inputState };
+      }
+      
+      // THEN, trigger the update, which uses that state
       this.updateMovementState();
       
       if (this.callbacks) {
@@ -592,88 +606,15 @@ export default class MapView {
 
   // Method to create player character
   createPlayerCharacter(coords: { lng: number; lat: number }, rotation: number = 0): void {
-    // console.log('Creating player with rotation:', rotation);
-    const baseSize = this.playerBaseSize;
-    const size = this.calculateMarkerSize(baseSize);
-    
-    // Create 3D container with perspective
-    const container = document.createElement('div');
-    container.style.position = 'absolute';
-    container.style.width = `${size}px`;
-    container.style.height = `${size}px`;
-    container.style.transformStyle = 'preserve-3d';
-    container.style.perspective = '1000px';
-    container.style.zIndex = '1000';
-    container.style.pointerEvents = 'none';
-    container.style.willChange = 'transform';
-    
-    // Create billboard that always faces the camera
-    const billboard = document.createElement('div');
-    billboard.style.position = 'absolute';
-    billboard.style.width = `${size}px`;
-    billboard.style.height = `${size}px`;
-    billboard.style.transformStyle = 'preserve-3d';
-    billboard.style.willChange = 'transform';
-    
-    // Create the screen/surface for the animation
-    const screen = document.createElement('div');
-    screen.style.position = 'absolute';
-    screen.style.width = `${size}px`;
-    screen.style.height = `${size}px`;
-    screen.style.backgroundColor = 'transparent'; // Remove red background
-    screen.style.border = 'none'; // Remove border
-    screen.style.borderRadius = '0'; // Remove border radius
-    screen.style.overflow = 'hidden'; // Clip any overflow
-    screen.style.boxShadow = 'none'; // Remove shadow
+    if (!this.characterView) return;
 
-    // Add character sprite instead of image
-    const characterSprite = document.createElement('div');
-    characterSprite.style.width = '100%';
-    characterSprite.style.height = '100%';
-    characterSprite.style.backgroundImage = 'url(sprites/isometric_character_pack/isometric_character_idle.png)';
-    characterSprite.style.backgroundSize = '800% 800%'; // 8 columns, 8 rows (idle)
-    characterSprite.style.backgroundRepeat = 'no-repeat';
-    characterSprite.style.backgroundPosition = '0% 0%'; // Start at top-left
-    characterSprite.style.filter = 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))';
-    characterSprite.style.imageRendering = 'auto'; // Better scaling at different sizes
-    screen.appendChild(characterSprite);
+    // Delegate creation to the CharacterView instance
+    this.characterView.createPlayerCharacter(coords, rotation);
 
-    // Store reference to sprite
-    this.playerSprite = characterSprite;
-
-    // Debug: add a background color to see the actual sprite container
-    // characterSprite.style.backgroundColor = 'rgba(255, 0, 0, 0.1)';
-    
-    billboard.appendChild(screen);
-    container.appendChild(billboard);
-
-    // Add to map container
-    const mapContainer = this.map.getContainer();
-    mapContainer.appendChild(container);
-    
-    // Store references FIRST
-    this.playerElement = container;
+    // Keep a local copy of the position for camera controls, which still live in MapView.
     this.playerPosition = coords;
-    this.playerRotation = rotation;
-    
-    // Debug: Log the rotation and direction
-    // console.log('Creating player with rotation:', rotation);
-    
-    // THEN set the correct direction based on rotation
-    this.currentPlayerDirection = this.getDirectionFromRotation(rotation);
-    // console.log('Calculated direction:', this.currentPlayerDirection);
-    
-    // FINALLY start the animation with the correct direction (force restart for initial setup)
-    this.switchToAnimation('idle', true);
-    
-    // Update position immediately
-    this.updatePlayerScreenPosition();
-    
-    // Listen for map move/zoom events to update position
-    this.map.on('move', () => this.updatePlayerScreenPosition());
-    this.map.on('zoom', () => this.updatePlayerScreenPosition());
-    
-    // Cinematic zoom-in effect
+
+    // The cinematic zoom effect also stays in MapView.
     this.map.easeTo({
       center: coords,
       zoom: 21.5, // zoom target
@@ -731,23 +672,16 @@ export default class MapView {
 
   // Replace the updatePlayerPosition method:
   updatePlayerPosition(coords: { lng: number; lat: number }, rotation: number): void {
-    // Store new position and rotation
+    if (!this.characterView) return;
+
+    // Store new position and rotation for MapView's camera logic
     this.playerPosition = coords;
     this.playerRotation = rotation;
     
-    // Determine current direction
-    const newDirection = this.getDirectionFromRotation(rotation);
+    // Delegate the actual update logic to CharacterView
+    this.characterView.updatePlayerPosition(coords, rotation);
     
-    // Update animation if direction changed
-    if (newDirection !== this.currentPlayerDirection) {
-      this.currentPlayerDirection = newDirection;
-      this.startDirectionalAnimation(newDirection);
-    }
-    
-    // Update screen position
-    this.updatePlayerScreenPosition();
-    
-    // Update camera to follow player
+    // Update camera to follow player (this method still lives in MapView)
     this.centerCameraOnPlayer();
   }
 
@@ -779,6 +713,9 @@ export default class MapView {
         duration: 150 // Smooth rotation animation
       });
 
+      if (this.characterView) {
+        this.characterView.setCameraBearing(this.cameraBearing);
+      }
       // Update character animation direction immediately, not on 'moveend'
       this.updateCharacterDirectionAfterCameraRotation();
       this.map.once('moveend', () => this.isCameraRotating = false);
@@ -807,6 +744,9 @@ export default class MapView {
         duration: 150 // Smooth rotation animation
       });
 
+      if (this.characterView) {
+        this.characterView.setCameraBearing(this.cameraBearing);
+      }
       // Update character animation direction immediately, not on 'moveend'
       this.updateCharacterDirectionAfterCameraRotation();
       this.map.once('moveend', () => this.isCameraRotating = false);
@@ -868,13 +808,10 @@ export default class MapView {
 
   // Method to update character animation direction after camera rotation
   private updateCharacterDirectionAfterCameraRotation(): void {
-    // Recalculate the character's visual direction relative to the new camera bearing
-    const newDirection = this.getDirectionFromRotation(this.playerRotation);
-    
-    // Update animation if direction changed
-    if (newDirection !== this.currentPlayerDirection) {
-      this.currentPlayerDirection = newDirection;
-      this.startDirectionalAnimation(newDirection);
+    // This logic is now handled by CharacterView. We just trigger it.
+    if (this.characterView) {
+      // We pass the rotation from MapView because CharacterView doesn't store it.
+      this.characterView.updatePlayerPosition(this.playerPosition!, this.playerRotation);
     }
   }
 
@@ -982,23 +919,9 @@ export default class MapView {
 
   // Method to update movement state and switch animations
   private updateMovementState(): void {
-    const wasMoving = this.isPlayerMoving;
-    this.isPlayerMoving = this.checkIfPlayerMoving();
-    
-    // Determine the correct animation type
-    let targetAnimation: 'idle' | 'walking' | 'running';
-    
-    if (!this.isPlayerMoving) {
-      targetAnimation = 'idle';
-    } else if (this.inputState.running) {
-      targetAnimation = 'running';
-    } else {
-      targetAnimation = 'walking';
-    }
-    
-    // Switch animation if it changed
-    if (this.currentAnimationType !== targetAnimation) {
-      this.switchToAnimation(targetAnimation);
+    // This logic is now handled by CharacterView. We just trigger it.
+    if (this.characterView) {
+      this.characterView.updateMovementState();
     }
   }
 
