@@ -138,10 +138,12 @@ export default class InputManager {
       case 'KeyW':
         this.wKeyDownTime = 0;
         this.holdZoomActive = false;
+        this.callbacks?.onCameraZoomRelease?.('in');
         break;
       case 'KeyS':
         this.sKeyDownTime = 0;
         this.holdZoomActive = false;
+        this.callbacks?.onCameraZoomRelease?.('out');
         break;
       case 'ArrowUp':
         if (this.inputState.forward) {

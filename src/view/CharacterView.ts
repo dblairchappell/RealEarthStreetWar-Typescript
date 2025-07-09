@@ -1,28 +1,25 @@
 import type maplibregl from "maplibre-gl";
 
 /**
- * CharacterView – exact clone of MapView’s character logic.
- * For now MapView will continue to use its own copy; this file
- * is only a staging area so we can incrementally migrate.
+ * CharacterView handles all character rendering, animation, and sprite management.
+ * This component is responsible for the visual representation of the player character
+ * and maintains separation of concerns from MapView.
  */
 export default class CharacterView {
-
-  // injected
+  // Map instance reference
   private map: any;
-  constructor(map: any) { this.map = map; }
-
-  // ------------------------------------------------------------------
-  // 100 % COPY of the fields and methods that were in MapView
-  // ------------------------------------------------------------------
-
-  // --- state copied from MapView ------------------------------------
+  
+  // Character DOM elements
   private playerElement: HTMLElement | null = null;
   private playerSprite: HTMLElement | null = null;
+  
+  // Character state
   private playerPosition: { lng: number; lat: number } | null = null;
   private playerRotation = 0;
   private readonly playerBaseSize = 0.075;
-  private cameraBearing = 0; // For getDirectionFromRotation
+  private cameraBearing = 0; // Camera rotation for calculating relative direction
 
+  // Animation state
   private currentPlayerDirection: string = "south";
   private currentFrame = 0;
   private animationTimer: number | null = null;
@@ -30,6 +27,7 @@ export default class CharacterView {
   private isPlayerMoving = false;
   private currentAnimationType: "idle" | "walking" | "running" = "idle";
 
+  // Input state (synced from MapView)
   public inputState = {
     forward: false,
     backward: false,
@@ -40,19 +38,44 @@ export default class CharacterView {
     running: false
   };
 
-  // -------------------- * VERBATIM METHODS * ------------------------
+  constructor(map: any) {
+    this.map = map;
+  }
 
+  /**
+   * Updates the camera bearing for proper character direction calculation
+   */
   public setCameraBearing(bearing: number): void {
     this.cameraBearing = bearing;
   }
 
+  /**
+   * Gets the current player position
+   */
+  public getPlayerPosition(): { lng: number; lat: number } | null {
+    return this.playerPosition;
+  }
+
+  /**
+   * Gets the current player rotation
+   */
+  public getPlayerRotation(): number {
+    return this.playerRotation;
+  }
+
+  /**
+   * Calculates marker size based on zoom level
+   */
   private calculateMarkerSize(baseSize: number, zoom?: number): number {
     const currentZoom = zoom ?? this.map.getZoom();
     const scale = Math.pow(2, (currentZoom - 10) / 1.2);
     return Math.max(1, Math.min(200, baseSize * scale));
   }
 
-  createPlayerCharacter(coords: { lng: number; lat: number }, rotation: number = 0): void {
+  /**
+   * Creates the player character sprite and adds it to the map
+   */
+  public createPlayerCharacter(coords: { lng: number; lat: number }, rotation: number = 0): void {
     const baseSize = this.playerBaseSize;
     const size = this.calculateMarkerSize(baseSize);
 
@@ -112,14 +135,52 @@ export default class CharacterView {
 
     this.map.on('move', () => this.updatePlayerScreenPosition());
     this.map.on('zoom', () => this.updatePlayerScreenPosition());
-
-    this.map.easeTo({
-      center: coords,
-      zoom: 21.5,
-      duration: 3000
-    });
+    
+    // Note: The cinematic zoom is handled by MapView
   }
 
+  /**
+   * Updates character size based on current zoom level
+   * Called by MapView during zoom events
+   */
+  public updateCharacterSize(enableTransition: boolean = false): void {
+    if (!this.playerElement) return;
+    
+    const zoom = this.map.getZoom();
+    const playerSize = this.calculateMarkerSize(this.playerBaseSize, zoom);
+    
+    // Apply transition based on whether we're actively zooming
+    const transitionStyle = enableTransition ? 'width 0.1s ease, height 0.1s ease' : 'none';
+    
+    this.playerElement.style.transition = transitionStyle;
+    this.playerElement.style.width = `${playerSize}px`;
+    this.playerElement.style.height = `${playerSize}px`;
+    
+    // Update billboard and screen sizes
+    const billboard = this.playerElement.querySelector('div');
+    const screen = billboard?.querySelector('div');
+    if (billboard) {
+      billboard.style.transition = transitionStyle;
+      billboard.style.width = `${playerSize}px`;
+      billboard.style.height = `${playerSize}px`;
+    }
+    if (screen) {
+      screen.style.transition = transitionStyle;
+      screen.style.width = `${playerSize}px`;
+      screen.style.height = `${playerSize}px`;
+      
+      // Sprite always fills its container
+      const sprite = screen.querySelector('div');
+      if (sprite) {
+        sprite.style.width = '100%';
+        sprite.style.height = '100%';
+      }
+    }
+  }
+
+  /**
+   * Updates the player's screen position based on map coordinates
+   */
   private updatePlayerScreenPosition(): void {
     if (!this.playerElement || !this.playerPosition) return;
 
@@ -158,7 +219,11 @@ export default class CharacterView {
     this.playerElement.style.transform = `translate(${x}px, ${y}px)`;
   }
 
-  updatePlayerPosition(coords: { lng: number; lat: number }, rotation: number): void {
+  /**
+   * Updates the player's position and rotation
+   * Handles direction changes and triggers animation updates
+   */
+  public updatePlayerPosition(coords: { lng: number; lat: number }, rotation: number): void {
     this.playerPosition = coords;
     this.playerRotation = rotation;
     const newDirection = this.getDirectionFromRotation(rotation);
@@ -169,6 +234,9 @@ export default class CharacterView {
     this.updatePlayerScreenPosition();
   }
 
+  /**
+   * Calculates the sprite direction based on player rotation and camera bearing
+   */
   private getDirectionFromRotation(rotation: number): string {
     const relativeRotation = rotation - this.cameraBearing;
     const normalizedRotation = ((relativeRotation % 360) + 360) % 360;
@@ -183,6 +251,9 @@ export default class CharacterView {
     return 'south';
   }
 
+  /**
+   * Starts the animation for a specific direction
+   */
   private startDirectionalAnimation(direction: string): void {
     if (this.animationTimer) {
       clearInterval(this.animationTimer);
@@ -209,6 +280,9 @@ export default class CharacterView {
     }, 1000 / this.frameRate);
   }
 
+  /**
+   * Updates the sprite frame position for animation
+   */
   private updateSpriteFrame(row: number, frame: number): void {
     if (this.playerSprite) {
       let columnCount: number;
@@ -225,6 +299,9 @@ export default class CharacterView {
     }
   }
 
+  /**
+   * Stops the current animation
+   */
   private stopPlayerAnimation(): void {
     if (this.animationTimer) {
       clearInterval(this.animationTimer);
@@ -232,6 +309,9 @@ export default class CharacterView {
     }
   }
 
+  /**
+   * Checks if the player is currently moving based on input state
+   */
   private checkIfPlayerMoving(): boolean {
     return this.inputState.forward ||
       this.inputState.backward ||
@@ -239,6 +319,10 @@ export default class CharacterView {
       this.inputState.right;
   }
 
+  /**
+   * Updates the movement state and switches animations accordingly
+   * Called by MapView when input state changes
+   */
   public updateMovementState(): void {
     const wasMoving = this.isPlayerMoving;
     this.isPlayerMoving = this.checkIfPlayerMoving();
@@ -255,7 +339,10 @@ export default class CharacterView {
     }
   }
 
-  switchToAnimation(animationType: 'idle' | 'walking' | 'running', forceRestart: boolean = false): void {
+  /**
+   * Switches to a different animation type
+   */
+  private switchToAnimation(animationType: 'idle' | 'walking' | 'running', forceRestart: boolean = false): void {
     if (this.currentAnimationType === animationType && !forceRestart) return;
     this.currentAnimationType = animationType;
     if (this.playerSprite) {
@@ -271,5 +358,18 @@ export default class CharacterView {
       }
     }
     this.startDirectionalAnimation(this.currentPlayerDirection);
+  }
+
+  /**
+   * Cleans up resources when the character view is destroyed
+   */
+  public destroy(): void {
+    this.stopPlayerAnimation();
+    if (this.playerElement && this.playerElement.parentNode) {
+      this.playerElement.parentNode.removeChild(this.playerElement);
+    }
+    this.playerElement = null;
+    this.playerSprite = null;
+    this.playerPosition = null;
   }
 }

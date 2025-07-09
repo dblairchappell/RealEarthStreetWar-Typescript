@@ -34,7 +34,6 @@ export default class MapView {
   private transportLayers: string[] = [];
   private markers: Array<{ marker: any, element: HTMLElement, baseSize: number }> = [];
   private characterView: CharacterView | null = null;
-  private playerMarker: any = null;
   private playerPosition: { lng: number; lat: number } | null = null;
   private playerRotation: number = 0;
   
@@ -51,9 +50,6 @@ export default class MapView {
   private wKeyDownTime: number = 0;
   private sKeyDownTime: number = 0;
   private holdZoomActive: boolean = false;
-
-  // Animation properties
-  private playerSprite: HTMLElement | null = null;
 
   // HUD elements
   public plantProducerBtn!: HTMLElement | null;
@@ -97,7 +93,8 @@ export default class MapView {
       onCameraRotateRight: () => this.rotateCameraRight(),
       onCameraZoomIn: () => this.zoomIn(),
       onCameraZoomOut: () => this.zoomOut(),
-      onCameraZoomHold: (direction) => this.handleZoomHold(direction)
+      onCameraZoomHold: (direction) => this.handleZoomHold(direction),
+      onCameraZoomRelease: (direction) => this.handleZoomRelease(direction)
     });
 
     // Query HUD elements
@@ -304,49 +301,10 @@ export default class MapView {
       }
     });
 
-    // Update player character size
-    // if (this.playerElement) {
-    //   const playerBaseSize = this.playerBaseSize;
-    //   const playerSize = this.calculateMarkerSize(playerBaseSize, zoom);
-      
-    //   if (enableTransition) {
-    //     this.playerElement.style.transition = 'width 0.1s ease, height 0.1s ease';
-    //   } else {
-    //     this.playerElement.style.transition = 'none';
-    //   }
-      
-    //   this.playerElement.style.width = `${playerSize}px`;
-    //   this.playerElement.style.height = `${playerSize}px`;
-      
-    //   // Update billboard and screen sizes
-    //   const billboard = this.playerElement.querySelector('div');
-    //   const screen = billboard?.querySelector('div');
-    //   if (billboard) {
-    //     if (enableTransition) {
-    //       billboard.style.transition = 'width 0.1s ease, height 0.1s ease';
-    //     } else {
-    //       billboard.style.transition = 'none';
-    //     }
-    //     billboard.style.width = `${playerSize}px`;
-    //     billboard.style.height = `${playerSize}px`;
-    //   }
-    //   if (screen) {
-    //     if (enableTransition) {
-    //       screen.style.transition = 'width 0.1s ease, height 0.1s ease';
-    //     } else {
-    //       screen.style.transition = 'none';
-    //     }
-    //     screen.style.width = `${playerSize}px`;
-    //     screen.style.height = `${playerSize}px`;
-        
-    //     // Update the sprite size too
-    //     const sprite = screen.querySelector('div');
-    //     if (sprite) {
-    //       sprite.style.width = '100%';
-    //       sprite.style.height = '100%';
-    //     }
-    //   }
-    // }
+    // Update player character size through CharacterView
+    if (this.characterView) {
+      this.characterView.updateCharacterSize(enableTransition);
+    }
   }
 
   // Method to create HQ marker (called from controller)
@@ -422,10 +380,11 @@ export default class MapView {
     // Delegate creation to the CharacterView instance
     this.characterView.createPlayerCharacter(coords, rotation);
 
-    // Keep a local copy of the position for camera controls, which still live in MapView.
-    this.playerPosition = coords;
+    // Store position and rotation for camera controls
+    this.playerPosition = this.characterView.getPlayerPosition();
+    this.playerRotation = this.characterView.getPlayerRotation();
 
-    // The cinematic zoom effect also stays in MapView.
+    // The cinematic zoom effect stays in MapView
     this.map.easeTo({
       center: coords,
       zoom: 21.5, // zoom target
@@ -437,12 +396,12 @@ export default class MapView {
   updatePlayerPosition(coords: { lng: number; lat: number }, rotation: number): void {
     if (!this.characterView) return;
 
-    // Store new position and rotation for MapView's camera logic
-    this.playerPosition = coords;
-    this.playerRotation = rotation;
-    
     // Delegate the actual update logic to CharacterView
     this.characterView.updatePlayerPosition(coords, rotation);
+    
+    // Get updated position and rotation from CharacterView for camera logic
+    this.playerPosition = this.characterView.getPlayerPosition();
+    this.playerRotation = this.characterView.getPlayerRotation();
     
     // Update camera to follow player (this method still lives in MapView)
     this.centerCameraOnPlayer();
@@ -524,6 +483,7 @@ export default class MapView {
     const currentTime = Date.now();
     if (currentTime - this.lastZoomTime < this.zoomCooldownMs) return;
 
+    this.wKeyDownTime = currentTime; // Set the key down time
     this.isCameraZooming = true;
     this.map.easeTo({
         zoom: Math.min(22, this.map.getZoom() + 1),
@@ -537,6 +497,7 @@ export default class MapView {
     const currentTime = Date.now();
     if (currentTime - this.lastZoomTime < this.zoomCooldownMs) return;
 
+    this.sKeyDownTime = currentTime; // Set the key down time
     this.isCameraZooming = true;
     this.map.easeTo({
         zoom: Math.max(14, this.map.getZoom() - 1),
@@ -551,6 +512,12 @@ export default class MapView {
     
     const continuousZoom = () => {
       if (!this.holdZoomActive) return;
+      
+      // Check if the key is still being held
+      if ((direction === 'in' && !this.wKeyDownTime) || (direction === 'out' && !this.sKeyDownTime)) {
+        this.holdZoomActive = false;
+        return;
+      }
 
       const zoomFactor = direction === 'in' ? 0.05 : -0.05;
       const currentZoom = this.map.getZoom();
@@ -562,7 +529,6 @@ export default class MapView {
     };
 
     // Wait for the hold threshold before starting the continuous zoom
-    // Use a fixed threshold since we no longer store it locally
     const tapDurationThresholdMs = 500; // Local constant
     setTimeout(() => {
       if ((direction === 'in' && this.wKeyDownTime) || (direction === 'out' && this.sKeyDownTime)) {
@@ -571,12 +537,20 @@ export default class MapView {
     }, tapDurationThresholdMs);
   }
 
+  private handleZoomRelease(direction: 'in' | 'out'): void {
+    if (direction === 'in') {
+      this.wKeyDownTime = 0;
+    } else {
+      this.sKeyDownTime = 0;
+    }
+    this.holdZoomActive = false;
+  }
+
   // Method to update character animation direction after camera rotation
   private updateCharacterDirectionAfterCameraRotation(): void {
-    // This logic is now handled by CharacterView. We just trigger it.
-    if (this.characterView) {
-      // We pass the rotation from MapView because CharacterView doesn't store it.
-      this.characterView.updatePlayerPosition(this.playerPosition!, this.playerRotation);
+    if (this.characterView && this.playerPosition) {
+      // Trigger an update with current position and rotation to recalculate direction
+      this.characterView.updatePlayerPosition(this.playerPosition, this.playerRotation);
     }
   }
 
@@ -586,5 +560,21 @@ export default class MapView {
     if (this.characterView) {
       this.characterView.updateMovementState();
     }
+  }
+
+  /**
+   * Cleans up resources when the view is destroyed
+   */
+  public destroy(): void {
+    if (this.characterView) {
+      this.characterView.destroy();
+      this.characterView = null;
+    }
+    if (this.inputManager) {
+      this.inputManager.destroy();
+    }
+    // Clean up markers
+    this.markers.forEach(({ marker }) => marker.remove());
+    this.markers = [];
   }
 }

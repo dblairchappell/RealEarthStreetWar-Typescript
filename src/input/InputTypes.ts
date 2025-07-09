@@ -17,4 +17,5 @@ export interface InputCallbacks {
   onCameraZoomIn: () => void;
   onCameraZoomOut: () => void;
   onCameraZoomHold: (direction: 'in' | 'out') => void;
+  onCameraZoomRelease?: (direction: 'in' | 'out') => void;
 }
