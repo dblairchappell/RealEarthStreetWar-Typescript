@@ -2,6 +2,8 @@
 import * as turf from "@turf/turf";
 import { HQType } from "../model/GameState";
 import CharacterView from "./CharacterView";
+import InputManager from "../input/InputManager";
+import { InputState } from "../input/InputTypes";
 
 // Callback interface for MapView to communicate with controller
 export interface MapViewCallbacks {
@@ -61,17 +63,6 @@ export default class MapView {
   private animationTimer: number | null = null;
   private frameRate: number = 12; // frames per second
   private playerSprite: HTMLElement | null = null;
-  
-  // Input state tracking
-  private inputState = {
-    forward: false,
-    backward: false,
-    left: false,        // Now for strafing left
-    right: false,       // Now for strafing right
-    rotateLeft: false,  // New: for rotation left (shift+left)
-    rotateRight: false, // New: for rotation right (shift+right)
-    running: false      // New: for running (control+movement)
-  };
 
   // HUD elements
   public plantProducerBtn!: HTMLElement | null;
@@ -84,6 +75,7 @@ export default class MapView {
 
   // Callbacks for communicating with controller
   private callbacks: MapViewCallbacks | null = null;
+  private inputManager: InputManager;
 
   constructor(containerId: string = 'map') {
     // Set up PMTiles protocol for loading .pmtiles files
@@ -105,9 +97,17 @@ export default class MapView {
     });
 
     this.characterView = new CharacterView(this.map);
+    this.inputManager = new InputManager();
 
-    // Set up input handlers
-    this.setupInputHandlers();
+    // Set up InputManager callbacks
+    this.inputManager.setCallbacks({
+      onPlayerInput: (input) => this.handlePlayerInput(input),
+      onCameraRotateLeft: () => this.rotateCameraLeft(),
+      onCameraRotateRight: () => this.rotateCameraRight(),
+      onCameraZoomIn: () => this.zoomIn(),
+      onCameraZoomOut: () => this.zoomOut(),
+      onCameraZoomHold: (direction) => this.handleZoomHold(direction)
+    });
 
     // Query HUD elements
     this.queryHudElements();
@@ -148,193 +148,18 @@ export default class MapView {
     });
   }
 
-  private setupInputHandlers(): void {
-    // Focus management - make sure the document can receive key events
-    document.addEventListener('keydown', (e) => {
-      this.handleKeyDown(e);
-      e.preventDefault(); // Prevent page scrolling
-    });
-
-    document.addEventListener('keyup', (e) => {
-      this.handleKeyUp(e);
-      e.preventDefault();
-    });
-
-    // Make sure the page is focusable
-    if (document.body.tabIndex === -1) {
-      document.body.tabIndex = 0;
+  private handlePlayerInput(input: InputState): void {
+    // Sync with CharacterView
+    if (this.characterView) {
+      this.characterView.inputState = { ...input };
     }
-  }
-
-  // Update the key handling methods to reverse the behavior
-  private handleKeyDown(e: KeyboardEvent): void {
-    let inputChanged = false;
-
-    switch(e.code) {
-      case 'KeyD':
-        // D key - rotate camera left 45 degrees
-        this.rotateCameraLeft();
-        break;
-      case 'KeyA':
-        // A key - rotate camera right 45 degrees
-        this.rotateCameraRight();
-        break;
-      case 'KeyW':
-        // W key - zoom in
-        if (!this.wKeyDownTime) { // Prevent re-triggering if held
-          this.wKeyDownTime = Date.now();
-          this.zoomIn(); // Perform initial zoom immediately
-          this.handleZoomHold('in');
-        }
-        break;
-      case 'KeyS':
-        // S key - zoom out
-        if (!this.sKeyDownTime) { // Prevent re-triggering if held
-          this.sKeyDownTime = Date.now();
-          this.zoomOut(); // Perform initial zoom immediately
-          this.handleZoomHold('out');
-        }
-        break;
-      case 'ArrowUp':
-        if (!this.inputState.forward) { // Only trigger on initial press
-          const currentTime = Date.now();
-          const timeSinceLastRelease = currentTime - this.lastArrowUpReleaseTime;
-          const lastPressDuration = this.lastArrowUpReleaseTime - this.lastArrowUpPressTime;
-
-          if (timeSinceLastRelease < this.doubleTapThresholdMs && lastPressDuration < this.tapDurationThresholdMs) {
-            // Double-tap detected
-            this.inputState.running = true;
-          }
-          
-          this.inputState.forward = true;
-          this.lastArrowUpPressTime = currentTime; // Record press time
-          inputChanged = true;
-        }
-        break;
-      case 'ArrowDown':
-        if (!this.inputState.backward) {
-          this.inputState.backward = true;
-          inputChanged = true;
-        }
-        break;
-      case 'ArrowLeft':
-        if (e.shiftKey) {
-          // Shift+Left = Strafe left
-          if (!this.inputState.left) {
-            this.inputState.left = true;
-            inputChanged = true;
-          }
-        } else {
-          // Left = Rotate left (default behavior)
-          if (!this.inputState.rotateLeft) {
-            this.inputState.rotateLeft = true;
-            inputChanged = true;
-          }
-        }
-        break;
-      case 'ArrowRight':
-        if (e.shiftKey) {
-          // Shift+Right = Strafe right
-          if (!this.inputState.right) {
-            this.inputState.right = true;
-            inputChanged = true;
-          }
-        } else {
-          // Right = Rotate right (default behavior)
-          if (!this.inputState.rotateRight) {
-            this.inputState.rotateRight = true;
-            inputChanged = true;
-          }
-        }
-        break;
-    }
-
-    if (inputChanged) {
-      // First, sync state WITH CharacterView
-      if (this.characterView) {
-        this.characterView.inputState = { ...this.inputState };
-      }
-      
-      // THEN, trigger the update, which uses that state
-      this.updateMovementState();
-      
-      if (this.callbacks) {
-        this.callbacks.onPlayerInput(this.inputState);
-      }
-    }
-  }
-
-  private handleKeyUp(e: KeyboardEvent): void {
-    let inputChanged = false;
-
-    switch(e.code) {
-      case 'KeyW':
-        this.wKeyDownTime = 0;
-        this.holdZoomActive = false;
-        break;
-      case 'KeyS':
-        this.sKeyDownTime = 0;
-        this.holdZoomActive = false;
-        break;
-      case 'ArrowUp':
-        // On release, stop moving/running, and record times for double-tap check
-        if (this.inputState.forward) {
-          this.inputState.forward = false;
-          this.inputState.running = false; // Always stop running on release
-          this.lastArrowUpReleaseTime = Date.now();
-          inputChanged = true;
-        }
-        break;
-      case 'ArrowDown':
-        if (this.inputState.backward) {
-          this.inputState.backward = false;
-          inputChanged = true;
-        }
-        break;
-      case 'ArrowLeft':
-        // Reset both strafe and rotate for left arrow
-        let leftChanged = false;
-        if (this.inputState.left) {
-          this.inputState.left = false;
-          leftChanged = true;
-        }
-        if (this.inputState.rotateLeft) {
-          this.inputState.rotateLeft = false;
-          leftChanged = true;
-        }
-        if (leftChanged) {
-          inputChanged = true;
-        }
-        break;
-      case 'ArrowRight':
-        // Reset both strafe and rotate for right arrow
-        let rightChanged = false;
-        if (this.inputState.right) {
-          this.inputState.right = false;
-          rightChanged = true;
-        }
-        if (this.inputState.rotateRight) {
-          this.inputState.rotateRight = false;
-          rightChanged = true;
-        }
-        if (rightChanged) {
-          inputChanged = true;
-        }
-        break;
-    }
-
-    if (inputChanged) {
-      // First, sync state WITH CharacterView
-      if (this.characterView) {
-        this.characterView.inputState = { ...this.inputState };
-      }
-      
-      // THEN, trigger the update, which uses that state
-      this.updateMovementState();
-      
-      if (this.callbacks) {
-        this.callbacks.onPlayerInput(this.inputState);
-      }
+    
+    // Update movement state
+    this.updateMovementState();
+    
+    // Notify controller
+    if (this.callbacks) {
+      this.callbacks.onPlayerInput(input);
     }
   }
 
@@ -489,48 +314,48 @@ export default class MapView {
     });
 
     // Update player character size
-    if (this.playerElement) {
-      const playerBaseSize = this.playerBaseSize;
-      const playerSize = this.calculateMarkerSize(playerBaseSize, zoom);
+    // if (this.playerElement) {
+    //   const playerBaseSize = this.playerBaseSize;
+    //   const playerSize = this.calculateMarkerSize(playerBaseSize, zoom);
       
-      if (enableTransition) {
-        this.playerElement.style.transition = 'width 0.1s ease, height 0.1s ease';
-      } else {
-        this.playerElement.style.transition = 'none';
-      }
+    //   if (enableTransition) {
+    //     this.playerElement.style.transition = 'width 0.1s ease, height 0.1s ease';
+    //   } else {
+    //     this.playerElement.style.transition = 'none';
+    //   }
       
-      this.playerElement.style.width = `${playerSize}px`;
-      this.playerElement.style.height = `${playerSize}px`;
+    //   this.playerElement.style.width = `${playerSize}px`;
+    //   this.playerElement.style.height = `${playerSize}px`;
       
-      // Update billboard and screen sizes
-      const billboard = this.playerElement.querySelector('div');
-      const screen = billboard?.querySelector('div');
-      if (billboard) {
-        if (enableTransition) {
-          billboard.style.transition = 'width 0.1s ease, height 0.1s ease';
-        } else {
-          billboard.style.transition = 'none';
-        }
-        billboard.style.width = `${playerSize}px`;
-        billboard.style.height = `${playerSize}px`;
-      }
-      if (screen) {
-        if (enableTransition) {
-          screen.style.transition = 'width 0.1s ease, height 0.1s ease';
-        } else {
-          screen.style.transition = 'none';
-        }
-        screen.style.width = `${playerSize}px`;
-        screen.style.height = `${playerSize}px`;
+    //   // Update billboard and screen sizes
+    //   const billboard = this.playerElement.querySelector('div');
+    //   const screen = billboard?.querySelector('div');
+    //   if (billboard) {
+    //     if (enableTransition) {
+    //       billboard.style.transition = 'width 0.1s ease, height 0.1s ease';
+    //     } else {
+    //       billboard.style.transition = 'none';
+    //     }
+    //     billboard.style.width = `${playerSize}px`;
+    //     billboard.style.height = `${playerSize}px`;
+    //   }
+    //   if (screen) {
+    //     if (enableTransition) {
+    //       screen.style.transition = 'width 0.1s ease, height 0.1s ease';
+    //     } else {
+    //       screen.style.transition = 'none';
+    //     }
+    //     screen.style.width = `${playerSize}px`;
+    //     screen.style.height = `${playerSize}px`;
         
-        // Update the sprite size too
-        const sprite = screen.querySelector('div');
-        if (sprite) {
-          sprite.style.width = '100%';
-          sprite.style.height = '100%';
-        }
-      }
-    }
+    //     // Update the sprite size too
+    //     const sprite = screen.querySelector('div');
+    //     if (sprite) {
+    //       sprite.style.width = '100%';
+    //       sprite.style.height = '100%';
+    //     }
+    //   }
+    // }
   }
 
   // Method to create HQ marker (called from controller)
