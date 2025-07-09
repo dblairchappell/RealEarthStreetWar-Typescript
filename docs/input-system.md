@@ -27,15 +27,15 @@ interface InputState {
 ### Movement Controls
 - **↑**: Forward movement
 - **↓**: Backward movement  
-- **←**: Rotate character left
-- **→**: Rotate character right
+- **←**: Rotate character anticlockwise
+- **→**: Rotate character clockwise
 - **Shift + ←**: Strafe left (move sideways)
 - **Shift + →**: Strafe right (move sideways)
 - **Double-tap ↑**: Toggle running (within 300ms, max 500ms press duration)
 
 ### Camera Controls  
-- **A**: Rotate camera left 45°
-- **D**: Rotate camera right 45°
+- **A**: Rotate camera clockwise 45°
+- **D**: Rotate camera anticlockwise 45°
 - **W**: Zoom in (hold for continuous zoom)
 - **S**: Zoom out (hold for continuous zoom)
 
