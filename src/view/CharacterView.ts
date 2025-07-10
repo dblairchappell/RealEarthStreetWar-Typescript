@@ -9,12 +9,13 @@ export default class CharacterView {
   
   // Character DOM elements
   private playerElement: HTMLElement | null = null;
-  private playerSprite: HTMLElement | null = null;
+  private spriteSlices: HTMLElement[] = [];
   
   // Character state
   private playerPosition: { lng: number; lat: number } | null = null;
   private playerRotation = 0;
   private readonly playerBaseSize = 0.075;
+  private cameraPitch = 0;
   private cameraBearing = 0; // Camera rotation for calculating relative direction
 
   // Animation state
@@ -64,6 +65,10 @@ export default class CharacterView {
     this.cameraBearing = bearing;
   }
 
+  public setCameraPitch(pitch: number): void {
+    this.cameraPitch = pitch;
+  }
+
   /**
    * Gets the current player position
    */
@@ -91,51 +96,37 @@ export default class CharacterView {
    * Creates the player character sprite and adds it to the map
    */
   public createPlayerCharacter(coords: { lng: number; lat: number }, rotation: number = 0): void {
-    const baseSize = this.playerBaseSize;
-    const size = this.calculateMarkerSize(baseSize);
+    // Slice stack parameters
+    const SLICE_COUNT = 3;   // How many layers to stack for the 3D effect.
+    const SLICE_GAP   = 1;    // The gap in `px` between each slice.
 
     const container = document.createElement('div');
-    container.style.position = 'absolute';
-    container.style.width = `${size}px`;
-    container.style.height = `${size}px`;
-    container.style.transformStyle = 'preserve-3d';
-    container.style.perspective = '1000px';
-    container.style.zIndex = '1000';
-    container.style.pointerEvents = 'none';
-    container.style.willChange = 'transform';
+    container.id = 'character-container'; // Hook into the stylesheet for 3D context
+    container.style.pointerEvents = 'none'; // Clicks should pass through to the map
+    container.style.willChange = 'transform'; // Performance hint
+    
+    // Set CSS variables that the stylesheet will use for calculations
+    container.style.setProperty('--num-slices', String(SLICE_COUNT));
 
-    const billboard = document.createElement('div');
-    billboard.style.position = 'absolute';
-    billboard.style.width = `${size}px`;
-    billboard.style.height = `${size}px`;
-    billboard.style.transformStyle = 'preserve-3d';
-    billboard.style.willChange = 'transform';
+    // Create multiple slice layers
+    for (let i = 0; i < SLICE_COUNT; i++) {
+      const slice = document.createElement('div');
+      slice.className = 'character-sprite-slice';
+      
+      // Set a variable for this slice's index, used for the fade calculation in CSS
+      slice.style.setProperty('--slice-index', String(i));
+      
+      // The actual 3D offset for this slice
+      slice.style.transform = `translateZ(${i * SLICE_GAP}px)`;
 
-    const screen = document.createElement('div');
-    screen.style.position = 'absolute';
-    screen.style.width = `${size}px`;
-    screen.style.height = `${size}px`;
-    screen.style.backgroundColor = 'transparent';
-    screen.style.border = 'none';
-    screen.style.borderRadius = '0';
-    screen.style.overflow = 'hidden';
-    screen.style.boxShadow = 'none';
+      // The top slice gets a special class for the drop-shadow effect
+      if (i === SLICE_COUNT - 1) {
+        slice.classList.add('top-slice');
+      }
 
-    const characterSprite = document.createElement('div');
-    characterSprite.style.width = '100%';
-    characterSprite.style.height = '100%';
-    characterSprite.style.backgroundImage = `url(${this.animations.idle.url})`;
-    characterSprite.style.backgroundSize = `${this.animations.idle.frames * 100}% 100%`;
-    characterSprite.style.backgroundRepeat = 'no-repeat';
-    characterSprite.style.backgroundPosition = '0% 0%';
-    characterSprite.style.filter = 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))';
-    characterSprite.style.imageRendering = 'auto';
-    screen.appendChild(characterSprite);
-
-    this.playerSprite = characterSprite;
-
-    billboard.appendChild(screen);
-    container.appendChild(billboard);
+      container.appendChild(slice);
+      this.spriteSlices.push(slice);
+    }
 
     const mapContainer = this.map.getContainer();
     mapContainer.appendChild(container);
@@ -146,11 +137,6 @@ export default class CharacterView {
 
     this.switchToAnimation('idle', true);
     this.updatePlayerScreenPosition();
-
-    this.map.on('move', () => this.updatePlayerScreenPosition());
-    this.map.on('zoom', () => this.updatePlayerScreenPosition());
-    
-    // Note: The cinematic zoom is handled by MapView
   }
 
   /**
@@ -169,27 +155,6 @@ export default class CharacterView {
     this.playerElement.style.transition = transitionStyle;
     this.playerElement.style.width = `${playerSize}px`;
     this.playerElement.style.height = `${playerSize}px`;
-    
-    // Update billboard and screen sizes
-    const billboard = this.playerElement.querySelector('div');
-    const screen = billboard?.querySelector('div');
-    if (billboard) {
-      billboard.style.transition = transitionStyle;
-      billboard.style.width = `${playerSize}px`;
-      billboard.style.height = `${playerSize}px`;
-    }
-    if (screen) {
-      screen.style.transition = transitionStyle;
-      screen.style.width = `${playerSize}px`;
-      screen.style.height = `${playerSize}px`;
-      
-      // Sprite always fills its container
-      const sprite = screen.querySelector('div');
-      if (sprite) {
-        sprite.style.width = '100%';
-        sprite.style.height = '100%';
-      }
-    }
   }
 
   /**
@@ -199,39 +164,28 @@ export default class CharacterView {
     if (!this.playerElement || !this.playerPosition) return;
 
     const point = this.map.project(this.playerPosition);
-    const rawSize = this.calculateMarkerSize(this.playerBaseSize);
-    const size = Math.max(8, rawSize);
+    const size = this.calculateMarkerSize(this.playerBaseSize);
 
     this.playerElement.style.width = `${size}px`;
     this.playerElement.style.height = `${size}px`;
 
-    const billboard = this.playerElement.querySelector('div');
-    const screen = billboard?.querySelector('div');
-    if (billboard) {
-      billboard.style.width = `${size}px`;
-      billboard.style.height = `${size}px`;
-      billboard.style.transform = `rotateZ(${this.playerRotation - this.cameraBearing}deg)`;
+    // Calculate the fade factor based on camera pitch and set it as a CSS variable.
+    // The CSS will handle the rest of the opacity calculations.
+    const fadeStartPitch = 60; // Pitch at which fading begins
+    const fadeEndPitch = 85;   // Pitch at which top layers are fully faded
+    const pitchRange = fadeEndPitch - fadeStartPitch;
+    let fadeFactor = 0;
+    if (this.cameraPitch > fadeStartPitch) {
+        fadeFactor = Math.min(1, (this.cameraPitch - fadeStartPitch) / pitchRange);
     }
-    if (screen) {
-      screen.style.width = `${size}px`;
-      screen.style.height = `${size}px`;
-      const sprite = screen.querySelector('div') as HTMLElement;
-      if (sprite) {
-        sprite.style.width = '100%';
-        sprite.style.height = '100%';
-        if (size < 16) {
-          sprite.style.imageRendering = 'auto';
-        } else if (size < 32) {
-          sprite.style.imageRendering = 'auto';
-        } else {
-          sprite.style.imageRendering = 'pixelated';
-        }
-      }
-    }
+    this.playerElement.style.setProperty('--pitch-fade-factor', fadeFactor.toString());
 
-    const x = Math.round(point.x - size / 2);
-    const y = Math.round(point.y - size / 2);
-    this.playerElement.style.transform = `translate(${x}px, ${y}px)`;
+    const x = Math.round(point.x);
+    const y = Math.round(point.y);
+    
+    // This single transform positions the character, centers it, and applies pitch/bearing rotations.
+    // translate(-50%, -50%) centers the element on its anchor point before positioning.
+    this.playerElement.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px) rotateX(${this.cameraPitch}deg) rotateZ(${this.playerRotation - this.cameraBearing}deg)`;
   }
 
   /**
@@ -253,13 +207,17 @@ export default class CharacterView {
   }
 
   private updateSpriteFrame(frame: number): void {
-    if (!this.playerSprite) return;
+    if (this.spriteSlices.length === 0) return;
 
     const animation = this.animations[this.currentAnimationType];
     if (!animation) return;
 
     const x = frame * (100 / (animation.frames - 1));
-    this.playerSprite.style.backgroundPosition = `${x}% 0%`;
+    const pos = `${x}% 0%`;
+    // Update all slices
+    for (const slice of this.spriteSlices) {
+      slice.style.backgroundPosition = pos;
+    }
   }
 
   private stopPlayerAnimation(): void {
@@ -307,12 +265,14 @@ export default class CharacterView {
     this.currentFrame = 0;
     
     const animation = this.animations[animationType];
-    if (!this.playerSprite || !animation) return;
+    if (!animation) return;
 
-    // Apply all changes atomically to prevent glitching
-    this.playerSprite.style.backgroundImage = `url(${animation.url})`;
-    this.playerSprite.style.backgroundSize = `${animation.frames * 100}% 100%`;
-    this.playerSprite.style.backgroundPosition = '0% 0%'; // Reset to first frame immediately
+    // Apply all changes atomically to all slices to prevent glitching
+    for (const slice of this.spriteSlices) {
+      slice.style.backgroundImage = `url(${animation.url})`;
+      slice.style.backgroundSize = `${animation.frames * 100}% 100%`;
+      slice.style.backgroundPosition = '0% 0%';
+    }
     this.frameRate = animation.frameRate;
 
     this.animationTimer = window.setInterval(() => {
@@ -333,7 +293,7 @@ export default class CharacterView {
       this.playerElement.parentNode.removeChild(this.playerElement);
     }
     this.playerElement = null;
-    this.playerSprite = null;
+    this.spriteSlices = [];
     this.playerPosition = null;
   }
 }

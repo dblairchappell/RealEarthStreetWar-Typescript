@@ -73,13 +73,13 @@ export default class MapView {
       style: 'offline-map-style.json',
       center: [-74.05682, 40.69337], // starting position [lng, lat]
       zoom: 14, // Start zoomed out for cinematic effect
-      pitch: 0,
+      pitch: 45,
       bearing: 0, // slight rotation for depth perception
       antialias: true,
       dragRotate: true, // allows mouse drag rotation,
-      dragPitch: false,
+      dragPitch: true,
       // dragPan: false,
-      pitchWithRotate: false,
+      pitchWithRotate: true,
       touchZoomRotate: true, // allows touch zoom rotation
       keyboard: false // Disable built-in keyboard navigation to prevent conflicts
     });
@@ -266,10 +266,15 @@ export default class MapView {
       this.map.getCanvas().style.cursor = this.callbacks?.isPlanting() ? 'crosshair' : '';
     });
 
-    // Add a listener for map rotation to update the character's direction
-    this.map.on('rotate', () => {
+    // Add a listener for map movement to update the character's direction and orientation
+    this.map.on('move', () => {
       this.cameraBearing = this.map.getBearing();
-      this.updateCharacterDirectionAfterCameraRotation();
+      const pitch = this.map.getPitch();
+      if (this.characterView) {
+        this.characterView.setCameraBearing(this.cameraBearing);
+        this.characterView.setCameraPitch(pitch);
+        this.characterView.redraw();
+      }
     });
   }
 
@@ -467,8 +472,10 @@ export default class MapView {
     
     if (this.continuousZoomDirection === 'in') {
       newZoom = Math.min(22, currentZoom + this.currentZoomSpeed);
+      // newZoom = currentZoom + this.currentZoomSpeed;
     } else {
-      newZoom = Math.max(14, currentZoom - this.currentZoomSpeed);
+      newZoom = Math.max(5, currentZoom - this.currentZoomSpeed);
+      // newZoom = currentZoom - this.currentZoomSpeed;
     }
 
     // Apply zoom centered on player if available
