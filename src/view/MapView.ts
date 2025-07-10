@@ -39,18 +39,15 @@ export default class MapView {
   
   // Camera properties
   private cameraBearing: number = 0; // Camera rotation in degrees
-  private lastCameraRotationTime: number = 0;
-  private cameraRotationCooldownMs: number = 50; // Throttle camera rotation
   private isCameraRotating: boolean = false; // Flag to prevent movement from interrupting rotation
 
   // Continuous rotation state
-  public continuousCameraRotation: boolean = false;
   private continuousRotationActive: boolean = false;
   private continuousRotationDirection: 'left' | 'right' | null = null;
   private currentRotationSpeed: number = 0;
-  private minRotationSpeed: number = 0.5; // The slowest speed
-  private maxRotationSpeed: number = 5.0; // The fastest speed
-  private rotationAcceleration: number = 0.1; // How quickly it speeds up
+  private minRotationSpeed: number = 0.5;
+  private maxRotationSpeed: number = 5.0;
+  private rotationAcceleration: number = 0.1;
 
   // Zoom control state
   private lastZoomTime: number = 0;
@@ -87,14 +84,12 @@ export default class MapView {
     // Set up InputManager callbacks
     this.inputManager.setCallbacks({
       onPlayerInput: (input) => this.handlePlayerInput(input),
-      onCameraRotateLeft: () => this.rotateCameraLeft(),
-      onCameraRotateRight: () => this.rotateCameraRight(),
       onCameraZoomIn: () => this.zoomIn(),
       onCameraZoomOut: () => this.zoomOut(),
       onCameraZoomHold: (direction) => this.handleZoomHold(direction),
       onCameraZoomRelease: (direction) => this.handleZoomRelease(direction),
       onCameraRotateHold: (direction) => this.handleRotationHold(direction),
-      onCameraRotateRelease: (direction) => this.handleRotationRelease(direction),
+      onCameraRotateRelease: () => this.handleRotationRelease(),
     });
 
     // Query HUD elements
@@ -431,73 +426,6 @@ export default class MapView {
   }
 
   // Camera rotation methods
-  private rotateCameraLeft(): void {
-    // Only perform snap-rotation if not in continuous mode
-    if (this.continuousCameraRotation) return;
-
-    const currentTime = Date.now();
-    if (currentTime - this.lastCameraRotationTime < this.cameraRotationCooldownMs) {
-      return; // Throttle rotation
-    }
-    
-    this.isCameraRotating = true;
-    this.cameraBearing = (this.cameraBearing - 45 + 360) % 360;
-    this.lastCameraRotationTime = currentTime;
-    
-    // Rotate around the player's position
-    if (this.playerPosition) {
-      if (this.characterView) {
-        this.characterView.setCameraBearing(this.cameraBearing);
-        this.updateCharacterDirectionAfterCameraRotation();
-      }
-
-      this.map.easeTo({
-        center: [this.playerPosition.lng, this.playerPosition.lat],
-        bearing: this.cameraBearing,
-        duration: 150 // Smooth rotation animation
-      });
-
-      this.map.once('moveend', () => this.isCameraRotating = false);
-
-    } else {
-      this.map.setBearing(this.cameraBearing);
-      this.isCameraRotating = false;
-    }
-  }
-
-  private rotateCameraRight(): void {
-    // Only perform snap-rotation if not in continuous mode
-    if (this.continuousCameraRotation) return;
-
-    const currentTime = Date.now();
-    if (currentTime - this.lastCameraRotationTime < this.cameraRotationCooldownMs) {
-      return; // Throttle rotation
-    }
-    
-    this.isCameraRotating = true;
-    this.cameraBearing = (this.cameraBearing + 45) % 360;
-    this.lastCameraRotationTime = currentTime;
-    
-    // Rotate around the player's position
-    if (this.playerPosition) {
-      if (this.characterView) {
-        this.characterView.setCameraBearing(this.cameraBearing);
-        this.updateCharacterDirectionAfterCameraRotation();
-      }
-
-      this.map.easeTo({
-        center: [this.playerPosition.lng, this.playerPosition.lat],
-        bearing: this.cameraBearing,
-        duration: 150 // Smooth rotation animation
-      });
-
-      this.map.once('moveend', () => this.isCameraRotating = false);
-
-    } else {
-      this.map.setBearing(this.cameraBearing);
-      this.isCameraRotating = false;
-    }
-  }
 
   private zoomIn(): void {
     const currentTime = Date.now();
@@ -554,38 +482,47 @@ export default class MapView {
   }
 
   private handleRotationHold(direction: 'left' | 'right'): void {
-    if (!this.continuousCameraRotation) return;
-
     this.continuousRotationDirection = direction;
     if (!this.continuousRotationActive) {
-      this.currentRotationSpeed = this.minRotationSpeed; // Reset speed on new rotation
+      this.isCameraRotating = true; // Set flag to prevent zoom conflicts
+      this.currentRotationSpeed = this.minRotationSpeed;
       this.continuousRotationActive = true;
       this.continuousRotate();
     }
   }
 
-  private handleRotationRelease(direction: 'left' | 'right'): void {
+  private handleRotationRelease(): void {
+    this.isCameraRotating = false; // Unset flag
     this.continuousRotationActive = false;
     this.continuousRotationDirection = null;
   }
 
   private continuousRotate(): void {
-    if (!this.continuousRotationActive || !this.continuousRotationDirection) return;
+    if (!this.continuousRotationActive) return;
 
-    // Accelerate up to max speed
+    // Accelerate
     if (this.currentRotationSpeed < this.maxRotationSpeed) {
       this.currentRotationSpeed += this.rotationAcceleration;
-    } else {
-      this.currentRotationSpeed = this.maxRotationSpeed; // Clamp to max
     }
 
-    if (this.continuousRotationDirection === 'right') {
-      this.cameraBearing = (this.cameraBearing + this.currentRotationSpeed) % 360;
-    } else {
+    // A is for 'left' (counter-clockwise, +bearing), D is for 'right' (clockwise, -bearing)
+    if (this.continuousRotationDirection === 'left') { // D key
       this.cameraBearing = (this.cameraBearing - this.currentRotationSpeed + 360) % 360;
+    } else { // A key
+      this.cameraBearing = (this.cameraBearing + this.currentRotationSpeed) % 360;
     }
 
-    this.map.setBearing(this.cameraBearing);
+    // Ensure rotation is centered on the player
+    if (this.playerPosition) {
+      this.map.easeTo({
+        center: [this.playerPosition.lng, this.playerPosition.lat],
+        bearing: this.cameraBearing,
+        duration: 0 // Instant update to keep it smooth
+      });
+    } else {
+      this.map.setBearing(this.cameraBearing);
+    }
+
     this.updateCharacterDirectionAfterCameraRotation();
 
     requestAnimationFrame(() => this.continuousRotate());

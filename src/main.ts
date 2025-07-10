@@ -1,7 +1,7 @@
 import GameState, { HQType } from "./model/GameState";
 import MapView, { MapViewCallbacks } from "./view/MapView";
 import GameController from "./controller/GameController";
-import HUDView, { HUDCallbacks } from "./view/HUDView";
+import HUDView, { HUDViewCallbacks } from "./view/HUDView";
 import * as turf from "@turf/turf";
 
 const state = new GameState();
@@ -90,9 +90,6 @@ hud.setCallbacks({
     state.plantingType = 'retailer';
     hud.setPlantingButtonActive('retailer');
   },
-  onToggleCameraRotationMode: (isChecked) => {
-    controller.setContinuousCameraRotation(isChecked);
-  }
 });
 
 // Wait for map to load before setting up game logic

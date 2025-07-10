@@ -35,7 +35,6 @@ export default class GameController {
     // 60 FPS movement updates
     this.movementTimer = window.setInterval(() => {
       this.updatePlayerMovement();
-      this.view.continuousCameraRotation = this.state.continuousCameraRotation;
     }, 1000 / 60);
   }
 
@@ -129,18 +128,4 @@ export default class GameController {
       );
     }
   }
-
-  public setContinuousCameraRotation(enabled: boolean): void {
-    this.state.continuousCameraRotation = enabled;
-  }
-
-  // Remove or refactor updateView to not call this.view.updateStats. Instead, update stats from main.ts using hud.updateStats.
-  // updateView() {
-  //   this.view.updateStats(
-  //     this.state.hqs.length,
-  //     this.state.commodities,
-  //     this.state.money,
-  //     this.state.gameDate
-  //   );
-  // }
 }

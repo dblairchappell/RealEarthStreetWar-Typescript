@@ -33,7 +33,6 @@ export default class GameState {
   };
 
   // Camera settings
-  continuousCameraRotation: boolean = false;
 
   gameDate = new Date('2100-01-01T00:00:00');
   commodities = 0;
@@ -45,7 +44,7 @@ export default class GameState {
   static readonly MINUTES_PER_TICK = 15; // 15 game minutes per tick
   
   // Player movement constants
-  static readonly PLAYER_MOVE_SPEED = 0.0000004; // degrees per frame
-  static readonly PLAYER_RUN_SPEED = 0.0000010; // degrees per frame (2x walking speed)
-  static readonly PLAYER_ROTATION_SPEED = 2.0; // degrees per frame
+  static readonly PLAYER_MOVE_SPEED = 0.0000005; // degrees per frame
+  static readonly PLAYER_RUN_SPEED = 0.0000012; // degrees per frame (2x walking speed)
+  static readonly PLAYER_ROTATION_SPEED = 4.0; // degrees per frame
 }

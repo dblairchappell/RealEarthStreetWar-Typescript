@@ -64,15 +64,13 @@ export default class InputManager {
       case 'KeyD':
         if (!this.dKeyDownTime) {
           this.dKeyDownTime = Date.now();
-          this.callbacks?.onCameraRotateLeft();
-          this.callbacks?.onCameraRotateHold('left');
+          this.callbacks?.onCameraRotateHold('left'); // D for counter-clockwise
         }
         break;
       case 'KeyA':
         if (!this.aKeyDownTime) {
           this.aKeyDownTime = Date.now();
-          this.callbacks?.onCameraRotateRight();
-          this.callbacks?.onCameraRotateHold('right');
+          this.callbacks?.onCameraRotateHold('right'); // A for clockwise
         }
         break;
       case 'KeyW':
@@ -149,11 +147,11 @@ export default class InputManager {
     switch(e.code) {
       case 'KeyD':
         this.dKeyDownTime = 0;
-        this.callbacks?.onCameraRotateRelease('left');
+        this.callbacks?.onCameraRotateRelease();
         break;
       case 'KeyA':
         this.aKeyDownTime = 0;
-        this.callbacks?.onCameraRotateRelease('right');
+        this.callbacks?.onCameraRotateRelease();
         break;
       case 'KeyW':
         this.wKeyDownTime = 0;
