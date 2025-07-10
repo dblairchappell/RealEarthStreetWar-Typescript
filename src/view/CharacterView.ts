@@ -309,8 +309,10 @@ export default class CharacterView {
     const animation = this.animations[animationType];
     if (!this.playerSprite || !animation) return;
 
+    // Apply all changes atomically to prevent glitching
     this.playerSprite.style.backgroundImage = `url(${animation.url})`;
     this.playerSprite.style.backgroundSize = `${animation.frames * 100}% 100%`;
+    this.playerSprite.style.backgroundPosition = '0% 0%'; // Reset to first frame immediately
     this.frameRate = animation.frameRate;
 
     this.animationTimer = window.setInterval(() => {
