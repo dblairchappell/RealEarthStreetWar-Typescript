@@ -2,7 +2,7 @@
 
 The input system provides centralized keyboard and mouse handling with type-safe state management and flexible callback architecture.
 
-## 🏗 Architecture
+## 🏗️ Architecture
 
 ### Components
 - **InputManager**: Core input processing engine
@@ -32,6 +32,7 @@ interface InputState {
 - **Shift + ←**: Strafe left (move sideways)
 - **Shift + →**: Strafe right (move sideways)
 - **Double-tap ↑**: Toggle running (within 300ms, max 500ms press duration)
+- **HUD Toggle**: Use the on-screen button to switch movement mode (8-directional/360°)
 
 ### Camera Controls  
 - **A**: Rotate camera clockwise 45°

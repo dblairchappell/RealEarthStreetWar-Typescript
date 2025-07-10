@@ -55,7 +55,7 @@ const state: any = { ... };
 ```
 src/
 ├── input/          # Input handling only
-├── view/           # Rendering and UI only  
+├── view/           # Rendering, UI, and HUD logic (MapView, CharacterView, HUDView)
 ├── controller/     # Game logic coordination
 ├── model/          # Pure data structures
 └── types/          # Shared type definitions
@@ -75,6 +75,9 @@ src/
 2. Console errors → Check MapLibre GL JS messages
 3. Performance panel → Monitor frame rate during zoom/pan
 4. Console: `window.map.getZoom()` and `window.map.getBearing()`
+
+**HUD/UI Issues:**
+- Check `HUDView.ts` for event wiring and state updates
 
 ### Input System Debugging
 ```typescript
@@ -144,6 +147,12 @@ setCallbacks({
 2. **Add Icon** to `/icons` directory as SVG
 3. **Update MapView** icon mapping and styling
 4. **Add Placement Logic** if special rules needed
+
+### New HUD/UI Features
+1. **Add Elements** to `index.html`
+2. **Add Logic** to `HUDView.ts` for all HUD event wiring and state
+3. **Register Callbacks** in `main.ts` for game logic
+4. **Remove HUD logic from MapView** (now handled by HUDView)
 
 ## 🧪 Testing Strategy
 

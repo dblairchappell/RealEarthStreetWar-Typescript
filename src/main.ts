@@ -75,22 +75,6 @@ const mapCallbacks: MapViewCallbacks = {
     }
 };
 
-function setupPlantingButton(button: HTMLElement | null, type: HQType) {
-    if (!button) return;
-    button.addEventListener('click', () => {
-        const isAlreadyPlanting = state.plantingType === type;
-        
-        // Deactivate all buttons first
-        hud.exitPlantingMode();
-        state.plantingType = null;
-
-        if (!isAlreadyPlanting) {
-            state.plantingType = type;
-            button.classList.add('active');
-        }
-    });
-}
-
 // Set up HUD callbacks
 hud.setCallbacks({
   onPlantProducer: () => {
@@ -127,10 +111,6 @@ map.on('load', () => {
     hud.updateStats(state.hqs.length, state.commodities, state.money, state.gameDate);
     controller.startClock(); // Start the game clock
     controller.startMovementLoop(); // Start the movement update loop
-
-    // setupPlantingButton(view.plantProducerBtn, 'producer');
-    // setupPlantingButton(view.plantTraffickerBtn, 'trafficker');
-    // setupPlantingButton(view.plantRetailerBtn, 'retailer');
     
     // Setup movement mode toggle button
     hud.updateMovementModeButton(controller.isInFreeRotationMode());

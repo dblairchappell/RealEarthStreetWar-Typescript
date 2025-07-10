@@ -6,7 +6,7 @@ A web-based strategy game prototype that uses real-world map data for territory 
 
 - **Real-World Maps**: Authentic building heights and street layouts using OpenStreetMap data
 - **Territory Control**: Expand your influence by placing headquarters strategically  
-- **Player Movement**: WASD-style character controls with 8-directional movement and running
+- **Player Movement**: WASD-style character controls with 8-directional or 360° movement (toggle in HUD)
 - **Strategic Gameplay**: Three HQ types with location-based placement rules
 - **Complete Offline Play**: 116MB New Jersey dataset with all map layers included
 
@@ -33,6 +33,7 @@ Visit `http://localhost:5173` to start playing!
 - **Double-tap ↑**: Run
 - **A/D**: Rotate camera 45°
 - **W/S**: Zoom in/out
+- **Movement Mode Toggle**: Use the HUD button to switch between 8-directional and 360° movement
 
 ### Gameplay
 1. **Place HQs**: Click the control panel buttons then click on the map
@@ -42,7 +43,7 @@ Visit `http://localhost:5173` to start playing!
 2. **Expand Territory**: Each HQ creates influence areas that merge
 3. **Manage Resources**: Watch your stats grow over time
 
-## 🛠 Development
+## 🛠️ Development
 
 ```bash
 # Development server
@@ -61,16 +62,16 @@ Detailed technical documentation is available in the `/docs` folder:
 
 - [Architecture Overview](docs/architecture.md) - Code structure and design patterns
 - [Input System](docs/input-system.md) - Keyboard handling and controls
-- [View Layer](docs/view-layer.md) - Rendering and UI components  
+- [View Layer](docs/view-layer.md) - Rendering, UI components, and HUD logic
 - [Map Data](docs/map-data.md) - PMTiles generation and format details
 - [Development Guide](docs/development.md) - Contributing and extending the game
 
-## 🗺 Current Coverage
+## 🗺️ Current Coverage
 
 - **New Jersey**: Complete dataset with buildings, roads, water (116MB)
 - **Planned Expansions**: NYC, Philadelphia, Boston (see `expansion-packs.json`)
 
-## 🎯 Status
+## 🏁 Status
 
 **Current**: Fully functional single-player prototype with movement, territory control, and resource management.
 
