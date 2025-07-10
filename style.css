@@ -29,6 +29,9 @@ body {
 
 #controls {
     margin-bottom: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
 }
 
 #plant-hq-btn {
@@ -144,11 +147,13 @@ body {
     color: white;
     border: none;
     padding: 8px 12px;
-    margin: 2px;
+    margin: 0;
     border-radius: 4px;
     cursor: pointer;
     font-size: 0.9em;
     transition: background-color 0.2s;
+    width: 140px;
+    text-align: center;
 }
 
 #controls button:hover {
