@@ -76,8 +76,11 @@ export default class MapView {
       pitch: 0,
       bearing: 0, // slight rotation for depth perception
       antialias: true,
-      dragRotate: false, // prevents mouse drag rotation,
-      touchZoomRotate: false, // prevents touch zoom rotation
+      dragRotate: true, // allows mouse drag rotation,
+      dragPitch: false,
+      // dragPan: false,
+      pitchWithRotate: false,
+      touchZoomRotate: true, // allows touch zoom rotation
       keyboard: false // Disable built-in keyboard navigation to prevent conflicts
     });
 
@@ -261,6 +264,12 @@ export default class MapView {
     // Change cursor when in planting mode and log building info
     this.map.on('mousemove', (e: any) => {
       this.map.getCanvas().style.cursor = this.callbacks?.isPlanting() ? 'crosshair' : '';
+    });
+
+    // Add a listener for map rotation to update the character's direction
+    this.map.on('rotate', () => {
+      this.cameraBearing = this.map.getBearing();
+      this.updateCharacterDirectionAfterCameraRotation();
     });
   }
 
