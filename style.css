@@ -76,9 +76,9 @@ body {
 }
 
 #stats-panel {
-    margin-top: 8px;
+    margin-top: 20px;
+    padding: 15px;
     background: rgba(255,255,255,0.8);
-    padding: 6px 10px;
     border-radius: 4px;
     font-size: 14px;
 }
@@ -136,9 +136,8 @@ body {
 }
 
 #controls button.active {
-    background-color: #ff4500;
-    color: white;
-    border-color: #ff4500;
+    background-color: #0056b3;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
 }
 
 /* Control buttons styling */
@@ -174,4 +173,24 @@ body {
 
 #movement-mode-btn.free-rotation:hover {
     background-color: #1e7e34 !important;
+} 
+
+.checkbox-container {
+    display: flex;
+    align-items: center;
+    margin-top: 8px;
+    padding: 6px 12px;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+
+.checkbox-container label {
+    margin-left: 8px;
+    font-size: 14px;
+    color: #fff;
+    cursor: pointer;
+}
+
+.checkbox-container input[type="checkbox"] {
+    cursor: pointer;
 } 

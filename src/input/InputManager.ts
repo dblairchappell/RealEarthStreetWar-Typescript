@@ -25,6 +25,10 @@ export default class InputManager {
   private sKeyDownTime: number = 0;
   private holdZoomActive: boolean = false;
 
+  // Rotation control state
+  private aKeyDownTime: number = 0;
+  private dKeyDownTime: number = 0;
+
   constructor() {
     this.setupInputHandlers();
   }
@@ -58,10 +62,18 @@ export default class InputManager {
 
     switch(e.code) {
       case 'KeyD':
-        this.callbacks?.onCameraRotateLeft();
+        if (!this.dKeyDownTime) {
+          this.dKeyDownTime = Date.now();
+          this.callbacks?.onCameraRotateLeft();
+          this.callbacks?.onCameraRotateHold('left');
+        }
         break;
       case 'KeyA':
-        this.callbacks?.onCameraRotateRight();
+        if (!this.aKeyDownTime) {
+          this.aKeyDownTime = Date.now();
+          this.callbacks?.onCameraRotateRight();
+          this.callbacks?.onCameraRotateHold('right');
+        }
         break;
       case 'KeyW':
         if (!this.wKeyDownTime) {
@@ -135,6 +147,14 @@ export default class InputManager {
     let inputChanged = false;
 
     switch(e.code) {
+      case 'KeyD':
+        this.dKeyDownTime = 0;
+        this.callbacks?.onCameraRotateRelease('left');
+        break;
+      case 'KeyA':
+        this.aKeyDownTime = 0;
+        this.callbacks?.onCameraRotateRelease('right');
+        break;
       case 'KeyW':
         this.wKeyDownTime = 0;
         this.holdZoomActive = false;

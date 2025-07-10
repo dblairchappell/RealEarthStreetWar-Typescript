@@ -18,12 +18,29 @@ export default class CharacterView {
   private cameraBearing = 0; // Camera rotation for calculating relative direction
 
   // Animation state
-  private currentPlayerDirection: string = "south";
   private currentFrame = 0;
   private animationTimer: number | null = null;
   private frameRate = 12;
   private isPlayerMoving = false;
   private currentAnimationType: "idle" | "walking" | "running" = "idle";
+
+  private animations = {
+    idle: {
+      url: 'sprites/brian/brian_idling_31x1.png',
+      frames: 31,
+      frameRate: 12
+    },
+    walking: {
+      url: 'sprites/brian/brian_walking_forward_31x1.png',
+      frames: 31,
+      frameRate: 24
+    },
+    running: {
+      url: 'sprites/brian/brian_running_forward_23x1.png',
+      frames: 23,
+      frameRate: 30
+    }
+  };
 
   // Input state (synced from MapView)
   public inputState = {
@@ -107,8 +124,8 @@ export default class CharacterView {
     const characterSprite = document.createElement('div');
     characterSprite.style.width = '100%';
     characterSprite.style.height = '100%';
-    characterSprite.style.backgroundImage = 'url(sprites/isometric_character_pack/isometric_character_idle.png)';
-    characterSprite.style.backgroundSize = '800% 800%';
+    characterSprite.style.backgroundImage = `url(${this.animations.idle.url})`;
+    characterSprite.style.backgroundSize = `${this.animations.idle.frames * 100}% 100%`;
     characterSprite.style.backgroundRepeat = 'no-repeat';
     characterSprite.style.backgroundPosition = '0% 0%';
     characterSprite.style.filter = 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))';
@@ -127,7 +144,6 @@ export default class CharacterView {
     this.playerPosition = coords;
     this.playerRotation = rotation;
 
-    this.currentPlayerDirection = this.getDirectionFromRotation(rotation);
     this.switchToAnimation('idle', true);
     this.updatePlayerScreenPosition();
 
@@ -194,6 +210,7 @@ export default class CharacterView {
     if (billboard) {
       billboard.style.width = `${size}px`;
       billboard.style.height = `${size}px`;
+      billboard.style.transform = `rotateZ(${this.playerRotation - this.cameraBearing}deg)`;
     }
     if (screen) {
       screen.style.width = `${size}px`;
@@ -218,88 +235,33 @@ export default class CharacterView {
   }
 
   /**
+   * Forces a redraw of the character's screen position.
+   * Useful for updates that don't change position but affect appearance, like rotation.
+   */
+  public redraw(): void {
+    this.updatePlayerScreenPosition();
+  }
+
+  /**
    * Updates the player's position and rotation
    * Handles direction changes and triggers animation updates
    */
   public updatePlayerPosition(coords: { lng: number; lat: number }, rotation: number): void {
     this.playerPosition = coords;
     this.playerRotation = rotation;
-    const newDirection = this.getDirectionFromRotation(rotation);
-    if (newDirection !== this.currentPlayerDirection) {
-      this.currentPlayerDirection = newDirection;
-      this.startDirectionalAnimation(newDirection);
-    }
     this.updatePlayerScreenPosition();
   }
 
-  /**
-   * Calculates the sprite direction based on player rotation and camera bearing
-   */
-  private getDirectionFromRotation(rotation: number): string {
-    const relativeRotation = rotation - this.cameraBearing;
-    const normalizedRotation = ((relativeRotation % 360) + 360) % 360;
-    if (normalizedRotation >= 337.5 || normalizedRotation < 22.5) return 'north';
-    if (normalizedRotation >= 22.5 && normalizedRotation < 67.5) return 'northeast';
-    if (normalizedRotation >= 67.5 && normalizedRotation < 112.5) return 'east';
-    if (normalizedRotation >= 112.5 && normalizedRotation < 157.5) return 'southeast';
-    if (normalizedRotation >= 157.5 && normalizedRotation < 202.5) return 'south';
-    if (normalizedRotation >= 202.5 && normalizedRotation < 247.5) return 'southwest';
-    if (normalizedRotation >= 247.5 && normalizedRotation < 292.5) return 'west';
-    if (normalizedRotation >= 292.5 && normalizedRotation < 337.5) return 'northwest';
-    return 'south';
+  private updateSpriteFrame(frame: number): void {
+    if (!this.playerSprite) return;
+
+    const animation = this.animations[this.currentAnimationType];
+    if (!animation) return;
+
+    const x = frame * (100 / (animation.frames - 1));
+    this.playerSprite.style.backgroundPosition = `${x}% 0%`;
   }
 
-  /**
-   * Starts the animation for a specific direction
-   */
-  private startDirectionalAnimation(direction: string): void {
-    if (this.animationTimer) {
-      clearInterval(this.animationTimer);
-      this.animationTimer = null;
-    }
-    const rowMap: { [key: string]: number } = {
-      'south': 0, 'southeast': 1, 'southwest': 2, 'west': 3,
-      'northwest': 4, 'north': 5, 'northeast': 6, 'east': 7
-    };
-    const row = rowMap[direction] || 0;
-    this.currentFrame = 0;
-    let frameCount: number;
-    if (this.currentAnimationType === 'idle') {
-      frameCount = 8;
-    } else if (this.currentAnimationType === 'running') {
-      frameCount = 6;
-    } else {
-      frameCount = 12;
-    }
-    this.updateSpriteFrame(row, this.currentFrame);
-    this.animationTimer = window.setInterval(() => {
-      this.currentFrame = (this.currentFrame + 1) % frameCount;
-      this.updateSpriteFrame(row, this.currentFrame);
-    }, 1000 / this.frameRate);
-  }
-
-  /**
-   * Updates the sprite frame position for animation
-   */
-  private updateSpriteFrame(row: number, frame: number): void {
-    if (this.playerSprite) {
-      let columnCount: number;
-      if (this.currentAnimationType === 'idle') {
-        columnCount = 8;
-      } else if (this.currentAnimationType === 'running') {
-        columnCount = 6;
-      } else {
-        columnCount = 12;
-      }
-      const x = Math.round((frame * 100) / (columnCount - 1) * 100) / 100;
-      const y = Math.round((row * 100) / (8 - 1) * 100) / 100;
-      this.playerSprite.style.backgroundPosition = `${x}% ${y}%`;
-    }
-  }
-
-  /**
-   * Stops the current animation
-   */
   private stopPlayerAnimation(): void {
     if (this.animationTimer) {
       clearInterval(this.animationTimer);
@@ -337,25 +299,27 @@ export default class CharacterView {
     }
   }
 
-  /**
-   * Switches to a different animation type
-   */
   private switchToAnimation(animationType: 'idle' | 'walking' | 'running', forceRestart: boolean = false): void {
     if (this.currentAnimationType === animationType && !forceRestart) return;
+    
+    this.stopPlayerAnimation();
     this.currentAnimationType = animationType;
-    if (this.playerSprite) {
-      if (animationType === 'idle') {
-        this.playerSprite.style.backgroundImage = 'url(sprites/isometric_character_pack/isometric_character_idle.png)';
-        this.playerSprite.style.backgroundSize = '800% 800%';
-      } else if (animationType === 'running') {
-        this.playerSprite.style.backgroundImage = 'url(sprites/isometric_character_pack/isometric_character_run.png)';
-        this.playerSprite.style.backgroundSize = '600% 800%';
-      } else {
-        this.playerSprite.style.backgroundImage = 'url(sprites/isometric_character_pack/isometric_character_walk.png)';
-        this.playerSprite.style.backgroundSize = '1200% 800%';
-      }
-    }
-    this.startDirectionalAnimation(this.currentPlayerDirection);
+    this.currentFrame = 0;
+    
+    const animation = this.animations[animationType];
+    if (!this.playerSprite || !animation) return;
+
+    this.playerSprite.style.backgroundImage = `url(${animation.url})`;
+    this.playerSprite.style.backgroundSize = `${animation.frames * 100}% 100%`;
+    this.frameRate = animation.frameRate;
+
+    this.animationTimer = window.setInterval(() => {
+        const anim = this.animations[this.currentAnimationType];
+        if (!anim) return;
+        
+        this.currentFrame = (this.currentFrame + 1) % anim.frames;
+        this.updateSpriteFrame(this.currentFrame);
+    }, 1000 / this.frameRate);
   }
 
   /**

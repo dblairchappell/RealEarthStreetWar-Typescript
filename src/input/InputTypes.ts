@@ -18,4 +18,6 @@ export interface InputCallbacks {
   onCameraZoomOut: () => void;
   onCameraZoomHold: (direction: 'in' | 'out') => void;
   onCameraZoomRelease: (direction: 'in' | 'out') => void;
+  onCameraRotateHold: (direction: 'left' | 'right') => void;
+  onCameraRotateRelease: (direction: 'left' | 'right') => void;
 }

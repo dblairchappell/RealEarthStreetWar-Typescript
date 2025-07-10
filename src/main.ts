@@ -90,9 +90,8 @@ hud.setCallbacks({
     state.plantingType = 'retailer';
     hud.setPlantingButtonActive('retailer');
   },
-  onToggleMovementMode: () => {
-    controller.toggleMovementMode();
-    hud.updateMovementModeButton(controller.isInFreeRotationMode());
+  onToggleCameraRotationMode: (isChecked) => {
+    controller.setContinuousCameraRotation(isChecked);
   }
 });
 
@@ -111,7 +110,4 @@ map.on('load', () => {
     hud.updateStats(state.hqs.length, state.commodities, state.money, state.gameDate);
     controller.startClock(); // Start the game clock
     controller.startMovementLoop(); // Start the movement update loop
-    
-    // Setup movement mode toggle button
-    hud.updateMovementModeButton(controller.isInFreeRotationMode());
 });

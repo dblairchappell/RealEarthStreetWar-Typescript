@@ -43,6 +43,15 @@ export default class MapView {
   private cameraRotationCooldownMs: number = 50; // Throttle camera rotation
   private isCameraRotating: boolean = false; // Flag to prevent movement from interrupting rotation
 
+  // Continuous rotation state
+  public continuousCameraRotation: boolean = false;
+  private continuousRotationActive: boolean = false;
+  private continuousRotationDirection: 'left' | 'right' | null = null;
+  private currentRotationSpeed: number = 0;
+  private minRotationSpeed: number = 0.5; // The slowest speed
+  private maxRotationSpeed: number = 5.0; // The fastest speed
+  private rotationAcceleration: number = 0.1; // How quickly it speeds up
+
   // Zoom control state
   private lastZoomTime: number = 0;
   private zoomCooldownMs: number = 100;
@@ -64,7 +73,7 @@ export default class MapView {
       style: 'offline-map-style.json',
       center: [-74.05682, 40.69337], // starting position [lng, lat]
       zoom: 14, // Start zoomed out for cinematic effect
-      pitch: 55, // tilt for 3-D perspective
+      pitch: 0,
       bearing: 0, // slight rotation for depth perception
       antialias: true,
       dragRotate: false, // prevents mouse drag rotation,
@@ -83,7 +92,9 @@ export default class MapView {
       onCameraZoomIn: () => this.zoomIn(),
       onCameraZoomOut: () => this.zoomOut(),
       onCameraZoomHold: (direction) => this.handleZoomHold(direction),
-      onCameraZoomRelease: (direction) => this.handleZoomRelease(direction)
+      onCameraZoomRelease: (direction) => this.handleZoomRelease(direction),
+      onCameraRotateHold: (direction) => this.handleRotationHold(direction),
+      onCameraRotateRelease: (direction) => this.handleRotationRelease(direction),
     });
 
     // Query HUD elements
@@ -421,6 +432,9 @@ export default class MapView {
 
   // Camera rotation methods
   private rotateCameraLeft(): void {
+    // Only perform snap-rotation if not in continuous mode
+    if (this.continuousCameraRotation) return;
+
     const currentTime = Date.now();
     if (currentTime - this.lastCameraRotationTime < this.cameraRotationCooldownMs) {
       return; // Throttle rotation
@@ -452,6 +466,9 @@ export default class MapView {
   }
 
   private rotateCameraRight(): void {
+    // Only perform snap-rotation if not in continuous mode
+    if (this.continuousCameraRotation) return;
+
     const currentTime = Date.now();
     if (currentTime - this.lastCameraRotationTime < this.cameraRotationCooldownMs) {
       return; // Throttle rotation
@@ -536,11 +553,48 @@ export default class MapView {
     this.holdZoomActive = false;
   }
 
-  // Method to update character animation direction after camera rotation
+  private handleRotationHold(direction: 'left' | 'right'): void {
+    if (!this.continuousCameraRotation) return;
+
+    this.continuousRotationDirection = direction;
+    if (!this.continuousRotationActive) {
+      this.currentRotationSpeed = this.minRotationSpeed; // Reset speed on new rotation
+      this.continuousRotationActive = true;
+      this.continuousRotate();
+    }
+  }
+
+  private handleRotationRelease(direction: 'left' | 'right'): void {
+    this.continuousRotationActive = false;
+    this.continuousRotationDirection = null;
+  }
+
+  private continuousRotate(): void {
+    if (!this.continuousRotationActive || !this.continuousRotationDirection) return;
+
+    // Accelerate up to max speed
+    if (this.currentRotationSpeed < this.maxRotationSpeed) {
+      this.currentRotationSpeed += this.rotationAcceleration;
+    } else {
+      this.currentRotationSpeed = this.maxRotationSpeed; // Clamp to max
+    }
+
+    if (this.continuousRotationDirection === 'right') {
+      this.cameraBearing = (this.cameraBearing + this.currentRotationSpeed) % 360;
+    } else {
+      this.cameraBearing = (this.cameraBearing - this.currentRotationSpeed + 360) % 360;
+    }
+
+    this.map.setBearing(this.cameraBearing);
+    this.updateCharacterDirectionAfterCameraRotation();
+
+    requestAnimationFrame(() => this.continuousRotate());
+  }
+
   private updateCharacterDirectionAfterCameraRotation(): void {
-    if (this.characterView && this.playerPosition) {
-      // Trigger an update with current position and rotation to recalculate direction
-      this.characterView.updatePlayerPosition(this.playerPosition, this.playerRotation);
+    if (this.characterView) {
+      this.characterView.setCameraBearing(this.cameraBearing);
+      this.characterView.redraw();
     }
   }
 
@@ -552,18 +606,12 @@ export default class MapView {
     }
   }
 
-  /**
-   * Cleans up resources when the view is destroyed
-   */
   public destroy(): void {
-    if (this.characterView) {
-      this.characterView.destroy();
-      this.characterView = null;
+    // Clean up map resources and event listeners
+    this.inputManager.destroy();
+    if (this.map) {
+      this.map.remove();
     }
-    if (this.inputManager) {
-      this.inputManager.destroy();
-    }
-    // Clean up markers
     this.markers.forEach(({ marker }) => marker.remove());
     this.markers = [];
   }
