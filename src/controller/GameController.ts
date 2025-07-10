@@ -42,7 +42,7 @@ export default class GameController {
 
   private tickClock() {
     this.state.gameDate.setMinutes(this.state.gameDate.getMinutes() + GameState.MINUTES_PER_TICK);
-    this.updateView();
+    // HUD update should be triggered from main.ts after clock advances
   }
 
   public handlePlayerInput(input: { 
@@ -156,14 +156,15 @@ export default class GameController {
     }
   }
 
-  updateView() {
-    this.view.updateStats(
-      this.state.hqs.length,
-      this.state.commodities,
-      this.state.money,
-      this.state.gameDate
-    );
-  }
+  // Remove or refactor updateView to not call this.view.updateStats. Instead, update stats from main.ts using hud.updateStats.
+  // updateView() {
+  //   this.view.updateStats(
+  //     this.state.hqs.length,
+  //     this.state.commodities,
+  //     this.state.money,
+  //     this.state.gameDate
+  //   );
+  // }
 
   // Toggle between 8-direction and 360-degree movement modes
   public toggleMovementMode(): void {

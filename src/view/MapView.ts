@@ -49,16 +49,6 @@ export default class MapView {
   private isCameraZooming: boolean = false;
   private holdZoomActive: boolean = false;
 
-  // HUD elements
-  public plantProducerBtn!: HTMLElement | null;
-  public plantTraffickerBtn!: HTMLElement | null;
-  public plantRetailerBtn!: HTMLElement | null;
-  public movementModeBtn!: HTMLElement | null;
-  private hqCountEl!: HTMLElement | null;
-  private commoditiesCountEl!: HTMLElement | null;
-  private moneyCountEl!: HTMLElement | null;
-  private gameDateEl!: HTMLElement | null;
-
   // Callbacks for communicating with controller
   private callbacks: MapViewCallbacks | null = null;
   private inputManager: InputManager;
@@ -97,7 +87,7 @@ export default class MapView {
     });
 
     // Query HUD elements
-    this.queryHudElements();
+    // this.queryHudElements(); // REMOVED
 
     // Handle missing images and fonts gracefully
     this.map.on('styleimagemissing', (e: any) => {
@@ -150,16 +140,16 @@ export default class MapView {
     }
   }
 
-  private queryHudElements() {
-    this.plantProducerBtn = document.getElementById('plant-producer-btn');
-    this.plantTraffickerBtn = document.getElementById('plant-trafficker-btn');
-    this.plantRetailerBtn = document.getElementById('plant-retailer-btn');
-    this.movementModeBtn = document.getElementById('movement-mode-btn');
-    this.hqCountEl = document.getElementById('hq-count');
-    this.commoditiesCountEl = document.getElementById('commodities-count');
-    this.moneyCountEl = document.getElementById('money-count');
-    this.gameDateEl = document.getElementById('game-date');
-  }
+  // private queryHudElements() { // REMOVED
+  //   this.plantProducerBtn = document.getElementById('plant-producer-btn');
+  //   this.plantTraffickerBtn = document.getElementById('plant-trafficker-btn');
+  //   this.plantRetailerBtn = document.getElementById('plant-retailer-btn');
+  //   this.movementModeBtn = document.getElementById('movement-mode-btn');
+  //   this.hqCountEl = document.getElementById('hq-count');
+  //   this.commoditiesCountEl = document.getElementById('commodities-count');
+  //   this.moneyCountEl = document.getElementById('money-count');
+  //   this.gameDateEl = document.getElementById('game-date');
+  // }
 
   private setupLayers() {
     // Source and layer to show the HQ's circle of influence
@@ -210,31 +200,31 @@ export default class MapView {
     return this.map;
   }
 
-  // Simple stats update
-  updateStats(hqCount: number, commodities: number, money: number, gameDate: Date) {
-    if (this.hqCountEl) this.hqCountEl.textContent = hqCount.toString();
-    if (this.commoditiesCountEl) this.commoditiesCountEl.textContent = commodities.toString();
-    if (this.moneyCountEl) this.moneyCountEl.textContent = money.toFixed(2);
-    if (this.gameDateEl) {
-      this.gameDateEl.textContent = gameDate.toLocaleString('en-US', {
-        day: 'numeric', month: 'short', year: 'numeric',
-        hour: '2-digit', minute: '2-digit', hour12: false
-      });
-    }
-  }
+  // Simple stats update // REMOVED
+  // updateStats(hqCount: number, commodities: number, money: number, gameDate: Date) { // REMOVED
+  //   if (this.hqCountEl) this.hqCountEl.textContent = hqCount.toString(); // REMOVED
+  //   if (this.commoditiesCountEl) this.commoditiesCountEl.textContent = commodities.toString(); // REMOVED
+  //   if (this.moneyCountEl) this.moneyCountEl.textContent = money.toFixed(2); // REMOVED
+  //   if (this.gameDateEl) { // REMOVED
+  //     this.gameDateEl.textContent = gameDate.toLocaleString('en-US', { // REMOVED
+  //       day: 'numeric', month: 'short', year: 'numeric', // REMOVED
+  //       hour: '2-digit', minute: '2-digit', hour12: false // REMOVED
+  //     }); // REMOVED
+  //   } // REMOVED
+  // } // REMOVED
 
-  // Update movement mode button appearance
-  updateMovementModeButton(isFreeRotation: boolean) {
-    if (this.movementModeBtn) {
-      if (isFreeRotation) {
-        this.movementModeBtn.textContent = '360° Mode';
-        this.movementModeBtn.classList.add('free-rotation');
-      } else {
-        this.movementModeBtn.textContent = '8-Direction Mode';
-        this.movementModeBtn.classList.remove('free-rotation');
-      }
-    }
-  }
+  // Update movement mode button appearance // REMOVED
+  // updateMovementModeButton(isFreeRotation: boolean) { // REMOVED
+  //   if (this.movementModeBtn) { // REMOVED
+  //     if (isFreeRotation) { // REMOVED
+  //       this.movementModeBtn.textContent = '360° Mode'; // REMOVED
+  //       this.movementModeBtn.classList.add('free-rotation'); // REMOVED
+  //     } else { // REMOVED
+  //       this.movementModeBtn.textContent = '8-Direction Mode'; // REMOVED
+  //       this.movementModeBtn.classList.remove('free-rotation'); // REMOVED
+  //     } // REMOVED
+  //   } // REMOVED
+  // } // REMOVED
 
   setCallbacks(callbacks: MapViewCallbacks) {
     this.callbacks = callbacks;
@@ -267,13 +257,13 @@ export default class MapView {
     });
   }
 
-  // Method to exit planting mode (called from controller)
-  exitPlantingMode() {
-    this.plantProducerBtn?.classList.remove('active');
-    this.plantTraffickerBtn?.classList.remove('active');
-    this.plantRetailerBtn?.classList.remove('active');
-    this.map.getCanvas().style.cursor = '';
-  }
+  // Method to exit planting mode (called from controller) // REMOVED
+  // exitPlantingMode() { // REMOVED
+  //   this.plantProducerBtn?.classList.remove('active'); // REMOVED
+  //   this.plantTraffickerBtn?.classList.remove('active'); // REMOVED
+  //   this.plantRetailerBtn?.classList.remove('active'); // REMOVED
+  //   this.map.getCanvas().style.cursor = ''; // REMOVED
+  // } // REMOVED
 
   // Helper function to calculate marker size based on zoom
   private calculateMarkerSize(baseSize: number, zoom?: number): number {

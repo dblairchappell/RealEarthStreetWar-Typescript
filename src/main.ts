@@ -1,9 +1,11 @@
 import GameState, { HQType } from "./model/GameState";
 import MapView, { MapViewCallbacks } from "./view/MapView";
 import GameController from "./controller/GameController";
+import HUDView, { HUDCallbacks } from "./view/HUDView";
 import * as turf from "@turf/turf";
 
 const state = new GameState();
+const hud = new HUDView();
 const view = new MapView('map');
 const controller = new GameController(state, view);
 
@@ -43,7 +45,7 @@ function plantHQ(coords: { lng: number; lat: number }, type: HQType) {
     }
 
     view.updateInfluenceArea(state.playerUnion);
-    controller.updateView();
+    hud.updateStats(state.hqs.length, state.commodities, state.money, state.gameDate);
 }
 
 // Set up callbacks for MapView to communicate back to controller
@@ -66,7 +68,7 @@ const mapCallbacks: MapViewCallbacks = {
         
         plantHQ(coords, state.plantingType);
         state.plantingType = null;
-        view.exitPlantingMode();
+        hud.exitPlantingMode();
     },
     onPlayerInput: (input) => {
         controller.handlePlayerInput(input);
@@ -79,7 +81,7 @@ function setupPlantingButton(button: HTMLElement | null, type: HQType) {
         const isAlreadyPlanting = state.plantingType === type;
         
         // Deactivate all buttons first
-        view.exitPlantingMode();
+        hud.exitPlantingMode();
         state.plantingType = null;
 
         if (!isAlreadyPlanting) {
@@ -88,6 +90,27 @@ function setupPlantingButton(button: HTMLElement | null, type: HQType) {
         }
     });
 }
+
+// Set up HUD callbacks
+hud.setCallbacks({
+  onPlantProducer: () => {
+    // Set planting mode, update button states, etc.
+    state.plantingType = 'producer';
+    hud.setPlantingButtonActive('producer');
+  },
+  onPlantTrafficker: () => {
+    state.plantingType = 'trafficker';
+    hud.setPlantingButtonActive('trafficker');
+  },
+  onPlantRetailer: () => {
+    state.plantingType = 'retailer';
+    hud.setPlantingButtonActive('retailer');
+  },
+  onToggleMovementMode: () => {
+    controller.toggleMovementMode();
+    hud.updateMovementModeButton(controller.isInFreeRotationMode());
+  }
+});
 
 // Wait for map to load before setting up game logic
 map.on('load', () => {
@@ -101,21 +124,14 @@ map.on('load', () => {
     );
     
     // Initial view update
-    controller.updateView();
+    hud.updateStats(state.hqs.length, state.commodities, state.money, state.gameDate);
     controller.startClock(); // Start the game clock
     controller.startMovementLoop(); // Start the movement update loop
 
-    setupPlantingButton(view.plantProducerBtn, 'producer');
-    setupPlantingButton(view.plantTraffickerBtn, 'trafficker');
-    setupPlantingButton(view.plantRetailerBtn, 'retailer');
+    // setupPlantingButton(view.plantProducerBtn, 'producer');
+    // setupPlantingButton(view.plantTraffickerBtn, 'trafficker');
+    // setupPlantingButton(view.plantRetailerBtn, 'retailer');
     
     // Setup movement mode toggle button
-    if (view.movementModeBtn) {
-        view.movementModeBtn.addEventListener('click', () => {
-            controller.toggleMovementMode();
-            view.updateMovementModeButton(controller.isInFreeRotationMode());
-        });
-        // Initialize button state
-        view.updateMovementModeButton(controller.isInFreeRotationMode());
-    }
+    hud.updateMovementModeButton(controller.isInFreeRotationMode());
 });
