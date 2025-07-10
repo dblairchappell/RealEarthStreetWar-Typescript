@@ -12,10 +12,8 @@ export interface InputState {
 
 export interface InputCallbacks {
   onPlayerInput: (input: InputState) => void;
-  onCameraZoomIn: () => void;
-  onCameraZoomOut: () => void;
   onCameraZoomHold: (direction: 'in' | 'out') => void;
-  onCameraZoomRelease: (direction: 'in' | 'out') => void;
+  onCameraZoomRelease: () => void;
   onCameraRotateHold: (direction: 'left' | 'right') => void;
   onCameraRotateRelease: () => void;
 }

@@ -49,11 +49,14 @@ export default class MapView {
   private maxRotationSpeed: number = 5.0;
   private rotationAcceleration: number = 0.1;
 
-  // Zoom control state
-  private lastZoomTime: number = 0;
-  private zoomCooldownMs: number = 100;
+  // Continuous zoom state
+  private continuousZoomActive: boolean = false;
+  private continuousZoomDirection: 'in' | 'out' | null = null;
+  private currentZoomSpeed: number = 0;
+  private minZoomSpeed: number = 0.02;
+  private maxZoomSpeed: number = 0.15;
+  private zoomAcceleration: number = 0.005;
   private isCameraZooming: boolean = false;
-  private holdZoomActive: boolean = false;
 
   // Callbacks for communicating with controller
   private callbacks: MapViewCallbacks | null = null;
@@ -81,15 +84,13 @@ export default class MapView {
     this.characterView = new CharacterView(this.map);
     this.inputManager = new InputManager();
 
-    // Set up InputManager callbacks
+    // Set up input callbacks
     this.inputManager.setCallbacks({
       onPlayerInput: (input) => this.handlePlayerInput(input),
-      onCameraZoomIn: () => this.zoomIn(),
-      onCameraZoomOut: () => this.zoomOut(),
       onCameraZoomHold: (direction) => this.handleZoomHold(direction),
-      onCameraZoomRelease: (direction) => this.handleZoomRelease(direction),
+      onCameraZoomRelease: () => this.handleZoomRelease(),
       onCameraRotateHold: (direction) => this.handleRotationHold(direction),
-      onCameraRotateRelease: () => this.handleRotationRelease(),
+      onCameraRotateRelease: () => this.handleRotationRelease()
     });
 
     // Query HUD elements
@@ -427,58 +428,52 @@ export default class MapView {
 
   // Camera rotation methods
 
-  private zoomIn(): void {
-    const currentTime = Date.now();
-    if (currentTime - this.lastZoomTime < this.zoomCooldownMs) return;
-
-    this.isCameraZooming = true;
-    this.map.easeTo({
-        zoom: Math.min(22, this.map.getZoom() + 1),
-        duration: 200
-    });
-    this.lastZoomTime = currentTime;
-    this.map.once('moveend', () => this.isCameraZooming = false);
-  }
-
-  private zoomOut(): void {
-    const currentTime = Date.now();
-    if (currentTime - this.lastZoomTime < this.zoomCooldownMs) return;
-
-    this.isCameraZooming = true;
-    this.map.easeTo({
-        zoom: Math.max(14, this.map.getZoom() - 1),
-        duration: 200
-    });
-    this.lastZoomTime = currentTime;
-    this.map.once('moveend', () => this.isCameraZooming = false);
-  }
-
   private handleZoomHold(direction: 'in' | 'out'): void {
-    this.holdZoomActive = true;
-    
-    const continuousZoom = () => {
-      if (!this.holdZoomActive) return;
-
-      const zoomFactor = direction === 'in' ? 0.05 : -0.05;
-      const currentZoom = this.map.getZoom();
-      const newZoom = Math.max(14, Math.min(22, currentZoom + zoomFactor));
-      
-      this.map.setZoom(newZoom);
-      
-      requestAnimationFrame(continuousZoom);
-    };
-
-    // Wait for the hold threshold before starting the continuous zoom
-    const tapDurationThresholdMs = 500; // Local constant
-    setTimeout(() => {
-      if (this.holdZoomActive) {
-        requestAnimationFrame(continuousZoom);
-      }
-    }, tapDurationThresholdMs);
+    this.continuousZoomDirection = direction;
+    if (!this.continuousZoomActive) {
+      this.isCameraZooming = true; // Set flag to prevent movement conflicts
+      this.currentZoomSpeed = this.minZoomSpeed;
+      this.continuousZoomActive = true;
+      this.continuousZoom();
+    }
   }
 
-  private handleZoomRelease(direction: 'in' | 'out'): void {
-    this.holdZoomActive = false;
+  private handleZoomRelease(): void {
+    this.isCameraZooming = false; // Unset flag
+    this.continuousZoomActive = false;
+    this.continuousZoomDirection = null;
+  }
+
+  private continuousZoom(): void {
+    if (!this.continuousZoomActive) return;
+
+    // Accelerate
+    if (this.currentZoomSpeed < this.maxZoomSpeed) {
+      this.currentZoomSpeed += this.zoomAcceleration;
+    }
+
+    // Apply zoom change
+    const currentZoom = this.map.getZoom();
+    let newZoom;
+    
+    if (this.continuousZoomDirection === 'in') {
+      newZoom = Math.min(22, currentZoom + this.currentZoomSpeed);
+    } else {
+      newZoom = Math.max(14, currentZoom - this.currentZoomSpeed);
+    }
+
+    // Apply zoom centered on player if available
+    if (this.playerPosition) {
+      this.map.easeTo({
+        center: [this.playerPosition.lng, this.playerPosition.lat],
+        zoom: newZoom,
+        duration: 0 // Instant update to keep it smooth
+      });
+    } else {
+      this.map.setZoom(newZoom);
+    }
+
+    requestAnimationFrame(() => this.continuousZoom());
   }
 
   private handleRotationHold(direction: 'left' | 'right'): void {

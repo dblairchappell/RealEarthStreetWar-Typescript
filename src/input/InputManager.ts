@@ -64,26 +64,24 @@ export default class InputManager {
       case 'KeyD':
         if (!this.dKeyDownTime) {
           this.dKeyDownTime = Date.now();
-          this.callbacks?.onCameraRotateHold('left'); // D for counter-clockwise
+          this.callbacks?.onCameraRotateHold('right'); // D for clockwise
         }
         break;
       case 'KeyA':
         if (!this.aKeyDownTime) {
           this.aKeyDownTime = Date.now();
-          this.callbacks?.onCameraRotateHold('right'); // A for clockwise
+          this.callbacks?.onCameraRotateHold('left'); // A for counter-clockwise
         }
         break;
       case 'KeyW':
         if (!this.wKeyDownTime) {
           this.wKeyDownTime = Date.now();
-          this.callbacks?.onCameraZoomIn();
           this.callbacks?.onCameraZoomHold('in');
         }
         break;
       case 'KeyS':
         if (!this.sKeyDownTime) {
           this.sKeyDownTime = Date.now();
-          this.callbacks?.onCameraZoomOut();
           this.callbacks?.onCameraZoomHold('out');
         }
         break;
@@ -156,12 +154,12 @@ export default class InputManager {
       case 'KeyW':
         this.wKeyDownTime = 0;
         this.holdZoomActive = false;
-        this.callbacks?.onCameraZoomRelease('in');
+        this.callbacks?.onCameraZoomRelease();
         break;
       case 'KeyS':
         this.sKeyDownTime = 0;
         this.holdZoomActive = false;
-        this.callbacks?.onCameraZoomRelease('out');
+        this.callbacks?.onCameraZoomRelease();
         break;
       case 'ArrowUp':
         if (this.inputState.forward) {
