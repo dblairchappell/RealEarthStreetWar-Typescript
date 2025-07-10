@@ -108,4 +108,14 @@ map.on('load', () => {
     setupPlantingButton(view.plantProducerBtn, 'producer');
     setupPlantingButton(view.plantTraffickerBtn, 'trafficker');
     setupPlantingButton(view.plantRetailerBtn, 'retailer');
+    
+    // Setup movement mode toggle button
+    if (view.movementModeBtn) {
+        view.movementModeBtn.addEventListener('click', () => {
+            controller.toggleMovementMode();
+            view.updateMovementModeButton(controller.isInFreeRotationMode());
+        });
+        // Initialize button state
+        view.updateMovementModeButton(controller.isInFreeRotationMode());
+    }
 });

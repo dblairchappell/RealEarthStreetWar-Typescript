@@ -63,25 +63,41 @@ export default class GameController {
     let positionChanged = false;
     let rotationChanged = false;
 
-    // Handle rotation (shift+left/right arrows) - discrete 8-direction system
-    const currentTime = Date.now();
-    const canRotate = currentTime - this.lastRotationTime >= this.rotationCooldownMs;
-    
-    if (canRotate && this.currentInput.rotateLeft) {
-      const newDirection = GameState.getNextDirection(this.state.player.rotation, false);
-      if (newDirection !== this.state.player.rotation) {
-        this.state.player.rotation = newDirection;
-        this.lastRotationTime = currentTime;
+    // Handle rotation based on movement mode
+    if (this.state.freeRotationMode) {
+      // 360-degree continuous rotation mode
+      if (this.currentInput.rotateLeft) {
+        this.state.player.rotation -= GameState.PLAYER_FREE_ROTATION_SPEED;
+        this.state.player.rotation = ((this.state.player.rotation % 360) + 360) % 360; // Normalize to 0-360
         rotationChanged = true;
       }
-    }
-    
-    if (canRotate && this.currentInput.rotateRight) {
-      const newDirection = GameState.getNextDirection(this.state.player.rotation, true);
-      if (newDirection !== this.state.player.rotation) {
-        this.state.player.rotation = newDirection;
-        this.lastRotationTime = currentTime;
+      
+      if (this.currentInput.rotateRight) {
+        this.state.player.rotation += GameState.PLAYER_FREE_ROTATION_SPEED;
+        this.state.player.rotation = ((this.state.player.rotation % 360) + 360) % 360; // Normalize to 0-360
         rotationChanged = true;
+      }
+    } else {
+      // Discrete 8-direction system
+      const currentTime = Date.now();
+      const canRotate = currentTime - this.lastRotationTime >= this.rotationCooldownMs;
+      
+      if (canRotate && this.currentInput.rotateLeft) {
+        const newDirection = GameState.getNextDirection(this.state.player.rotation, false);
+        if (newDirection !== this.state.player.rotation) {
+          this.state.player.rotation = newDirection;
+          this.lastRotationTime = currentTime;
+          rotationChanged = true;
+        }
+      }
+      
+      if (canRotate && this.currentInput.rotateRight) {
+        const newDirection = GameState.getNextDirection(this.state.player.rotation, true);
+        if (newDirection !== this.state.player.rotation) {
+          this.state.player.rotation = newDirection;
+          this.lastRotationTime = currentTime;
+          rotationChanged = true;
+        }
       }
     }
 
@@ -147,5 +163,25 @@ export default class GameController {
       this.state.money,
       this.state.gameDate
     );
+  }
+
+  // Toggle between 8-direction and 360-degree movement modes
+  public toggleMovementMode(): void {
+    this.state.freeRotationMode = !this.state.freeRotationMode;
+    
+    // If switching from free rotation back to 8-direction, snap to nearest valid direction
+    if (!this.state.freeRotationMode) {
+      this.state.player.rotation = GameState.snapToValidDirection(this.state.player.rotation);
+      // Update view to show the snapped rotation
+      this.view.updatePlayerPosition(
+        { lng: this.state.player.lng, lat: this.state.player.lat },
+        this.state.player.rotation
+      );
+    }
+  }
+
+  // Get current movement mode for UI updates
+  public isInFreeRotationMode(): boolean {
+    return this.state.freeRotationMode;
   }
 }

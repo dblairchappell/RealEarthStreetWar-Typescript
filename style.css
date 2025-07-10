@@ -136,4 +136,37 @@ body {
     background-color: #ff4500;
     color: white;
     border-color: #ff4500;
+}
+
+/* Control buttons styling */
+#controls button {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    margin: 2px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: background-color 0.2s;
+}
+
+#controls button:hover {
+    background-color: #0056b3;
+}
+
+#movement-mode-btn {
+    background-color: #6c757d !important;
+}
+
+#movement-mode-btn:hover {
+    background-color: #545b62 !important;
+}
+
+#movement-mode-btn.free-rotation {
+    background-color: #28a745 !important;
+}
+
+#movement-mode-btn.free-rotation:hover {
+    background-color: #1e7e34 !important;
 } 

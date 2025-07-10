@@ -32,6 +32,9 @@ export default class GameState {
     isMoving: false
   };
 
+  // Movement mode toggle
+  freeRotationMode: boolean = false; // false = 8-direction, true = 360-degree
+
   gameDate = new Date('2100-01-01T00:00:00');
   commodities = 0;
   money = 1000; // Start with some cash
@@ -45,6 +48,7 @@ export default class GameState {
   static readonly PLAYER_MOVE_SPEED = 0.0000004; // degrees per frame
   static readonly PLAYER_RUN_SPEED = 0.0000010; // degrees per frame (2x walking speed)
   static readonly PLAYER_ROTATION_SPEED = 0.5; // degrees per frame
+  static readonly PLAYER_FREE_ROTATION_SPEED = 2.0; // degrees per frame for 360-degree mode
   
   // 8-direction system constants
   static readonly VALID_DIRECTIONS = [

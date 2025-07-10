@@ -53,6 +53,7 @@ export default class MapView {
   public plantProducerBtn!: HTMLElement | null;
   public plantTraffickerBtn!: HTMLElement | null;
   public plantRetailerBtn!: HTMLElement | null;
+  public movementModeBtn!: HTMLElement | null;
   private hqCountEl!: HTMLElement | null;
   private commoditiesCountEl!: HTMLElement | null;
   private moneyCountEl!: HTMLElement | null;
@@ -153,6 +154,7 @@ export default class MapView {
     this.plantProducerBtn = document.getElementById('plant-producer-btn');
     this.plantTraffickerBtn = document.getElementById('plant-trafficker-btn');
     this.plantRetailerBtn = document.getElementById('plant-retailer-btn');
+    this.movementModeBtn = document.getElementById('movement-mode-btn');
     this.hqCountEl = document.getElementById('hq-count');
     this.commoditiesCountEl = document.getElementById('commodities-count');
     this.moneyCountEl = document.getElementById('money-count');
@@ -218,6 +220,19 @@ export default class MapView {
         day: 'numeric', month: 'short', year: 'numeric',
         hour: '2-digit', minute: '2-digit', hour12: false
       });
+    }
+  }
+
+  // Update movement mode button appearance
+  updateMovementModeButton(isFreeRotation: boolean) {
+    if (this.movementModeBtn) {
+      if (isFreeRotation) {
+        this.movementModeBtn.textContent = '360° Mode';
+        this.movementModeBtn.classList.add('free-rotation');
+      } else {
+        this.movementModeBtn.textContent = '8-Direction Mode';
+        this.movementModeBtn.classList.remove('free-rotation');
+      }
     }
   }
 
