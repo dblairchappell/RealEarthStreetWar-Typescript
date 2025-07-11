@@ -83,7 +83,7 @@ export default class MapView {
       pitchWithRotate: GTA1_STYLE_TOP_DOWN ? false : true,
       touchZoomRotate: GTA1_STYLE_TOP_DOWN ? false : true, // allows touch zoom rotation
       keyboard: false, // Disable built-in keyboard navigation to prevent conflicts
-      maxPitch: 50,
+      maxPitch: 50
     });
 
     this.characterView = new CharacterView(this.map);
@@ -121,6 +121,7 @@ export default class MapView {
     });
 
     this.map.on('load', () => {
+      this.map.setProjection({ type: 'globe' });
       this.setupLayers();
       this.identifyInteractiveLayers();
       this.setupMapEventHandlers();
