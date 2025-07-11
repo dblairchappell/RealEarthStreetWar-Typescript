@@ -4,6 +4,7 @@ import { HQType } from "../model/GameState";
 import CharacterView from "./CharacterView";
 import InputManager from "../input/InputManager";
 import { InputState } from "../input/InputTypes";
+import { GTA1_STYLE_TOP_DOWN } from "../config";
 
 // Callback interface for MapView to communicate with controller
 export interface MapViewCallbacks {
@@ -73,14 +74,14 @@ export default class MapView {
       style: 'offline-map-style.json',
       center: [-74.05682, 40.69337], // starting position [lng, lat]
       zoom: 14, // Start zoomed out for cinematic effect
-      pitch: 10,
+      pitch: GTA1_STYLE_TOP_DOWN ? 0 : 55,
       bearing: 0, // slight rotation for depth perception
       antialias: true,
-      dragRotate: true, // allows mouse drag rotation,
-      dragPitch: false,
-      // dragPan: false,
-      pitchWithRotate: false,
-      touchZoomRotate: true, // allows touch zoom rotation
+      dragRotate: GTA1_STYLE_TOP_DOWN ? false : true, // allows mouse drag rotation,
+      dragPitch: GTA1_STYLE_TOP_DOWN ? false : true,
+      dragPan: true,
+      pitchWithRotate: GTA1_STYLE_TOP_DOWN ? false : true,
+      touchZoomRotate: GTA1_STYLE_TOP_DOWN ? false : true, // allows touch zoom rotation
       keyboard: false, // Disable built-in keyboard navigation to prevent conflicts
       maxPitch: 50,
     });

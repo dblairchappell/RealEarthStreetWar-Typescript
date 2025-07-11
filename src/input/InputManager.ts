@@ -1,5 +1,6 @@
 // src/input/InputManager.ts
 import { InputState, InputCallbacks } from './InputTypes';
+import { GTA1_STYLE_TOP_DOWN } from "../config";
 
 export default class InputManager {
   private inputState: InputState = {
