@@ -5,7 +5,7 @@ import CharacterView from "./CharacterView";
 import InputManager from "../input/InputManager";
 import { InputState } from "../input/InputTypes";
 import { GTA1_STYLE_TOP_DOWN } from "../config";
-import { InfluenceLayer } from './map';
+import { InfluenceLayer, MarkerLayer } from './map';
 
 // Callback interface for MapView to communicate with controller
 export interface MapViewCallbacks {
@@ -34,7 +34,7 @@ export default class MapView {
   // Use only the 2-D footprint polygons for hit-testing
   private buildingLayers: string[] = ['building-footprints'];
   private transportLayers: string[] = [];
-  private markers: Array<{ marker: any, element: HTMLElement, baseSize: number }> = [];
+  private markerLayer: MarkerLayer | null = null;
   private characterView: CharacterView | null = null;
   private playerPosition: { lng: number; lat: number } | null = null;
   private playerRotation: number = 0;
@@ -127,18 +127,14 @@ export default class MapView {
       this.map.setProjection({ type: 'globe' });
       // Initialise influence layer (moved out to its own class)
       this.influenceLayer = new InfluenceLayer(this.map);
+      this.markerLayer    = new MarkerLayer(this.map);
       this.identifyInteractiveLayers();
       this.setupMapEventHandlers();
       
       // Use 'zoomend' instead of 'zoom' for smoother performance
       // But also add 'zoom' for real-time updates
-      this.map.on('zoom', () => {
-        this.updateMarkerSizes(false); // No transition during zoom
-      });
-      
-      this.map.on('zoomend', () => {
-        this.updateMarkerSizes(true); // Enable transition when zoom stops
-      });
+      this.map.on('zoom',    () => this.markerLayer?.resizeAll(false));
+      this.map.on('zoomend', () => this.markerLayer?.resizeAll(true));
     });
   }
 
@@ -266,101 +262,9 @@ export default class MapView {
   //   this.map.getCanvas().style.cursor = ''; // REMOVED
   // } // REMOVED
 
-  // Helper function to calculate marker size based on zoom
-  private calculateMarkerSize(baseSize: number, zoom?: number): number {
-    const currentZoom = zoom ?? this.map.getZoom();
-    const scale = Math.pow(2, (currentZoom - 10) / 1.2);
-    return Math.max(1, Math.min(200, baseSize * scale));
-  }
-
-  private updateMarkerSizes(enableTransition: boolean = false) {
-    const zoom = this.map.getZoom();
-    
-    // Update HQ markers
-    this.markers.forEach(({ element, baseSize }) => {
-      const size = this.calculateMarkerSize(baseSize, zoom);
-      
-      // Control transition based on whether we're actively zooming
-      if (enableTransition) {
-        element.style.transition = 'width 0.1s ease, height 0.1s ease';
-      } else {
-        element.style.transition = 'none'; // No transition during zoom
-      }
-      
-      // Apply size to element
-      element.style.width = `${size}px`;
-      element.style.height = `${size}px`;
-      
-      // Scale the icon inside too
-      const img = element.querySelector('img');
-      if (img) {
-        const iconSize = size * 0.6;
-        if (enableTransition) {
-          img.style.transition = 'width 0.1s ease, height 0.1s ease';
-        } else {
-          img.style.transition = 'none';
-        }
-        img.style.width = `${iconSize}px`;
-        img.style.height = `${iconSize}px`;
-      }
-    });
-
-    // Update player character size through CharacterView
-    if (this.characterView) {
-      this.characterView.updateCharacterSize(enableTransition);
-    }
-  }
-
-  // Method to create HQ marker (called from controller)
+  // Delegate HQ marker creation to MarkerLayer
   createHQMarker(coords: { lng: number; lat: number }, type: HQType): any {
-    const baseSize = 1;
-    const size = this.calculateMarkerSize(baseSize);
-    
-    // Create marker element
-    const el = document.createElement('div');
-    el.style.width = `${size}px`;
-    el.style.height = `${size}px`;
-    el.style.boxShadow = '0 0 10px rgba(0,0,0,0.5)';
-    el.style.cursor = 'pointer';
-    el.style.display = 'flex';
-    el.style.justifyContent = 'center';
-    el.style.alignItems = 'top';
-    el.style.clipPath = 'polygon(50% 100%, 15% 60%, 0% 20%, 20% 0%, 80% 0%, 100% 20%, 85% 60%)';
-    
-    // Set background color based on type
-    if (type === 'producer') {
-      el.style.backgroundColor = '#4CAF50';
-      el.style.border = '4px solid #4CAF50';
-    } else if (type === 'trafficker') {
-      el.style.backgroundColor = '#FFC107';
-      el.style.border = '4px solid #FFC107';
-    } else if (type === 'retailer') {
-      el.style.backgroundColor = '#2196F3';
-      el.style.border = '4px solid #2196F3';
-    }
-
-    // Add the icon image
-    const img = document.createElement('img');
-    img.src = ICON_MAP[type];
-    img.alt = type;
-    const iconSize = size * 0.6;
-    img.style.width = `${iconSize}px`;
-    img.style.height = `${iconSize}px`;
-    img.style.pointerEvents = 'none';
-    el.appendChild(img);
-
-    // Create marker
-    const marker = new (window as any).maplibregl.Marker({ 
-      element: el, 
-      anchor: 'bottom'
-    })
-      .setLngLat(coords)
-      .addTo(this.map);
-    
-    // Store marker info for zoom-based scaling
-    this.markers.push({ marker, element: el, baseSize });
-    
-    return marker;
+    return this.markerLayer?.createHQMarker(coords, type);
   }
 
   // Forward-compat: keep same public signature used by main.ts
@@ -530,8 +434,7 @@ export default class MapView {
     if (this.map) {
       this.map.remove();
     }
-    this.markers.forEach(({ marker }) => marker.remove());
-    this.markers = [];
+    this.markerLayer?.destroy();
     this.influenceLayer?.destroy();
   }
 }
