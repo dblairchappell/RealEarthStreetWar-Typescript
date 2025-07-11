@@ -74,6 +74,7 @@ export default class MapView {
       style: 'offline-map-style.json',
       center: [-74.05682, 40.69337], // starting position [lng, lat]
       zoom: 14, // Start zoomed out for cinematic effect
+      minZoom: 1, // Allow zooming out to see the full globe
       pitch: GTA1_STYLE_TOP_DOWN ? 0 : 55,
       bearing: 0, // slight rotation for depth perception
       antialias: true,
@@ -477,8 +478,7 @@ export default class MapView {
       newZoom = Math.min(22, currentZoom + this.currentZoomSpeed);
       // newZoom = currentZoom + this.currentZoomSpeed;
     } else {
-      newZoom = Math.max(5, currentZoom - this.currentZoomSpeed);
-      // newZoom = currentZoom - this.currentZoomSpeed;
+      newZoom = currentZoom - this.currentZoomSpeed;
     }
 
     // Apply zoom centered on player if available

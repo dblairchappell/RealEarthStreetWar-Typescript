@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit --watch",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "create-basemap": "pmtiles extract --maxzoom=7 \"https://build.protomaps.com/20240722.pmtiles\" \"map_data/tiles/protomaps-basemap.pmtiles\""
   },
   "keywords": [],
   "author": "",
@@ -16,6 +17,7 @@
     "@types/luxon": "^3.6.2",
     "@types/node": "^24.0.7",
     "@types/tz-lookup": "^6.1.2",
+    "pmtiles": "^4.3.0",
     "typescript": "^5.8.3",
     "vite": "^5.4.19"
   },
