@@ -128,8 +128,15 @@ export default class MapView {
       
       // Use 'zoomend' instead of 'zoom' for smoother performance
       // But also add 'zoom' for real-time updates
-      this.map.on('zoom',    () => this.markerLayer?.resizeAll(false));
-      this.map.on('zoomend', () => this.markerLayer?.resizeAll(true));
+      this.map.on('zoom', () => {
+        this.markerLayer?.resizeAll(false);
+        this.characterView?.updateCharacterSize(false);
+      });
+
+      this.map.on('zoomend', () => {
+        this.markerLayer?.resizeAll(true);
+        this.characterView?.updateCharacterSize(true);
+      });
     });
   }
 
@@ -284,6 +291,10 @@ export default class MapView {
       zoom: 21.5, // zoom target
       duration: 3000
     });
+
+    // Ensure sprite is visible with correct size immediately
+    this.characterView.updateCharacterSize(false);
+    this.characterView.redraw();
   }
 
   // Replace the updatePlayerPosition method:
