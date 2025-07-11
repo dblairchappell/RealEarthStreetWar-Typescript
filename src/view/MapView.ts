@@ -22,13 +22,6 @@ export interface MapViewCallbacks {
   }) => void;
 }
 
-// Map HQ types to their icon images (relative to public root)
-const ICON_MAP: Record<HQType, string> = {
-  producer: 'icons/drug_farm.svg',
-  trafficker: 'icons/foot_trafficker.svg',
-  retailer: 'icons/trade v3.svg'
-};
-
 export default class MapView {
   private map: any;
   // Use only the 2-D footprint polygons for hit-testing
