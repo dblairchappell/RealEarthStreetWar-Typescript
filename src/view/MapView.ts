@@ -5,7 +5,7 @@ import CharacterView from "./CharacterView";
 import InputManager from "../input/InputManager";
 import { InputState } from "../input/InputTypes";
 import { GTA1_STYLE_TOP_DOWN } from "../config";
-import { InfluenceLayer, MarkerLayer, CameraController } from './map';
+import { InfluenceLayer, MarkerLayer, CameraController, FeatureQuery } from './map';
 
 // Callback interface for MapView to communicate with controller
 export interface MapViewCallbacks {
@@ -24,9 +24,7 @@ export interface MapViewCallbacks {
 
 export default class MapView {
   private map: any;
-  // Use only the 2-D footprint polygons for hit-testing
-  private buildingLayers: string[] = ['building-footprints'];
-  private transportLayers: string[] = [];
+  private featureQuery: FeatureQuery | null = null;
   private markerLayer: MarkerLayer | null = null;
   private camera: CameraController | null = null;
   private characterView: CharacterView | null = null;
@@ -104,7 +102,7 @@ export default class MapView {
       this.influenceLayer = new InfluenceLayer(this.map);
       this.markerLayer    = new MarkerLayer(this.map);
       this.camera         = new CameraController(this.map, this.characterView);
-      this.identifyInteractiveLayers();
+      this.featureQuery   = new FeatureQuery(this.map);
       this.setupMapEventHandlers();
       
       // Use 'zoomend' instead of 'zoom' for smoother performance
@@ -147,22 +145,7 @@ export default class MapView {
   //   this.gameDateEl = document.getElementById('game-date');
   // }
 
-  private identifyInteractiveLayers() {
-    const layers = this.map.getStyle().layers;
-    this.transportLayers = layers
-      .filter((layer: any) => {
-        const layerId = layer.id || '';
-        return layer.type === 'line' && (
-          layerId.includes('road') ||
-          layerId.includes('street') ||
-          layerId.includes('highway') ||
-          layerId.includes('transportation') ||
-          layerId.includes('waterway')
-        );
-      })
-      .map((layer: any) => layer.id);
-    // console.log('Found transportation layers:', this.transportLayers);
-  }
+  // identifyInteractiveLayers is now handled by FeatureQuery
 
   // Getter to expose the map instance to the controller
   get mapInstance(): any {
@@ -206,15 +189,8 @@ export default class MapView {
 
       const coords = { lng: e.lngLat.lng, lat: e.lngLat.lat };
       
-      const point = e.point;
-      const buildingFeatures = this.map.queryRenderedFeatures(point, { layers: this.buildingLayers });
-      const transportFeatures = this.map.queryRenderedFeatures(point, { layers: this.transportLayers });
-
-      // Notify controller about click, including any features found
-      this.callbacks?.onMapClick(coords, {
-        building: buildingFeatures.length > 0 ? buildingFeatures[0] : undefined,
-        transport: transportFeatures.length > 0 ? transportFeatures[0] : undefined,
-      });
+      const features = this.featureQuery?.query(e.point) ?? {};
+      this.callbacks?.onMapClick(coords, features);
 
       // Reset cursor
       this.map.getCanvas().style.cursor = '';
@@ -227,7 +203,11 @@ export default class MapView {
 
     // Keep character sprite pitch synced with camera pitch
     this.map.on('move', () => {
-      this.characterView?.setCameraPitch(this.map.getPitch());
+      if (this.characterView) {
+        this.characterView.setCameraPitch(this.map.getPitch());
+        this.characterView.setCameraBearing(this.map.getBearing());
+        this.characterView.redraw();
+      }
     });
   }
 
