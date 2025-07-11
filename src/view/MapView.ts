@@ -5,7 +5,7 @@ import CharacterView from "./CharacterView";
 import InputManager from "../input/InputManager";
 import { InputState } from "../input/InputTypes";
 import { GTA1_STYLE_TOP_DOWN } from "../config";
-import { InfluenceLayer, MarkerLayer } from './map';
+import { InfluenceLayer, MarkerLayer, CameraController } from './map';
 
 // Callback interface for MapView to communicate with controller
 export interface MapViewCallbacks {
@@ -28,6 +28,7 @@ export default class MapView {
   private buildingLayers: string[] = ['building-footprints'];
   private transportLayers: string[] = [];
   private markerLayer: MarkerLayer | null = null;
+  private camera: CameraController | null = null;
   private characterView: CharacterView | null = null;
   private playerPosition: { lng: number; lat: number } | null = null;
   private playerRotation: number = 0;
@@ -88,10 +89,10 @@ export default class MapView {
     // Set up input callbacks
     this.inputManager.setCallbacks({
       onPlayerInput: (input) => this.handlePlayerInput(input),
-      onCameraZoomHold: (direction) => this.handleZoomHold(direction),
-      onCameraZoomRelease: () => this.handleZoomRelease(),
-      onCameraRotateHold: (direction) => this.handleRotationHold(direction),
-      onCameraRotateRelease: () => this.handleRotationRelease()
+      onCameraZoomHold: (direction) => this.camera?.startZoom(direction),
+      onCameraZoomRelease: () => this.camera?.stopZoom(),
+      onCameraRotateHold: (direction) => this.camera?.startRotate(direction),
+      onCameraRotateRelease: () => this.camera?.stopRotate()
     });
 
     // Query HUD elements
@@ -121,6 +122,7 @@ export default class MapView {
       // Initialise influence layer (moved out to its own class)
       this.influenceLayer = new InfluenceLayer(this.map);
       this.markerLayer    = new MarkerLayer(this.map);
+      this.camera         = new CameraController(this.map, this.characterView);
       this.identifyInteractiveLayers();
       this.setupMapEventHandlers();
       
@@ -295,8 +297,8 @@ export default class MapView {
     this.playerPosition = this.characterView.getPlayerPosition();
     this.playerRotation = this.characterView.getPlayerRotation();
     
-    // Update camera to follow player (this method still lives in MapView)
-    this.centerCameraOnPlayer();
+    // Tell camera controller to follow the player
+    this.camera?.follow(coords);
   }
 
   // Update the centerCameraOnPlayer method:
@@ -429,5 +431,6 @@ export default class MapView {
     }
     this.markerLayer?.destroy();
     this.influenceLayer?.destroy();
+    this.camera?.destroy();
   }
 }
