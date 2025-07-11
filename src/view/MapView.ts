@@ -73,15 +73,16 @@ export default class MapView {
       style: 'offline-map-style.json',
       center: [-74.05682, 40.69337], // starting position [lng, lat]
       zoom: 14, // Start zoomed out for cinematic effect
-      pitch: 45,
+      pitch: 10,
       bearing: 0, // slight rotation for depth perception
       antialias: true,
       dragRotate: true, // allows mouse drag rotation,
-      dragPitch: true,
+      dragPitch: false,
       // dragPan: false,
-      pitchWithRotate: true,
+      pitchWithRotate: false,
       touchZoomRotate: true, // allows touch zoom rotation
-      keyboard: false // Disable built-in keyboard navigation to prevent conflicts
+      keyboard: false, // Disable built-in keyboard navigation to prevent conflicts
+      maxPitch: 50,
     });
 
     this.characterView = new CharacterView(this.map);

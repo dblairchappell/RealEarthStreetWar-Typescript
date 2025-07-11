@@ -46,5 +46,5 @@ export default class GameState {
   // Player movement constants
   static readonly PLAYER_MOVE_SPEED = 0.0000005; // degrees per frame
   static readonly PLAYER_RUN_SPEED = 0.0000012; // degrees per frame (2x walking speed)
-  static readonly PLAYER_ROTATION_SPEED = 4.0; // degrees per frame
+  static readonly PLAYER_ROTATION_SPEED = 3.0; // degrees per frame
 }

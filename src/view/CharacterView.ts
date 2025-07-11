@@ -97,8 +97,8 @@ export default class CharacterView {
    */
   public createPlayerCharacter(coords: { lng: number; lat: number }, rotation: number = 0): void {
     // Slice stack parameters
-    const SLICE_COUNT = 3;   // How many layers to stack for the 3D effect.
-    const SLICE_GAP   = 1;    // The gap in `px` between each slice.
+    const SLICE_COUNT = 2;   // How many layers to stack for the 3D effect.
+    const SLICE_GAP   = 3;    // The gap in `px` between each slice.
 
     const container = document.createElement('div');
     container.id = 'character-container'; // Hook into the stylesheet for 3D context
@@ -171,7 +171,7 @@ export default class CharacterView {
 
     // Calculate the fade factor based on camera pitch and set it as a CSS variable.
     // The CSS will handle the rest of the opacity calculations.
-    const fadeStartPitch = 60; // Pitch at which fading begins
+    const fadeStartPitch = 20; // Pitch at which fading begins
     const fadeEndPitch = 85;   // Pitch at which top layers are fully faded
     const pitchRange = fadeEndPitch - fadeStartPitch;
     let fadeFactor = 0;
