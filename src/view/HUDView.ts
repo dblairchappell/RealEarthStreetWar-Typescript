@@ -17,6 +17,11 @@ export default class HUDView {
   private moneyCountEl: HTMLElement | null;
   private gameDateEl: HTMLElement | null;
 
+  // World clock elements
+  private timeLondonEl: HTMLElement | null;
+  private timeNyEl: HTMLElement | null;
+  private timeTokyoEl: HTMLElement | null;
+
   private callbacks: HUDViewCallbacks = {};
 
   constructor() {
@@ -27,6 +32,11 @@ export default class HUDView {
     this.commoditiesCountEl = document.getElementById('commodities-count');
     this.moneyCountEl = document.getElementById('money-count');
     this.gameDateEl = document.getElementById('game-date');
+
+    // Query world clock elements
+    this.timeLondonEl = document.getElementById('time-london');
+    this.timeNyEl = document.getElementById('time-ny');
+    this.timeTokyoEl = document.getElementById('time-tokyo');
 
     this.setupEventListeners();
   }
@@ -41,30 +51,49 @@ export default class HUDView {
     this.plantRetailerBtn?.addEventListener('click', () => this.callbacks.onPlantRetailer?.());
   }
 
-  updateStats(hqCount: number, commodities: number, money: number, gameDate: Date) {
+  updateStats(hqCount: number, commodities: number, money: number) {
     if (this.hqCountEl) this.hqCountEl.textContent = hqCount.toString();
     if (this.commoditiesCountEl) this.commoditiesCountEl.textContent = commodities.toString();
     if (this.moneyCountEl) this.moneyCountEl.textContent = money.toFixed(2);
-    // Keep showing the in-game calendar if you still want it
-    if (this.gameDateEl) {
-      this.gameDateEl.textContent = formatInTimeZone(
-        gameDate,
-        'UTC',                          // always show the “game” date in UTC
-        'dd MMM yyyy HH:mm'
-      );
-    }
   }
 
   /* ----------------------------------------------------------------
-     Real-world clock (called from main.ts every second)
+     Game clock display (called from main.ts every second)
      ---------------------------------------------------------------- */
-  public updateLocalTime(now: Date, timeZone: string) {
-    if (!this.gameDateEl) return;
-    this.gameDateEl.textContent = formatInTimeZone(
-      now,
-      timeZone,
-      'dd MMM yyyy HH:mm:ss'
-    );
+  public updateTimeDisplays(gameDate: Date, localTimeZone: string) {
+    const format = 'dd MMM yyyy HH:mm';
+
+    // Update local time
+    if (this.gameDateEl) {
+      this.gameDateEl.textContent = formatInTimeZone(
+        gameDate,
+        localTimeZone,
+        format
+      );
+    }
+
+    // Update world clocks
+    if (this.timeLondonEl) {
+      this.timeLondonEl.textContent = formatInTimeZone(
+        gameDate,
+        'Europe/London',
+        format
+      );
+    }
+    if (this.timeNyEl) {
+      this.timeNyEl.textContent = formatInTimeZone(
+        gameDate,
+        'America/New_York',
+        format
+      );
+    }
+    if (this.timeTokyoEl) {
+      this.timeTokyoEl.textContent = formatInTimeZone(
+        gameDate,
+        'Asia/Tokyo',
+        format
+      );
+    }
   }
 
   exitPlantingMode() {

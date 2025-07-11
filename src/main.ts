@@ -46,7 +46,7 @@ function plantHQ(coords: { lng: number; lat: number }, type: HQType) {
     }
 
     view.updateInfluenceArea(state.playerUnion);
-    hud.updateStats(state.hqs.length, state.commodities, state.money, state.gameDate);
+    hud.updateStats(state.hqs.length, state.commodities, state.money);
 }
 
 // Set up callbacks for MapView to communicate back to controller
@@ -105,13 +105,13 @@ map.on('load', () => {
     );
     
     // Initial view update
-    hud.updateStats(state.hqs.length, state.commodities, state.money, state.gameDate);
+    hud.updateStats(state.hqs.length, state.commodities, state.money);
     controller.startClock(); // Start the game clock
     controller.startMovementLoop(); // Start the movement update loop
 
         /* ──────────────────────────────────────────────────────────
-       Real-time clock: every second work out which time-zone the
-       current map centre sits in and update the HUD.
+       Game clock: every second, get the game date, work out which 
+       time-zone the current map centre sits in, and update the HUD.
        ────────────────────────────────────────────────────────── */
     setInterval(() => {
         const centre = map.getCenter();        // { lng, lat }
@@ -121,6 +121,6 @@ map.on('load', () => {
         } catch (_) {
             zone = 'UTC';                      // fallback
         }
-        hud.updateLocalTime(new Date(), zone);
+        hud.updateTimeDisplays(state.gameDate, zone);
     }, 1000);
 });

@@ -41,7 +41,7 @@ export default class GameState {
   /* ----- constants ----- */
   static readonly INFLUENCE_RADIUS_KM = 0.08;
   static readonly GAME_TICK_MS = 1000; // 1 second per game tick
-  static readonly MINUTES_PER_TICK = 15; // 15 game minutes per tick
+  static readonly MINUTES_PER_TICK = 1; // 1 game minute per tick
   
   // Player movement constants
   static readonly PLAYER_MOVE_SPEED = 0.0000005; // degrees per frame
