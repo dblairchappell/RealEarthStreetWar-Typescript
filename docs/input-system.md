@@ -5,9 +5,9 @@ The input system provides centralized keyboard and mouse handling with type-safe
 ## 🏗️ Architecture
 
 ### Components
-- **InputManager**: Core input processing engine
+- **InputManager**: Core input processing engine (singleton – instantiated once in `main.ts`)
 - **InputTypes**: Type definitions and interfaces  
-- **Callback System**: Delegates input events to appropriate handlers
+- **Observer System**: Any component can subscribe via `addCallbacks()`; supports multiple observers concurrently.
 
 ### Input State
 ```typescript
@@ -69,23 +69,39 @@ if (timeSinceLastRelease < 300 && lastPressDuration < 500) {
 ```typescript
 interface InputCallbacks {
   onPlayerInput: (input: InputState) => void;
-  onCameraRotateLeft: () => void;
-  onCameraRotateRight: () => void;  
-  onCameraZoomIn: () => void;
-  onCameraZoomOut: () => void;
   onCameraZoomHold: (direction: 'in' | 'out') => void;
+  onCameraZoomRelease: () => void;
+  onCameraRotateHold: (direction: 'left' | 'right') => void;
+  onCameraRotateRelease: () => void;
+}
+
+interface IInputService {
+  addCallbacks(cb: InputCallbacks): void;    // subscribe
+  removeCallbacks(cb: InputCallbacks): void; // unsubscribe
 }
 ```
 
-### Usage Example
+### Usage Example (multiple observers)
 ```typescript
-inputManager.setCallbacks({
-  onPlayerInput: (input) => this.handlePlayerInput(input),
-  onCameraRotateLeft: () => this.rotateCameraLeft(),
-  onCameraRotateRight: () => this.rotateCameraRight(),
-  onCameraZoomIn: () => this.zoomIn(),
-  onCameraZoomOut: () => this.zoomOut(),
-  onCameraZoomHold: (direction) => this.handleZoomHold(direction)
+// Shared instance created in main.ts
+const input = new InputManager();
+
+// MapView cares about sprite & camera
+input.addCallbacks({
+  onPlayerInput: (inp) => characterView.inputState = inp,
+  onCameraZoomHold: (d) => camera.startZoom(d),
+  onCameraZoomRelease: () => camera.stopZoom(),
+  onCameraRotateHold: (d) => camera.startRotate(d),
+  onCameraRotateRelease: () => camera.stopRotate()
+});
+
+// GameController cares about movement logic
+input.addCallbacks({
+  onPlayerInput: (inp) => controller.handlePlayerInput(inp),
+  onCameraZoomHold: () => {},
+  onCameraZoomRelease: () => {},
+  onCameraRotateHold: () => {},
+  onCameraRotateRelease: () => {}
 });
 ```
 
@@ -101,9 +117,8 @@ inputManager.setCallbacks({
 - **State Objects**: Copied rather than referenced for immutability
 - **Cleanup Method**: `destroy()` available for cleanup (future use)
 
-## 🔧 Extending the Input System
+### Extending the Input System (unchanged API surface)
 
-### Adding New Input Types
 1. **Update InputState interface**:
    ```typescript
    interface InputState {

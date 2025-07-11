@@ -2,23 +2,17 @@
 import { HQType } from "../model/GameState";
 import CharacterView from "./CharacterView";
 import InputManager from "../input/InputManager";
+import { IInputService } from "../input/IInputService";
 import { InputState } from "../input/InputTypes";
 import { GTA1_STYLE_TOP_DOWN } from "../config";
 import { InfluenceLayer, MarkerLayer, CameraController, FeatureQuery } from './map';
+import maplibregl from 'maplibre-gl';
+import { Protocol } from 'pmtiles';
 
 // Callback interface for MapView to communicate with controller
 export interface MapViewCallbacks {
   onMapClick: (coords: { lng: number; lat: number }, features: { building?: any, transport?: any }) => void;
   isPlanting: () => boolean;
-  onPlayerInput: (input: { 
-    forward: boolean, 
-    backward: boolean, 
-    left: boolean, 
-    right: boolean,
-    rotateLeft: boolean,
-    rotateRight: boolean,
-    running: boolean
-  }) => void;
 }
 
 export default class MapView {
@@ -34,16 +28,17 @@ export default class MapView {
 
   // Callbacks for communicating with controller
   private callbacks: MapViewCallbacks | null = null;
-  private inputManager: InputManager;
+  private inputManager: IInputService;
+  private createdOwnInputManager: boolean = false;
   private influenceLayer: InfluenceLayer | null = null;
 
-  constructor(containerId: string = 'map') {
+  constructor(containerId: string = 'map', inputService?: IInputService) {
     // Set up PMTiles protocol for loading .pmtiles files
-    let protocol = new (window as any).pmtiles.Protocol();
-    (window as any).maplibregl.addProtocol("pmtiles", protocol.tile);
+    const protocol = new Protocol();
+    (maplibregl as any).addProtocol("pmtiles", protocol.tile);
 
     // MapLibre GL JS doesn't require an access token for open data sources
-    this.map = new (window as any).maplibregl.Map({
+    this.map = new maplibregl.Map({
       container: containerId,
       style: 'offline-map-style.json',
       center: [-74.05682, 40.69337], // starting position [lng, lat]
@@ -59,13 +54,21 @@ export default class MapView {
       touchZoomRotate: GTA1_STYLE_TOP_DOWN ? false : true, // allows touch zoom rotation
       keyboard: false, // Disable built-in keyboard navigation to prevent conflicts
       maxPitch: 50
-    });
+    } as any);
 
     this.characterView = new CharacterView(this.map);
-    this.inputManager = new InputManager();
 
-    // Set up input callbacks
-    this.inputManager.setCallbacks({
+    // Use injected input service if provided, otherwise create one locally
+    if (inputService) {
+      this.inputManager = inputService;
+      this.createdOwnInputManager = false;
+    } else {
+      this.inputManager = new InputManager();
+      this.createdOwnInputManager = true;
+    }
+
+    // Set up input callbacks – MapView cares only about sprite + camera
+    this.inputManager.addCallbacks({
       onPlayerInput: (input) => this.handlePlayerInput(input),
       onCameraZoomHold: (direction) => this.camera?.startZoom(direction),
       onCameraZoomRelease: () => this.camera?.stopZoom(),
@@ -124,10 +127,7 @@ export default class MapView {
     // Update movement state
     this.updateMovementState();
     
-    // Notify controller
-    if (this.callbacks) {
-      this.callbacks.onPlayerInput(input);
-    }
+
   }
 
   // Getter to expose the map instance to the controller
@@ -228,7 +228,9 @@ export default class MapView {
 
   public destroy(): void {
     // Clean up map resources and event listeners
-    this.inputManager.destroy();
+    if (this.createdOwnInputManager) {
+      this.inputManager.destroy();
+    }
     if (this.map) {
       this.map.remove();
     }

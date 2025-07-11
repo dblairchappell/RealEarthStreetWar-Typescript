@@ -1,8 +1,9 @@
 // src/input/InputManager.ts
 import { InputState, InputCallbacks } from './InputTypes';
+import { IInputService } from './IInputService';
 import { GTA1_STYLE_TOP_DOWN } from "../config";
 
-export default class InputManager {
+export default class InputManager implements IInputService {
   private inputState: InputState = {
     forward: false,
     backward: false,
@@ -13,7 +14,7 @@ export default class InputManager {
     running: false
   };
 
-  private callbacks: InputCallbacks | null = null;
+  private callbacks: InputCallbacks[] = [];
 
   // Double-tap running state
   private lastArrowUpPressTime: number = 0;
@@ -34,8 +35,20 @@ export default class InputManager {
     this.setupInputHandlers();
   }
 
+  /* ----------------------------------------------------------
+   * Observer management
+   * -------------------------------------------------------- */
+  public addCallbacks(callbacks: InputCallbacks): void {
+    this.callbacks.push(callbacks);
+  }
+
+  public removeCallbacks(callbacks: InputCallbacks): void {
+    this.callbacks = this.callbacks.filter(cb => cb !== callbacks);
+  }
+
+  /** Legacy helper – clears previous listeners and sets a single one. */
   public setCallbacks(callbacks: InputCallbacks): void {
-    this.callbacks = callbacks;
+    this.callbacks = [callbacks];
   }
 
   public getInputState(): InputState {
@@ -65,25 +78,25 @@ export default class InputManager {
       case 'KeyD':
         if (!this.dKeyDownTime) {
           this.dKeyDownTime = Date.now();
-          this.callbacks?.onCameraRotateHold('left'); // D for clockwise
+          this.callbacks.forEach(cb => cb.onCameraRotateHold('left')); // D for clockwise
         }
         break;
       case 'KeyA':
         if (!this.aKeyDownTime) {
           this.aKeyDownTime = Date.now();
-          this.callbacks?.onCameraRotateHold('right'); // A for counter-clockwise
+          this.callbacks.forEach(cb => cb.onCameraRotateHold('right')); // A for counter-clockwise
         }
         break;
       case 'KeyW':
         if (!this.wKeyDownTime) {
           this.wKeyDownTime = Date.now();
-          this.callbacks?.onCameraZoomHold('in');
+          this.callbacks.forEach(cb => cb.onCameraZoomHold('in'));
         }
         break;
       case 'KeyS':
         if (!this.sKeyDownTime) {
           this.sKeyDownTime = Date.now();
-          this.callbacks?.onCameraZoomHold('out');
+          this.callbacks.forEach(cb => cb.onCameraZoomHold('out'));
         }
         break;
       case 'ArrowUp':
@@ -135,8 +148,8 @@ export default class InputManager {
         break;
     }
 
-    if (inputChanged && this.callbacks) {
-      this.callbacks.onPlayerInput(this.inputState);
+    if (inputChanged) {
+      this.callbacks.forEach(cb => cb.onPlayerInput(this.inputState));
     }
   }
 
@@ -146,21 +159,21 @@ export default class InputManager {
     switch(e.code) {
       case 'KeyD':
         this.dKeyDownTime = 0;
-        this.callbacks?.onCameraRotateRelease();
+        this.callbacks.forEach(cb => cb.onCameraRotateRelease());
         break;
       case 'KeyA':
         this.aKeyDownTime = 0;
-        this.callbacks?.onCameraRotateRelease();
+        this.callbacks.forEach(cb => cb.onCameraRotateRelease());
         break;
       case 'KeyW':
         this.wKeyDownTime = 0;
         this.holdZoomActive = false;
-        this.callbacks?.onCameraZoomRelease();
+        this.callbacks.forEach(cb => cb.onCameraZoomRelease());
         break;
       case 'KeyS':
         this.sKeyDownTime = 0;
         this.holdZoomActive = false;
-        this.callbacks?.onCameraZoomRelease();
+        this.callbacks.forEach(cb => cb.onCameraZoomRelease());
         break;
       case 'ArrowUp':
         if (this.inputState.forward) {
@@ -206,8 +219,8 @@ export default class InputManager {
         break;
     }
 
-    if (inputChanged && this.callbacks) {
-      this.callbacks.onPlayerInput(this.inputState);
+    if (inputChanged) {
+      this.callbacks.forEach(cb => cb.onPlayerInput(this.inputState));
     }
   }
 

@@ -2,12 +2,20 @@ import GameState, { HQType } from "./model/GameState";
 import MapView, { MapViewCallbacks } from "./view/MapView";
 import GameController from "./controller/GameController";
 import HUDView, { HUDViewCallbacks } from "./view/HUDView";
+import InputManager from "./input/InputManager";
 import * as turf from "@turf/turf";
 import tzLookup from "tz-lookup";          // gives us the lat/lon → TZ function
+// (Optional) If other code needs osmtogeojson globally later you can import it:
+// import osmtogeojson from 'osmtogeojson';
+
 
 const state = new GameState();
 const hud = new HUDView();
-const view = new MapView('map');
+
+// Single, application-wide input service
+const input = new InputManager();
+
+const view = new MapView('map', input);
 const controller = new GameController(state, view);
 
 // Get the map instance from the view
@@ -57,24 +65,28 @@ const mapCallbacks: MapViewCallbacks = {
 
         // Retailers must be placed on a building
         if (state.plantingType === 'retailer' && !features.building) {
-            // console.log("Retailers must be placed on a building.");
             return;
         }
 
         // Traffickers must be placed on a road or river
         if (state.plantingType === 'trafficker' && !features.transport) {
-            // console.log("Traffickers must be placed on a road or river.");
             return;
         }
         
         plantHQ(coords, state.plantingType);
         state.plantingType = null;
         hud.exitPlantingMode();
-    },
-    onPlayerInput: (input) => {
-        controller.handlePlayerInput(input);
     }
 };
+
+// Controller listens directly to input service
+input.addCallbacks({
+    onPlayerInput: (inp) => controller.handlePlayerInput(inp),
+    onCameraZoomHold: () => {},
+    onCameraZoomRelease: () => {},
+    onCameraRotateHold: () => {},
+    onCameraRotateRelease: () => {}
+});
 
 // Set up HUD callbacks
 hud.setCallbacks({

@@ -1,5 +1,6 @@
 // view/map/MarkerLayer.ts
 import { HQType } from "../../model/GameState";
+import maplibregl from 'maplibre-gl';
 
 /** Maps HQ type → SVG icon (relative to site root) */
 const ICON_MAP: Record<HQType, string> = {
@@ -59,7 +60,7 @@ export class MarkerLayer {
     el.appendChild(img);
 
     // Create MapLibre marker
-    const marker = new (window as any).maplibregl.Marker({
+    const marker = new maplibregl.Marker({
       element: el,
       anchor: "bottom",
     })

@@ -39,10 +39,11 @@ src/
 - **View** (`MapView`, `CharacterView`, `HUDView`): Map rendering, character animation, HUD/UI logic and event wiring
 - **Controller** (`GameController`): Game logic, input coordination, model/view updates
 
-### Input System Architecture
-- **InputManager**: Centralized keyboard/mouse handling with callbacks
-- **InputTypes**: Type-safe input state definitions
-- **Delegation**: MapView receives input callbacks and delegates to appropriate systems
+### Input System Architecture (updated)
+- **InputManager**: Application-wide service that captures keyboard / mouse events and notifies **all** registered observers.
+- **InputTypes**: Type-safe input state definitions shared across the app.
+- **Dependency Injection**: A single `InputManager` instance is created in `main.ts` and injected into subsystems that need it (e.g. `MapView`, `GameController`).  No more hard-new inside `MapView`.
+- **Multi-observer callbacks**: Components subscribe via `addCallbacks()`/`removeCallbacks()`; each input event fan-outs to every observer.
 
 ### View Layer Separation
 - **MapView**: Map rendering, camera controls, HQ markers
@@ -52,7 +53,7 @@ src/
 ## 🔄 Data Flow
 
 1. **Input** → `InputManager` processes keyboard events
-2. **Delegation** → `MapView` receives input callbacks  
+2. **Fan-out** → All observers (`GameController`, `MapView`, etc.) receive the same callback data  
 3. **State Update** → `GameController` updates `GameState`
 4. **View Sync** → Character, camera, and HUD positions updated
 5. **Rendering** → Map, character, and HUD views render changes
