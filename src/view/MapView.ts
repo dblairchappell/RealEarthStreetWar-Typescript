@@ -77,7 +77,7 @@ export default class MapView {
       pitch: GTA1_STYLE_TOP_DOWN ? 0 : 55,
       bearing: 0, // slight rotation for depth perception
       antialias: true,
-      dragRotate: GTA1_STYLE_TOP_DOWN ? false : true, // allows mouse drag rotation,
+      dragRotate: true, // allows mouse drag rotation,
       dragPitch: GTA1_STYLE_TOP_DOWN ? false : true,
       dragPan: true,
       pitchWithRotate: GTA1_STYLE_TOP_DOWN ? false : true,

@@ -3,6 +3,7 @@ import MapView, { MapViewCallbacks } from "./view/MapView";
 import GameController from "./controller/GameController";
 import HUDView, { HUDViewCallbacks } from "./view/HUDView";
 import * as turf from "@turf/turf";
+import tzLookup from "tz-lookup";          // gives us the lat/lon → TZ function
 
 const state = new GameState();
 const hud = new HUDView();
@@ -107,4 +108,19 @@ map.on('load', () => {
     hud.updateStats(state.hqs.length, state.commodities, state.money, state.gameDate);
     controller.startClock(); // Start the game clock
     controller.startMovementLoop(); // Start the movement update loop
+
+        /* ──────────────────────────────────────────────────────────
+       Real-time clock: every second work out which time-zone the
+       current map centre sits in and update the HUD.
+       ────────────────────────────────────────────────────────── */
+    setInterval(() => {
+        const centre = map.getCenter();        // { lng, lat }
+        let zone: string;
+        try {
+            zone = tzLookup(centre.lat, centre.lng);
+        } catch (_) {
+            zone = 'UTC';                      // fallback
+        }
+        hud.updateLocalTime(new Date(), zone);
+    }, 1000);
 });

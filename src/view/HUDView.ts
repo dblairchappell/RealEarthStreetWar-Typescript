@@ -1,5 +1,7 @@
 // src/view/HUDView.ts
 
+import { formatInTimeZone } from "../utils/time";
+
 export interface HUDViewCallbacks {
   onPlantProducer?: () => void;
   onPlantTrafficker?: () => void;
@@ -43,12 +45,26 @@ export default class HUDView {
     if (this.hqCountEl) this.hqCountEl.textContent = hqCount.toString();
     if (this.commoditiesCountEl) this.commoditiesCountEl.textContent = commodities.toString();
     if (this.moneyCountEl) this.moneyCountEl.textContent = money.toFixed(2);
+    // Keep showing the in-game calendar if you still want it
     if (this.gameDateEl) {
-      this.gameDateEl.textContent = gameDate.toLocaleString('en-US', {
-        day: 'numeric', month: 'short', year: 'numeric',
-        hour: '2-digit', minute: '2-digit', hour12: false
-      });
+      this.gameDateEl.textContent = formatInTimeZone(
+        gameDate,
+        'UTC',                          // always show the “game” date in UTC
+        'dd MMM yyyy HH:mm'
+      );
     }
+  }
+
+  /* ----------------------------------------------------------------
+     Real-world clock (called from main.ts every second)
+     ---------------------------------------------------------------- */
+  public updateLocalTime(now: Date, timeZone: string) {
+    if (!this.gameDateEl) return;
+    this.gameDateEl.textContent = formatInTimeZone(
+      now,
+      timeZone,
+      'dd MMM yyyy HH:mm:ss'
+    );
   }
 
   exitPlantingMode() {
