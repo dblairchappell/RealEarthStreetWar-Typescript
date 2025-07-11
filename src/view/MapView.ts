@@ -1,5 +1,4 @@
 // view/MapView.ts
-import * as turf from "@turf/turf";
 import { HQType } from "../model/GameState";
 import CharacterView from "./CharacterView";
 import InputManager from "../input/InputManager";
@@ -74,9 +73,6 @@ export default class MapView {
       onCameraRotateRelease: () => this.camera?.stopRotate()
     });
 
-    // Query HUD elements
-    // this.queryHudElements(); // REMOVED
-
     // Handle missing images and fonts gracefully
     this.map.on('styleimagemissing', (e: any) => {
       // Create a dummy-placeholder image for any missing icons
@@ -134,49 +130,10 @@ export default class MapView {
     }
   }
 
-  // private queryHudElements() { // REMOVED
-  //   this.plantProducerBtn = document.getElementById('plant-producer-btn');
-  //   this.plantTraffickerBtn = document.getElementById('plant-trafficker-btn');
-  //   this.plantRetailerBtn = document.getElementById('plant-retailer-btn');
-  //   this.movementModeBtn = document.getElementById('movement-mode-btn');
-  //   this.hqCountEl = document.getElementById('hq-count');
-  //   this.commoditiesCountEl = document.getElementById('commodities-count');
-  //   this.moneyCountEl = document.getElementById('money-count');
-  //   this.gameDateEl = document.getElementById('game-date');
-  // }
-
-  // identifyInteractiveLayers is now handled by FeatureQuery
-
   // Getter to expose the map instance to the controller
   get mapInstance(): any {
     return this.map;
   }
-
-  // Simple stats update // REMOVED
-  // updateStats(hqCount: number, commodities: number, money: number, gameDate: Date) { // REMOVED
-  //   if (this.hqCountEl) this.hqCountEl.textContent = hqCount.toString(); // REMOVED
-  //   if (this.commoditiesCountEl) this.commoditiesCountEl.textContent = commodities.toString(); // REMOVED
-  //   if (this.moneyCountEl) this.moneyCountEl.textContent = money.toFixed(2); // REMOVED
-  //   if (this.gameDateEl) { // REMOVED
-  //     this.gameDateEl.textContent = gameDate.toLocaleString('en-US', { // REMOVED
-  //       day: 'numeric', month: 'short', year: 'numeric', // REMOVED
-  //       hour: '2-digit', minute: '2-digit', hour12: false // REMOVED
-  //     }); // REMOVED
-  //   } // REMOVED
-  // } // REMOVED
-
-  // Update movement mode button appearance // REMOVED
-  // updateMovementModeButton(isFreeRotation: boolean) { // REMOVED
-  //   if (this.movementModeBtn) { // REMOVED
-  //     if (isFreeRotation) { // REMOVED
-  //       this.movementModeBtn.textContent = '360° Mode'; // REMOVED
-  //       this.movementModeBtn.classList.add('free-rotation'); // REMOVED
-  //     } else { // REMOVED
-  //       this.movementModeBtn.textContent = '8-Direction Mode'; // REMOVED
-  //       this.movementModeBtn.classList.remove('free-rotation'); // REMOVED
-  //     } // REMOVED
-  //   } // REMOVED
-  // } // REMOVED
 
   setCallbacks(callbacks: MapViewCallbacks) {
     this.callbacks = callbacks;
@@ -210,14 +167,6 @@ export default class MapView {
       }
     });
   }
-
-  // Method to exit planting mode (called from controller) // REMOVED
-  // exitPlantingMode() { // REMOVED
-  //   this.plantProducerBtn?.classList.remove('active'); // REMOVED
-  //   this.plantTraffickerBtn?.classList.remove('active'); // REMOVED
-  //   this.plantRetailerBtn?.classList.remove('active'); // REMOVED
-  //   this.map.getCanvas().style.cursor = ''; // REMOVED
-  // } // REMOVED
 
   // Delegate HQ marker creation to MarkerLayer
   createHQMarker(coords: { lng: number; lat: number }, type: HQType): any {

@@ -11,7 +11,12 @@ src/
 │   └── InputTypes.ts        # Input-related type definitions
 │
 ├── view/                    # Rendering and UI layer
-│   ├── MapView.ts           # Map rendering, camera
+│   ├── MapView.ts           # Orchestration only
+│   ├── map/                 # View helpers (camera, markers, etc.)
+│   │   ├── CameraController.ts  # Continuous zoom/rotation, follow-player
+│   │   ├── MarkerLayer.ts       # HQ marker creation & scaling
+│   │   ├── InfluenceLayer.ts    # Territory fill layer
+│   │   └── FeatureQuery.ts      # Building / transport hit-testing
 │   ├── CharacterView.ts     # Character sprite & animation
 │   └── HUDView.ts           # HUD and UI logic, event wiring
 │
