@@ -33,26 +33,7 @@ export default class MapView {
   private playerPosition: { lng: number; lat: number } | null = null;
   private playerRotation: number = 0;
   
-  // Camera properties
-  private cameraBearing: number = 0; // Camera rotation in degrees
-  private isCameraRotating: boolean = false; // Flag to prevent movement from interrupting rotation
-
-  // Continuous rotation state
-  private continuousRotationActive: boolean = false;
-  private continuousRotationDirection: 'left' | 'right' | null = null;
-  private currentRotationSpeed: number = 0;
-  private minRotationSpeed: number = 0.5;
-  private maxRotationSpeed: number = 5.0;
-  private rotationAcceleration: number = 0.1;
-
-  // Continuous zoom state
-  private continuousZoomActive: boolean = false;
-  private continuousZoomDirection: 'in' | 'out' | null = null;
-  private currentZoomSpeed: number = 0;
-  private minZoomSpeed: number = 0.02;
-  private maxZoomSpeed: number = 0.15;
-  private zoomAcceleration: number = 0.005;
-  private isCameraZooming: boolean = false;
+  // (no per-frame camera state; handled by CameraController)
 
   // Callbacks for communicating with controller
   private callbacks: MapViewCallbacks | null = null;
@@ -244,15 +225,9 @@ export default class MapView {
       this.map.getCanvas().style.cursor = this.callbacks?.isPlanting() ? 'crosshair' : '';
     });
 
-    // Add a listener for map movement to update the character's direction and orientation
+    // Keep character sprite pitch synced with camera pitch
     this.map.on('move', () => {
-      this.cameraBearing = this.map.getBearing();
-      const pitch = this.map.getPitch();
-      if (this.characterView) {
-        this.characterView.setCameraBearing(this.cameraBearing);
-        this.characterView.setCameraPitch(pitch);
-        this.characterView.redraw();
-      }
+      this.characterView?.setCameraPitch(this.map.getPitch());
     });
   }
 
@@ -312,119 +287,7 @@ export default class MapView {
     this.camera?.follow(coords);
   }
 
-  // Update the centerCameraOnPlayer method:
-  centerCameraOnPlayer(): void {
-    if (this.isCameraRotating || this.isCameraZooming) return; // Don't recenter if camera is rotating or zooming
-    
-    if (this.playerPosition) {
-      this.map.setCenter([this.playerPosition.lng, this.playerPosition.lat]);
-    }
-  }
-
-  // Camera rotation methods
-
-  private handleZoomHold(direction: 'in' | 'out'): void {
-    this.continuousZoomDirection = direction;
-    if (!this.continuousZoomActive) {
-      this.isCameraZooming = true; // Set flag to prevent movement conflicts
-      this.currentZoomSpeed = this.minZoomSpeed;
-      this.continuousZoomActive = true;
-      this.continuousZoom();
-    }
-  }
-
-  private handleZoomRelease(): void {
-    this.isCameraZooming = false; // Unset flag
-    this.continuousZoomActive = false;
-    this.continuousZoomDirection = null;
-  }
-
-  private continuousZoom(): void {
-    if (!this.continuousZoomActive) return;
-
-    // Accelerate
-    if (this.currentZoomSpeed < this.maxZoomSpeed) {
-      this.currentZoomSpeed += this.zoomAcceleration;
-    }
-
-    // Apply zoom change
-    const currentZoom = this.map.getZoom();
-    let newZoom;
-    
-    if (this.continuousZoomDirection === 'in') {
-      newZoom = Math.min(22, currentZoom + this.currentZoomSpeed);
-      // newZoom = currentZoom + this.currentZoomSpeed;
-    } else {
-      newZoom = currentZoom - this.currentZoomSpeed;
-    }
-
-    // Apply zoom centered on player if available
-    if (this.playerPosition) {
-      this.map.easeTo({
-        center: [this.playerPosition.lng, this.playerPosition.lat],
-        zoom: newZoom,
-        duration: 0 // Instant update to keep it smooth
-      });
-    } else {
-      this.map.setZoom(newZoom);
-    }
-
-    requestAnimationFrame(() => this.continuousZoom());
-  }
-
-  private handleRotationHold(direction: 'left' | 'right'): void {
-    this.continuousRotationDirection = direction;
-    if (!this.continuousRotationActive) {
-      this.isCameraRotating = true; // Set flag to prevent zoom conflicts
-      this.currentRotationSpeed = this.minRotationSpeed;
-      this.continuousRotationActive = true;
-      this.continuousRotate();
-    }
-  }
-
-  private handleRotationRelease(): void {
-    this.isCameraRotating = false; // Unset flag
-    this.continuousRotationActive = false;
-    this.continuousRotationDirection = null;
-  }
-
-  private continuousRotate(): void {
-    if (!this.continuousRotationActive) return;
-
-    // Accelerate
-    if (this.currentRotationSpeed < this.maxRotationSpeed) {
-      this.currentRotationSpeed += this.rotationAcceleration;
-    }
-
-    // A is for 'left' (counter-clockwise, +bearing), D is for 'right' (clockwise, -bearing)
-    if (this.continuousRotationDirection === 'left') { // D key
-      this.cameraBearing = (this.cameraBearing - this.currentRotationSpeed + 360) % 360;
-    } else { // A key
-      this.cameraBearing = (this.cameraBearing + this.currentRotationSpeed) % 360;
-    }
-
-    // Ensure rotation is centered on the player
-    if (this.playerPosition) {
-      this.map.easeTo({
-        center: [this.playerPosition.lng, this.playerPosition.lat],
-        bearing: this.cameraBearing,
-        duration: 0 // Instant update to keep it smooth
-      });
-    } else {
-      this.map.setBearing(this.cameraBearing);
-    }
-
-    this.updateCharacterDirectionAfterCameraRotation();
-
-    requestAnimationFrame(() => this.continuousRotate());
-  }
-
-  private updateCharacterDirectionAfterCameraRotation(): void {
-    if (this.characterView) {
-      this.characterView.setCameraBearing(this.cameraBearing);
-      this.characterView.redraw();
-    }
-  }
+  // (camera recentering handled inside CameraController)
 
   // Method to update movement state and switch animations
   private updateMovementState(): void {
