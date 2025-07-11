@@ -5,6 +5,7 @@ import CharacterView from "./CharacterView";
 import InputManager from "../input/InputManager";
 import { InputState } from "../input/InputTypes";
 import { GTA1_STYLE_TOP_DOWN } from "../config";
+import { InfluenceLayer } from './map';
 
 // Callback interface for MapView to communicate with controller
 export interface MapViewCallbacks {
@@ -62,6 +63,7 @@ export default class MapView {
   // Callbacks for communicating with controller
   private callbacks: MapViewCallbacks | null = null;
   private inputManager: InputManager;
+  private influenceLayer: InfluenceLayer | null = null;
 
   constructor(containerId: string = 'map') {
     // Set up PMTiles protocol for loading .pmtiles files
@@ -123,7 +125,8 @@ export default class MapView {
 
     this.map.on('load', () => {
       this.map.setProjection({ type: 'globe' });
-      this.setupLayers();
+      // Initialise influence layer (moved out to its own class)
+      this.influenceLayer = new InfluenceLayer(this.map);
       this.identifyInteractiveLayers();
       this.setupMapEventHandlers();
       
@@ -164,33 +167,6 @@ export default class MapView {
   //   this.moneyCountEl = document.getElementById('money-count');
   //   this.gameDateEl = document.getElementById('game-date');
   // }
-
-  private setupLayers() {
-    // Source and layer to show the HQ's circle of influence
-    this.map.addSource('influence-area', { 
-      type: 'geojson', 
-      data: { type: 'FeatureCollection', features: [] } as any 
-    });
-    this.map.addLayer({
-      id: 'influence-area-fill',
-      type: 'fill',
-      source: 'influence-area',
-      paint: {
-        'fill-color': '#007bff',
-        'fill-opacity': 0.2
-      }
-    });
-
-    // Add an invisible fill layer dedicated to hit-testing buildings.
-    // This can be added without a 'before' ID, which is safer.
-    this.map.addLayer({
-      id: 'building-hit',
-      type: 'fill',
-      source: 'nj-complete',
-      'source-layer': 'building',
-      paint: { 'fill-opacity': 0 }
-    });
-  }
 
   private identifyInteractiveLayers() {
     const layers = this.map.getStyle().layers;
@@ -387,18 +363,9 @@ export default class MapView {
     return marker;
   }
 
-  // Method to update map sources with game data
+  // Forward-compat: keep same public signature used by main.ts
   updateInfluenceArea(territoryData: any) {
-    // console.log('Updating influence area with data:', territoryData);
-    const geoJsonData = {
-      type: 'FeatureCollection',
-      features: territoryData ? [{
-        type: 'Feature',
-        geometry: territoryData,
-        properties: {}
-      }] : []
-    };
-    (this.map.getSource('influence-area') as any).setData(geoJsonData);
+    this.influenceLayer?.update(territoryData);
   }
 
   // Method to create player character
@@ -565,5 +532,6 @@ export default class MapView {
     }
     this.markers.forEach(({ marker }) => marker.remove());
     this.markers = [];
+    this.influenceLayer?.destroy();
   }
 }
