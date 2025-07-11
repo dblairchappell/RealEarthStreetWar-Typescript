@@ -98,7 +98,7 @@ export default class CharacterView {
   public createPlayerCharacter(coords: { lng: number; lat: number }, rotation: number = 0): void {
     // Slice stack parameters
     const SLICE_COUNT = 2;   // How many layers to stack for the 3D effect.
-    const SLICE_GAP   = 3;    // The gap in `px` between each slice.
+    const SLICE_GAP   = 10;    // The gap in `px` between each slice.
 
     const container = document.createElement('div');
     container.id = 'character-container'; // Hook into the stylesheet for 3D context
