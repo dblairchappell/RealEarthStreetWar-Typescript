@@ -116,6 +116,12 @@ export default class MapView {
         this.characterView?.updateCharacterSize(true);
       });
     });
+
+    this.map.getCanvas().addEventListener('webglcontextlost', (e: WebGLContextEvent) => {
+      e.preventDefault();
+      console.warn('Context lost – attempting reload');
+      this.map.resize();            // triggers style rebuild
+    });
   }
 
   private handlePlayerInput(input: InputState): void {
