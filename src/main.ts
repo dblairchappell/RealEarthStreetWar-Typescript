@@ -205,7 +205,7 @@ map.on('load', () => {
         bridge.enqueueCommand(CommandType.SpawnNpc, Math.round(center.lng * 1e7), Math.round(center.lat * 1e7), 0);
     };
 
-    // Hot-reload helper removed – refresh the page to pick up code changes.
+    // (Hot-reload functionality intentionally omitted.)
 
         /* ──────────────────────────────────────────────────────────
        Game clock: every second, get the game date, work out which 

@@ -3,12 +3,9 @@
 import { addComponent, addEntity } from 'bitecs';
 import { world, Position, Rotation, Velocity } from '../ecs/world';
 import { NpcTag } from '../ecs/components/NpcTag';
-import { movementSystem as baseMovementSystem } from '../ecs/systems/movementSystem';
-import { randomWalkSystem as baseRandomWalkSystem } from '../ecs/systems/randomWalkSystem';
+import { movementSystem } from '../ecs/systems/movementSystem';
+import { randomWalkSystem } from '../ecs/systems/randomWalkSystem';
 import { defineQuery } from 'bitecs';
-
-let movementSystemFn = baseMovementSystem;
-let randomWalkSystemFn = baseRandomWalkSystem;
 
 interface InitMessage {
   type: 'init';
@@ -26,7 +23,7 @@ const npcQuery = defineQuery([NpcTag, Position, Rotation]);
 
 self.onmessage = (evt: MessageEvent<any>) => {
   const data = evt.data;
-  // Legacy 'reloadSystem' message handler removed.
+  // Message types other than initialisation are currently ignored.
   if (data.type !== 'init') return;
   const { npcCount, player } = data;
 
@@ -79,8 +76,8 @@ self.onmessage = (evt: MessageEvent<any>) => {
   // Start fixed-step loop (60 Hz)
   const DT_MS = 1000 / 60;
   setInterval(() => {
-    randomWalkSystemFn();
-    movementSystemFn();
+    randomWalkSystem();
+    movementSystem();
 
     // ---- process commands after systems (or before, up to design) ----
     if (cmdCtrl && cmdData) {
