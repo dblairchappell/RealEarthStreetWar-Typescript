@@ -1,0 +1,63 @@
+PREPARATION
+
+0.1 Create branch feat/fixed-step-loop off master.
+0.2 Add a minimal Playwright / Cypress smoke test that loads the map, spawns the player and verifies one rAF frame renders (future guard).
+0.3 Add npm run perf script that measures average + 95ᵗʰ frame time for 5 s and prints to console (simple performance.now() loop); threshold initially disabled.
+Your test: run the game & smoke test → both still pass.
+
+STEP 1 – Harden existing GameLoop (≈½ day)
+1.1 Add remove(u) and pause()/resume() to GameLoop.
+1.2 Convert CharacterView animation from setInterval to the shared rAF loop.
+1.3 Delete private rAFs in CameraController (continuousZoom/Rotate) and instead expose update(delta) that the loop calls.
+1.4 Verify no other setInterval/setTimeout are doing per-frame work.
+Test: gameplay unchanged, CPU usage a bit lower; pause/resume via dev-console works.
+STEP 2 – Frame-time instrumentation overlay (≈½ day)
+2.1 Add lightweight HUD panel (Ctrl-Shift-F1 toggle) showing fps, ms / frame, % CPU in rAF.
+2.2 Wire it to the now-central GameLoop.
+2.3 Fail the smoke test if avg fps < 55 (for now only warns).
+Test: toggle overlay, values update, no visual regressions.
+STEP 3 – Introduce ECS library on main thread (≈2 days)
+3.1 Add dependency bitecs + basic World initialisation.
+3.2 Create components: Position, Rotation, Velocity, SpriteRef.
+3.3 Implement one System: movementSystem (integrate velocity → position).
+3.4 Spawn the player as first entity; keep NPC count zero for now.
+3.5 Adapt GameController → writes to ECS instead of directly mutating GameState.player.
+Test: player still moves/rotates exactly as before.
+STEP 4 – Fixed-timestep loop with interpolation (≈2 days)
+4.1 Replace variable-delta GameLoop logic with:
+constant SIM_DT = 16.666 ms
+maxSubSteps = 5 catch-up guard
+accumulate → run systems → commit snapshot each tick.
+4.2 Keep render thread in same rAF but read latest snapshot and do linear interpolation for sprite & camera.
+4.3 Remove clockAccumulator from GameController; time now advances by tick count.
+Test: toggle overlay—simulation ticks at 60 Hz, rendering 60 Hz+; time/date logic still correct.
+STEP 5 – NPC prototype & scalability sanity (≈2 days)
+5.1 Add CLI flag ?npc=N to spawn configurable dummy NPC entities with random walk.
+5.2 Add view code to instanced-render coloured squares for NPCs (simple WebGL2 instancing via MapLibre custom layer).
+5.3 Verify 1 000 NPCs maintain ≥ 55 FPS on dev machine.
+Test: run index.html?npc=1000, move camera, overlay shows fps target met.
+STEP 6 – Move simulation to Web Worker (≈1 week)
+6.1 Create sim.worker.ts; port ECS world & fixed-step loop.
+6.2 Use postMessage (copy) first; snapshots serialised as Float32Array.
+6.3 Main thread stores last two snapshots for interpolation.
+Test: same 1 000 NPC scene, fps similar; smoke test passes in Chromium & Electron.
+STEP 7 – SharedArrayBuffer + ring buffer (≈2 days)
+7.1 Switch snapshots to pre-allocated SharedArrayBuffer; implement double buffer with Atomics.store/notify.
+7.2 Add COOP/COEP headers to dev server & Electron config; keep transferable fallback for non-SAB browsers.
+Test: measure latency (< 1 ms) between worker write and render read; game still plays.
+STEP 8 – Command queue & hot-reload hooks (≈1 day)
+8.1 Define Command enum (SpawnEntity, Destroy, SetVelocity …).
+8.2 UI thread enqueues commands into SAB ring; worker consumes before each tick.
+8.3 Expose /reloadSystem(name) dev helper that reimports a system module and swaps it in live.
+Test: issue commands from console (spawnTrafficker()), see entities appear; hot-reload a system without page refresh.
+STEP 9 – Performance guardrails & LOD (≈3 days)
+9.1 Implement simple uniform grid; systems can query “entities near camera”.
+9.2 Update rates: far NPCs run AI every 6th tick, animation every 3rd tick.
+9.3 Overlay now shows per-system ms; CI perf budget enabled (npm run perf fails if 95ᵗʰ frame > 16 ms).
+Test: spawn 5 000 NPCs; overlay shows main-thread ≤ 8 ms, worker ≤ 6 ms.
+STEP 10 – Clean-up & documentation (≈1 day)
+10.1 Delete legacy classes that wrote directly into GameState.
+10.2 Update docs in docs/architecture.md.
+10.3 Squash & merge to master; tag v0.4.0-fixedstep.
+Total: ~2.5 weeks to reach worker-based fixed-step loop with ECS & basic LOD; another ~1 week for full perf guards (matches original 5-6 week estimate including instancing polish).
+Let me know which steps you’d like to adjust or split further; once approved I’ll start with Step 0.

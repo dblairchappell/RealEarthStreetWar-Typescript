@@ -3,6 +3,7 @@ import MapView, { MapViewCallbacks } from "./view/MapView";
 import GameController from "./controller/GameController";
 import HUDView, { HUDViewCallbacks } from "./view/HUDView";
 import InputManager from "./input/InputManager";
+import GameLoop from "./loop/GameLoop";
 import * as turf from "@turf/turf";
 import tzLookup from "tz-lookup";          // gives us the lat/lon → TZ function
 // (Optional) If other code needs osmtogeojson globally later you can import it:
@@ -118,8 +119,11 @@ map.on('load', () => {
     
     // Initial view update
     hud.updateStats(state.hqs.length, state.commodities, state.money);
-    controller.startClock(); // Start the game clock
-    controller.startMovementLoop(); // Start the movement update loop
+
+    // Start the rAF-driven game loop
+    const loop = new GameLoop();
+    loop.add(controller);
+    loop.start();
 
         /* ──────────────────────────────────────────────────────────
        Game clock: every second, get the game date, work out which 

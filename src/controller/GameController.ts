@@ -3,10 +3,11 @@ import GameState from "../model/GameState";
 import MapView from "../view/MapView";
 
 export default class GameController {
-  private gameClockTimer: number | null = null;
-  private movementTimer: number | null = null;
-  private lastRotationTime: number = 0;
-  private rotationCooldownMs: number = 150; // Throttle rotation changes
+  /**
+   * Accumulates time so we advance the in-game clock in fixed steps of
+   * `GameState.GAME_TICK_MS`, regardless of the frame rate.
+   */
+  private clockAccumulator = 0;
   
   // Update the input handling method
   private currentInput = {
@@ -22,25 +23,22 @@ export default class GameController {
   constructor(private state: GameState, private view: MapView) {
   }
 
-  public startClock() {
-    if (this.gameClockTimer) return; // Prevent multiple timers
-    this.gameClockTimer = window.setInterval(() => {
-      this.tickClock();
-    }, GameState.GAME_TICK_MS);
-  }
+  /**
+   * Called every animation frame by the shared GameLoop. `deltaMs` is the
+   * elapsed real time in milliseconds since the previous frame.
+   */
+  public update(deltaMs: number): void {
+    // 1. Accumulate time and advance the in-game clock in discrete ticks.
+    this.clockAccumulator += deltaMs;
+    while (this.clockAccumulator >= GameState.GAME_TICK_MS) {
+      this.clockAccumulator -= GameState.GAME_TICK_MS;
+      this.state.gameDate.setMinutes(
+        this.state.gameDate.getMinutes() + GameState.MINUTES_PER_TICK
+      );
+    }
 
-  public startMovementLoop() {
-    if (this.movementTimer) return; // Prevent multiple timers
-    
-    // 60 FPS movement updates
-    this.movementTimer = window.setInterval(() => {
-      this.updatePlayerMovement();
-    }, 1000 / 60);
-  }
-
-  private tickClock() {
-    this.state.gameDate.setMinutes(this.state.gameDate.getMinutes() + GameState.MINUTES_PER_TICK);
-    // HUD update should be triggered from main.ts after clock advances
+    // 2. Player movement and rotation.
+    this.updatePlayerMovement(deltaMs / 1000); // convert to seconds
   }
 
   public handlePlayerInput(input: { 
@@ -56,20 +54,20 @@ export default class GameController {
     this.state.player.isMoving = input.forward || input.backward || input.left || input.right;
   }
 
-  // Update the movement logic
-  private updatePlayerMovement() {
+  // Update the movement logic — deltaSec is seconds since last frame
+  private updatePlayerMovement(deltaSec: number) {
     let positionChanged = false;
     let rotationChanged = false;
 
     // Handle rotation
     if (this.currentInput.rotateLeft) {
-      this.state.player.rotation -= GameState.PLAYER_ROTATION_SPEED;
+      this.state.player.rotation -= GameState.PLAYER_ROTATION_SPEED * deltaSec;
       this.state.player.rotation = ((this.state.player.rotation % 360) + 360) % 360; // Normalize to 0-360
       rotationChanged = true;
     }
     
     if (this.currentInput.rotateRight) {
-      this.state.player.rotation += GameState.PLAYER_ROTATION_SPEED;
+      this.state.player.rotation += GameState.PLAYER_ROTATION_SPEED * deltaSec;
       this.state.player.rotation = ((this.state.player.rotation % 360) + 360) % 360; // Normalize to 0-360
       rotationChanged = true;
     }
@@ -79,35 +77,37 @@ export default class GameController {
       const radians = (this.state.player.rotation * Math.PI) / 180;
       
       // Choose speed based on whether player is running
-      const moveSpeed = this.currentInput.running ? GameState.PLAYER_RUN_SPEED : GameState.PLAYER_MOVE_SPEED;
+      const moveSpeedDegPerSec = this.currentInput.running ? GameState.PLAYER_RUN_SPEED : GameState.PLAYER_MOVE_SPEED;
+
+      const step = moveSpeedDegPerSec * deltaSec;
       
       let deltaLat = 0;
       let deltaLng = 0;
       
       // Forward/backward movement
       if (this.currentInput.forward) {
-        deltaLat += Math.cos(radians) * moveSpeed;
-        deltaLng += Math.sin(radians) * moveSpeed;
+        deltaLat += Math.cos(radians) * step;
+        deltaLng += Math.sin(radians) * step;
       }
       
       if (this.currentInput.backward) {
-        deltaLat -= Math.cos(radians) * moveSpeed;
-        deltaLng -= Math.sin(radians) * moveSpeed;
+        deltaLat -= Math.cos(radians) * step;
+        deltaLng -= Math.sin(radians) * step;
       }
       
       // Strafing movement (perpendicular to facing direction)
       if (this.currentInput.left) {
         // Strafe left is 90 degrees counter-clockwise from facing direction
         const strafeRadians = radians - Math.PI / 2;
-        deltaLat += Math.cos(strafeRadians) * moveSpeed;
-        deltaLng += Math.sin(strafeRadians) * moveSpeed;
+        deltaLat += Math.cos(strafeRadians) * step;
+        deltaLng += Math.sin(strafeRadians) * step;
       }
       
       if (this.currentInput.right) {
         // Strafe right is 90 degrees clockwise from facing direction
         const strafeRadians = radians + Math.PI / 2;
-        deltaLat += Math.cos(strafeRadians) * moveSpeed;
-        deltaLng += Math.sin(strafeRadians) * moveSpeed;
+        deltaLat += Math.cos(strafeRadians) * step;
+        deltaLng += Math.sin(strafeRadians) * step;
       }
       
       // Apply latitude correction for longitude movement
