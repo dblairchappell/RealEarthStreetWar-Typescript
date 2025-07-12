@@ -51,16 +51,19 @@ STEP 7 – SharedArrayBuffer + ring buffer (≈2 days)
 7.1 Switch snapshots to pre-allocated SharedArrayBuffer; implement double buffer with Atomics.store/notify.
 7.2 Add COOP/COEP headers to dev server & Electron config; keep transferable fallback for non-SAB browsers.
 Test: measure latency (< 1 ms) between worker write and render read; game still plays.
+
 STEP 8 – Command queue & hot-reload hooks (≈1 day)
 8.1 Define Command enum (SpawnEntity, Destroy, SetVelocity …).
 8.2 UI thread enqueues commands into SAB ring; worker consumes before each tick.
 8.3 Expose /reloadSystem(name) dev helper that reimports a system module and swaps it in live.
 Test: issue commands from console (spawnTrafficker()), see entities appear; hot-reload a system without page refresh.
+
 STEP 9 – Performance guardrails & LOD (≈3 days)
 9.1 Implement simple uniform grid; systems can query “entities near camera”.
 9.2 Update rates: far NPCs run AI every 6th tick, animation every 3rd tick.
 9.3 Overlay now shows per-system ms; CI perf budget enabled (npm run perf fails if 95ᵗʰ frame > 16 ms).
 Test: spawn 5 000 NPCs; overlay shows main-thread ≤ 8 ms, worker ≤ 6 ms.
+
 STEP 10 – Clean-up & documentation (≈1 day)
 10.1 Delete legacy classes that wrote directly into GameState.
 10.2 Update docs in docs/architecture.md.

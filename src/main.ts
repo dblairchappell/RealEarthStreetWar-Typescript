@@ -17,6 +17,7 @@ import { addComponent, addEntity } from "bitecs";
 import { Velocity } from "./ecs/world";
 import NpcLayer from "./view/NpcLayer";
 import { bridge } from "./sim/SimulationBridge";
+import { CommandType } from "./sim/Command";
 
 
 const state = new GameState();
@@ -196,6 +197,14 @@ map.on('load', () => {
 
     // Expose for dev console (small dev aid)
     (window as any).loop = loop;
+
+    // Dev helper: spawn NPC near current centre
+    (window as any).spawnNpc = (lng?: number, lat?: number) => {
+        const center = lng !== undefined && lat !== undefined ? {lng, lat} : map.getCenter();
+        bridge.enqueueCommand(CommandType.SpawnNpc, Math.round(center.lng * 1e7), Math.round(center.lat * 1e7), 0);
+    };
+
+    // Hot-reload helper removed – refresh the page to pick up code changes.
 
         /* ──────────────────────────────────────────────────────────
        Game clock: every second, get the game date, work out which 

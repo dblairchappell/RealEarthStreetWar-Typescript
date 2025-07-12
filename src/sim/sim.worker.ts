@@ -3,9 +3,12 @@
 import { addComponent, addEntity } from 'bitecs';
 import { world, Position, Rotation, Velocity } from '../ecs/world';
 import { NpcTag } from '../ecs/components/NpcTag';
-import { movementSystem } from '../ecs/systems/movementSystem';
-import { randomWalkSystem } from '../ecs/systems/randomWalkSystem';
+import { movementSystem as baseMovementSystem } from '../ecs/systems/movementSystem';
+import { randomWalkSystem as baseRandomWalkSystem } from '../ecs/systems/randomWalkSystem';
 import { defineQuery } from 'bitecs';
+
+let movementSystemFn = baseMovementSystem;
+let randomWalkSystemFn = baseRandomWalkSystem;
 
 interface InitMessage {
   type: 'init';
@@ -13,13 +16,17 @@ interface InitMessage {
   player: { lng: number; lat: number; rot: number };
   sharedBuffer?: SharedArrayBuffer;
   floatsPerSnap?: number;
+  cmdBuffer?: SharedArrayBuffer;
+  cmdCapacity?: number;
+  cmdWords?: number;
 }
 
 // Query to read NPC positions efficiently
 const npcQuery = defineQuery([NpcTag, Position, Rotation]);
 
-self.onmessage = (evt: MessageEvent<InitMessage>) => {
+self.onmessage = (evt: MessageEvent<any>) => {
   const data = evt.data;
+  // Legacy 'reloadSystem' message handler removed.
   if (data.type !== 'init') return;
   const { npcCount, player } = data;
 
@@ -57,11 +64,67 @@ self.onmessage = (evt: MessageEvent<InitMessage>) => {
 
   let writeIndex = 0; // toggles 0/1 for double buffer
 
+  // Command queue views
+  let cmdCtrl: Int32Array | null = null;
+  let cmdData: Int32Array | null = null;
+  let CMD_CAPACITY = 0;
+  let CMD_WORDS = 4;
+  if (data.cmdBuffer && data.cmdCapacity) {
+    CMD_CAPACITY = data.cmdCapacity;
+    CMD_WORDS = data.cmdWords || 4;
+    cmdCtrl = new Int32Array(data.cmdBuffer, 0, 2);
+    cmdData = new Int32Array(data.cmdBuffer, 2 * Int32Array.BYTES_PER_ELEMENT);
+  }
+
   // Start fixed-step loop (60 Hz)
   const DT_MS = 1000 / 60;
   setInterval(() => {
-    randomWalkSystem();
-    movementSystem();
+    randomWalkSystemFn();
+    movementSystemFn();
+
+    // ---- process commands after systems (or before, up to design) ----
+    if (cmdCtrl && cmdData) {
+      let head = Atomics.load(cmdCtrl, 0);
+      let tail = Atomics.load(cmdCtrl, 1);
+      while (head !== tail) {
+        const base = head * CMD_WORDS;
+        const type = cmdData[base];
+        const a = cmdData[base + 1];
+        const b = cmdData[base + 2];
+        const c = cmdData[base + 3];
+
+        switch (type) {
+          case 1: // SpawnNpc
+            const lng = a / 1e7;
+            const lat = b / 1e7;
+            const eid = addEntity(world);
+            addComponent(world, Position, eid);
+            addComponent(world, Rotation, eid);
+            addComponent(world, Velocity, eid);
+            addComponent(world, NpcTag, eid);
+            Position.x[eid] = lng;
+            Position.y[eid] = lat;
+            Rotation.angle[eid] = c;
+            Velocity.x[eid] = 0;
+            Velocity.y[eid] = 0;
+            break;
+          case 2: // DestroyEntity
+            // not implemented yet
+            break;
+          case 3: // SetVelocity
+            // Interpret a as eid, b,c as vx,vy scaled 1e6
+            const eidSet = a;
+            if (eidSet !== undefined) {
+              Velocity.x[eidSet] = b / 1e6;
+              Velocity.y[eidSet] = c / 1e6;
+            }
+            break;
+        }
+
+        head = (head + 1) % CMD_CAPACITY;
+        Atomics.store(cmdCtrl, 0, head);
+      }
+    }
 
     const ents = npcQuery(world);
 
