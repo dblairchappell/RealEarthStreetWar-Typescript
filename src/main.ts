@@ -16,6 +16,7 @@ import { NpcTag } from "./ecs/components/NpcTag";
 import { addComponent, addEntity } from "bitecs";
 import { Velocity } from "./ecs/world";
 import NpcLayer from "./view/NpcLayer";
+import { bridge } from "./sim/SimulationBridge";
 
 
 const state = new GameState();
@@ -127,6 +128,9 @@ map.on('load', () => {
     controller.setPlayerEntity(playerEid);
     view.setPlayerEntity(playerEid);
 
+    // keep bridge snapshot in sync when running on main thread
+    bridge.updateFromMainThread(Position.x[playerEid], Position.y[playerEid], Rotation.angle[playerEid]);
+
     view.createPlayerCharacter(
         { lng: Position.x[playerEid], lat: Position.y[playerEid] }, 
         Rotation.angle[playerEid]
@@ -138,24 +142,46 @@ map.on('load', () => {
     // Start the rAF-driven game loop
     const loop = new GameLoop();
     loop.addFixed(controller);
-    const npcCount = Number(new URLSearchParams(location.search).get('npc') || '0');
-    const R = 0.001; // degrees
-    for (let i=0;i<npcCount;i++) {
-         const angle = Math.random()*Math.PI*2;
-         const dist = Math.random()*R;
-         const lng = state.player.lng + Math.cos(angle)*dist;
-         const lat = state.player.lat + Math.sin(angle)*dist;
-         const eid = addEntity(world);
-         addComponent(world, Position, eid);
-         addComponent(world, Rotation, eid);
-         addComponent(world, Velocity, eid);
-         addComponent(world, NpcTag, eid);
-         Position.x[eid] = lng; Position.y[eid] = lat;
-         Rotation.angle[eid] = 0;
-         Velocity.x[eid] = 0; Velocity.y[eid] = 0;
+    const params = new URLSearchParams(location.search);
+    const npcCount = Number(params.get('npc') || '0');
+    const workerEnabled = params.get('worker') === '1';
+
+    // Start simulation (main-thread or worker)
+    bridge.startInWorker(
+        workerEnabled,
+        npcCount,
+        { lng: Position.x[playerEid], lat: Position.y[playerEid], rot: Rotation.angle[playerEid] }
+    );
+
+    if (!workerEnabled) {
+        // Fallback: run simulation on main thread as before
+        const R = 0.001; // degrees hub radius
+        for (let i = 0; i < npcCount; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = Math.random() * R;
+            const lng = state.player.lng + Math.cos(angle) * dist;
+            const lat = state.player.lat + Math.sin(angle) * dist;
+            const eid = addEntity(world);
+            addComponent(world, Position, eid);
+            addComponent(world, Rotation, eid);
+            addComponent(world, Velocity, eid);
+            addComponent(world, NpcTag, eid);
+            Position.x[eid] = lng;
+            Position.y[eid] = lat;
+            Rotation.angle[eid] = 0;
+            Velocity.x[eid] = 0;
+            Velocity.y[eid] = 0;
+        }
+
+        const ecsRunner = {
+            fixedUpdate: () => {
+                randomWalkSystem();
+                movementSystem();
+            },
+        } as any;
+        loop.addFixed(ecsRunner);
     }
-    const ecsRunner = { fixedUpdate: () => { randomWalkSystem(); movementSystem(); } } as any;
-    loop.addFixed(ecsRunner);
+
     loop.add(view);           // still needs variable delta for animations
     loop.addRenderable(view);
 

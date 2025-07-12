@@ -8,6 +8,7 @@ import { GTA1_STYLE_TOP_DOWN } from "../config";
 import { InfluenceLayer, MarkerLayer, CameraController, FeatureQuery } from './map';
 import { Position, Rotation } from "../ecs/world";
 import { Renderable, Updatable } from "../loop/GameLoop";
+import { bridge } from "../sim/SimulationBridge";
 import maplibregl from 'maplibre-gl';
 import { Protocol } from 'pmtiles';
 
@@ -263,9 +264,14 @@ export default class MapView implements Updatable, Renderable {
     }
 
     if (this.playerEid !== null) {
-      const lng = Position.x[this.playerEid];
-      const lat = Position.y[this.playerEid];
-      const rot = Rotation.angle[this.playerEid];
+      let lng: number, lat: number, rot: number;
+      if (bridge.isWorkerEnabled()) {
+        ({ lng, lat, rot } = bridge.lastPlayer);
+      } else {
+        lng = Position.x[this.playerEid];
+        lat = Position.y[this.playerEid];
+        rot = Rotation.angle[this.playerEid];
+      }
 
       this.updatePlayerPosition({ lng, lat }, rot);
       // don't update prevPosition here; handled in render() after interpolation
@@ -275,9 +281,14 @@ export default class MapView implements Updatable, Renderable {
   /* Renderable interpolation */
   public render(alpha: number): void {
     if (this.playerEid === null || !this.prevPosition) return;
-    const currLng = Position.x[this.playerEid];
-    const currLat = Position.y[this.playerEid];
-    const currRot = Rotation.angle[this.playerEid];
+    let currLng: number, currLat: number, currRot: number;
+    if (bridge.isWorkerEnabled()) {
+      ({ lng: currLng, lat: currLat, rot: currRot } = bridge.lastPlayer);
+    } else {
+      currLng = Position.x[this.playerEid];
+      currLat = Position.y[this.playerEid];
+      currRot = Rotation.angle[this.playerEid];
+    }
 
     const lng = this.prevPosition.lng + (currLng - this.prevPosition.lng) * alpha;
     const lat = this.prevPosition.lat + (currLat - this.prevPosition.lat) * alpha;

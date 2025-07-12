@@ -40,11 +40,13 @@ STEP 5 – NPC prototype & scalability sanity (≈2 days)
 5.2 Add view code to instanced-render coloured squares for NPCs (simple WebGL2 instancing via MapLibre custom layer).
 5.3 Verify 1 000 NPCs maintain ≥ 55 FPS on dev machine.
 Test: run index.html?npc=1000, move camera, overlay shows fps target met.
+
 STEP 6 – Move simulation to Web Worker (≈1 week)
 6.1 Create sim.worker.ts; port ECS world & fixed-step loop.
 6.2 Use postMessage (copy) first; snapshots serialised as Float32Array.
 6.3 Main thread stores last two snapshots for interpolation.
 Test: same 1 000 NPC scene, fps similar; smoke test passes in Chromium & Electron.
+
 STEP 7 – SharedArrayBuffer + ring buffer (≈2 days)
 7.1 Switch snapshots to pre-allocated SharedArrayBuffer; implement double buffer with Atomics.store/notify.
 7.2 Add COOP/COEP headers to dev server & Electron config; keep transferable fallback for non-SAB browsers.
