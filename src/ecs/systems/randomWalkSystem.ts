@@ -15,7 +15,7 @@ export function randomWalkSystem(): void {
   const ents = npcQuery(world);
   for (let i = 0; i < ents.length; i++) {
     const eid = ents[i];
-    if (i === 0) console.log('vel', SPEED, Velocity.x[eid].toFixed(6));
+    // if (i === 0) console.log('vel', SPEED, Velocity.x[eid].toFixed(6));
     changeCounter[eid] = (changeCounter[eid] || 0) - 1;
     if (changeCounter[eid] <= 0) {
       changeCounter[eid] = Math.floor(Math.random()*CHANGE_TIMER)+CHANGE_TIMER;

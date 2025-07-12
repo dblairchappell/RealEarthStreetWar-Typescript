@@ -7,10 +7,17 @@ import { FixedUpdatable } from "../loop/GameLoop";
 
 export default class GameController implements FixedUpdatable {
   /**
-   * Accumulates time so we advance the in-game clock in fixed steps of
-   * `GameState.GAME_TICK_MS`, regardless of the frame rate.
+   * Counts how many fixed-update ticks have elapsed. Once we reach the
+   * equivalent of `GameState.GAME_TICK_MS` (≈1 s) we advance the in-game
+   * clock and reset the counter. This removes the old millisecond
+   * accumulator and keeps logic tied directly to the fixed-step loop.
    */
-  private clockAccumulator = 0;
+  private tickCounter = 0;
+
+  // Number of fixed-step ticks that make up one game tick (1 s).
+  private static readonly TICKS_PER_GAME_TICK = Math.round(
+    GameState.GAME_TICK_MS / (1000 / 60)
+  ); // 60 when FIXED_DT = 16.666 ms
   
   // Update the input handling method
   private currentInput = {
@@ -38,10 +45,10 @@ export default class GameController implements FixedUpdatable {
   public fixedUpdate(): void {
     const deltaSec = 1 / 60;
 
-    // Accumulate game clock (still 1 sec tickrate)
-    this.clockAccumulator += GameState.GAME_TICK_MS; // each fixed step equals GAME_TICK_MS
-    if (this.clockAccumulator >= GameState.GAME_TICK_MS) {
-      this.clockAccumulator = 0;
+    // Advance in-game clock every simulated second
+    this.tickCounter++;
+    if (this.tickCounter >= GameController.TICKS_PER_GAME_TICK) {
+      this.tickCounter = 0;
       this.state.gameDate.setMinutes(
         this.state.gameDate.getMinutes() + GameState.MINUTES_PER_TICK
       );

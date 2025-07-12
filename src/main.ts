@@ -197,6 +197,7 @@ map.on('load', () => {
 
     // Expose for dev console (small dev aid)
     (window as any).loop = loop;
+    (window as any).state = state;
 
     // Dev helper: spawn NPC near current centre
     (window as any).spawnNpc = (lng?: number, lat?: number) => {
