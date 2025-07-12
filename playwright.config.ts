@@ -5,6 +5,14 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:5173',
     headless: true,
+    launchOptions: {
+      args: [
+        '--enable-gpu',
+        '--disable-background-timer-throttling',
+        '--disable-renderer-backgrounding',
+        '--disable-backgrounding-occluded-windows'
+      ]
+    },
   },
   webServer: {
     command: 'npm run dev',
