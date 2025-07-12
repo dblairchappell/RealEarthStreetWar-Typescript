@@ -116,6 +116,11 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
 
     // Convert to mercator world coords expected by MapLibre matrix
     const mercArray = new Float32Array(count * 3);
+    const worldSize = (this.map as any).transform?.worldSize || 512;
+    // MapLibre expects coordinates in "world" units where the full map width at the
+    // current zoom equals `transform.worldSize`. Multiply the normalised Mercator
+    // [0-1] coordinate by this `worldSize` to get the correct value for every zoom.
+    const scale = worldSize;
     for (let i = 0; i < count; i++) {
       const lng = lngLatArray[i * 2];
       const lat = lngLatArray[i * 2 + 1];
@@ -123,8 +128,8 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
       // MapLibre's matrix expects world coordinates where the full world at zoom 0
       // spans 512 units. Multiply by 512 so points land at the right spot regardless
       // of projection (mercator vs. globe).
-      mercArray[i * 3] = merc.x;
-      mercArray[i * 3 + 1] = merc.y;
+      mercArray[i * 3] = merc.x * scale;
+      mercArray[i * 3 + 1] = merc.y * scale;
       mercArray[i * 3 + 2] = 0.0; // altitude 0
     }
 

@@ -19,6 +19,7 @@ import NpcInstancedLayer from "./view/NpcInstancedLayer";
 import { bridge } from "./sim/SimulationBridge";
 import { CommandType } from "./sim/Command";
 import NpcLayer from "./view/NpcLayer";
+import { ENABLE_GLOBE } from "./config";
 
 
 const state = new GameState();
@@ -188,10 +189,7 @@ map.on('load', () => {
     loop.addRenderable(view);
 
     if (npcCount > 0) {
-        const projectionInfo: any = (map as any).getProjection?.();
-        const projName: string = projectionInfo?.name || projectionInfo?.type || 'mercator';
-
-        if (projName === 'mercator') {
+        if (!ENABLE_GLOBE) {
             // Fast WebGL path works reliably in Mercator.
             const npcGlLayer = new NpcInstancedLayer();
             map.addLayer(npcGlLayer as any);

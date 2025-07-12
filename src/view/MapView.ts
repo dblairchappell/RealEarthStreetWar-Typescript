@@ -4,7 +4,7 @@ import CharacterView from "./CharacterView";
 import InputManager from "../input/InputManager";
 import { IInputService } from "../input/IInputService";
 import { InputState } from "../input/InputTypes";
-import { GTA1_STYLE_TOP_DOWN } from "../config";
+import { GTA1_STYLE_TOP_DOWN, ENABLE_GLOBE } from "../config";
 import { InfluenceLayer, MarkerLayer, CameraController, FeatureQuery } from './map';
 import { Position, Rotation } from "../ecs/world";
 import { Renderable, Updatable } from "../loop/GameLoop";
@@ -106,7 +106,9 @@ export default class MapView implements Updatable, Renderable {
 
     this.map.on('load', () => {
       // Switch to globe projection for an earth-view experience.
-      this.map.setProjection({ type: 'globe' });
+      if (ENABLE_GLOBE) {
+        this.map.setProjection({ type: 'globe' });
+      }
       // Initialise influence layer (moved out to its own class)
       this.influenceLayer = new InfluenceLayer(this.map);
       this.markerLayer    = new MarkerLayer(this.map);
