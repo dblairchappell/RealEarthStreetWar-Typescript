@@ -7,6 +7,47 @@ import { movementSystem } from '../ecs/systems/movementSystem';
 import { randomWalkSystem } from '../ecs/systems/randomWalkSystem';
 import { defineQuery } from 'bitecs';
 
+/* ───────── Uniform grid for spatial queries (Step 9.1) ───────── */
+const CELL_SIZE_DEG = 0.0006; // ~64 m at equator
+function cellKey(lng: number, lat: number): number {
+  const cx = Math.floor(lng / CELL_SIZE_DEG);
+  const cy = Math.floor(lat / CELL_SIZE_DEG);
+  return (cx << 16) ^ (cy & 0xffff);
+}
+
+// Map from cellKey → array of eids currently in that cell (rebuilt every tick)
+let grid = new Map<number, number[]>();
+
+function rebuildGrid(entities: number[]) {
+  grid.clear();
+  for (let i = 0; i < entities.length; i++) {
+    const eid = entities[i];
+    const key = cellKey(Position.x[eid], Position.y[eid]);
+    let arr = grid.get(key);
+    if (!arr) {
+      arr = [];
+      grid.set(key, arr);
+    }
+    arr.push(eid);
+  }
+}
+
+export function queryNear(lng: number, lat: number, radiusDeg: number): number[] {
+  const cx0 = Math.floor((lng - radiusDeg) / CELL_SIZE_DEG);
+  const cy0 = Math.floor((lat - radiusDeg) / CELL_SIZE_DEG);
+  const cx1 = Math.floor((lng + radiusDeg) / CELL_SIZE_DEG);
+  const cy1 = Math.floor((lat + radiusDeg) / CELL_SIZE_DEG);
+  const result: number[] = [];
+  for (let cy = cy0; cy <= cy1; cy++) {
+    for (let cx = cx0; cx <= cx1; cx++) {
+      const key = (cx << 16) ^ (cy & 0xffff);
+      const bucket = grid.get(key);
+      if (bucket) result.push(...bucket);
+    }
+  }
+  return result;
+}
+
 interface InitMessage {
   type: 'init';
   npcCount: number;
@@ -78,6 +119,10 @@ self.onmessage = (evt: MessageEvent<any>) => {
   setInterval(() => {
     randomWalkSystem();
     movementSystem();
+
+    // ───── Rebuild uniform grid for spatial queries ─────
+    const npcEnts = npcQuery(world);
+    rebuildGrid(npcEnts);
 
     // ---- process commands after systems (or before, up to design) ----
     if (cmdCtrl && cmdData) {
