@@ -2,8 +2,9 @@
 import GameState from "../model/GameState";
 import MapView from "../view/MapView";
 import { Position, Rotation, Velocity } from "../ecs/world";
+import { FixedUpdatable } from "../loop/GameLoop";
 
-export default class GameController {
+export default class GameController implements FixedUpdatable {
   /**
    * Accumulates time so we advance the in-game clock in fixed steps of
    * `GameState.GAME_TICK_MS`, regardless of the frame rate.
@@ -29,22 +30,23 @@ export default class GameController {
     this.playerEid = id;
   }
 
-  /**
-   * Called every animation frame by the shared GameLoop. `deltaMs` is the
-   * elapsed real time in milliseconds since the previous frame.
-   */
-  public update(deltaMs: number): void {
-    // 1. Accumulate time and advance the in-game clock in discrete ticks.
-    this.clockAccumulator += deltaMs;
-    while (this.clockAccumulator >= GameState.GAME_TICK_MS) {
-      this.clockAccumulator -= GameState.GAME_TICK_MS;
+  // legacy update kept empty (required by Updatable interface users)
+  public update(_deltaMs: number): void {}
+
+  // Fixed-step update (60 Hz)
+  public fixedUpdate(): void {
+    const deltaSec = 1 / 60;
+
+    // Accumulate game clock (still 1 sec tickrate)
+    this.clockAccumulator += GameState.GAME_TICK_MS; // each fixed step equals GAME_TICK_MS
+    if (this.clockAccumulator >= GameState.GAME_TICK_MS) {
+      this.clockAccumulator = 0;
       this.state.gameDate.setMinutes(
         this.state.gameDate.getMinutes() + GameState.MINUTES_PER_TICK
       );
     }
 
-    // 2. Player movement and rotation.
-    this.updatePlayerMovement(deltaMs / 1000); // convert to seconds
+    this.updatePlayerMovement(deltaSec);
   }
 
   public handlePlayerInput(input: { 

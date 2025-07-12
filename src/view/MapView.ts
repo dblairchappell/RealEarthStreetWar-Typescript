@@ -7,7 +7,7 @@ import { InputState } from "../input/InputTypes";
 import { GTA1_STYLE_TOP_DOWN } from "../config";
 import { InfluenceLayer, MarkerLayer, CameraController, FeatureQuery } from './map';
 import { Position, Rotation } from "../ecs/world";
-import { Updatable } from "../loop/GameLoop";
+import { Renderable, Updatable } from "../loop/GameLoop";
 import maplibregl from 'maplibre-gl';
 import { Protocol } from 'pmtiles';
 
@@ -17,7 +17,7 @@ export interface MapViewCallbacks {
   isPlanting: () => boolean;
 }
 
-export default class MapView implements Updatable {
+export default class MapView implements Updatable, Renderable {
   private map: any;
   private featureQuery: FeatureQuery | null = null;
   private markerLayer: MarkerLayer | null = null;
@@ -25,6 +25,9 @@ export default class MapView implements Updatable {
   private characterView: CharacterView | null = null;
   private playerPosition: { lng: number; lat: number } | null = null;
   private playerRotation: number = 0;
+  private prevPosition: { lng: number; lat: number } | null = null;
+  private prevRotation: number = 0;
+  private userCameraOverride = false;
   
   // (no per-frame camera state; handled by CameraController)
 
@@ -137,7 +140,12 @@ export default class MapView implements Updatable {
     
     // Update movement state
     this.updateMovementState();
-    
+
+    // If player starts moving or rotating, re-enable auto-follow
+    if (input.forward || input.backward || input.left || input.right || input.rotateLeft || input.rotateRight) {
+      this.disableUserCameraOverride();
+    }
+
 
   }
 
@@ -177,6 +185,11 @@ export default class MapView implements Updatable {
         this.characterView.redraw();
       }
     });
+
+    // Detect manual camera drag to override auto-follow – stays until player moves
+    this.map.on('dragstart', () => {
+      this.enableUserCameraOverride();
+    });
   }
 
   // Delegate HQ marker creation to MarkerLayer
@@ -204,8 +217,9 @@ export default class MapView implements Updatable {
     this.map.easeTo({
       center: coords,
       zoom: 21.5, // zoom target
-      duration: 3000
-    });
+      duration: 3000,
+      essential: true      // allow user interaction during animation
+    } as any);
 
     // Ensure sprite is visible with correct size immediately
     this.characterView.updateCharacterSize(false);
@@ -223,8 +237,10 @@ export default class MapView implements Updatable {
     this.playerPosition = this.characterView.getPlayerPosition();
     this.playerRotation = this.characterView.getPlayerRotation();
     
-    // Tell camera controller to follow the player
-    this.camera?.follow(coords);
+    // Tell camera controller to follow the player unless user is dragging
+    if (!this.userCameraOverride) {
+      this.camera?.follow(coords);
+    }
   }
 
   // (camera recentering handled inside CameraController)
@@ -252,7 +268,26 @@ export default class MapView implements Updatable {
       const rot = Rotation.angle[this.playerEid];
 
       this.updatePlayerPosition({ lng, lat }, rot);
+      // don't update prevPosition here; handled in render() after interpolation
     }
+  }
+
+  /* Renderable interpolation */
+  public render(alpha: number): void {
+    if (this.playerEid === null || !this.prevPosition) return;
+    const currLng = Position.x[this.playerEid];
+    const currLat = Position.y[this.playerEid];
+    const currRot = Rotation.angle[this.playerEid];
+
+    const lng = this.prevPosition.lng + (currLng - this.prevPosition.lng) * alpha;
+    const lat = this.prevPosition.lat + (currLat - this.prevPosition.lat) * alpha;
+    const rot = this.prevRotation + (currRot - this.prevRotation) * alpha;
+
+    this.updatePlayerPosition({ lng, lat }, rot);
+
+    // Store as previous for next frame interpolation
+    this.prevPosition = { lng: currLng, lat: currLat };
+    this.prevRotation = currRot;
   }
 
   /** Set the ECS entity id representing the player */
@@ -271,5 +306,14 @@ export default class MapView implements Updatable {
     this.markerLayer?.destroy();
     this.influenceLayer?.destroy();
     this.camera?.destroy();
+  }
+
+  /* ---------------- Camera override handlers ---------------- */
+  private enableUserCameraOverride(): void {
+    this.userCameraOverride = true;
+  }
+
+  private disableUserCameraOverride(): void {
+    this.userCameraOverride = false;
   }
 }

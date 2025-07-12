@@ -2,13 +2,13 @@ import { defineQuery } from 'bitecs';
 import { Position, Velocity, world } from '../world';
 
 const movableQuery = defineQuery([Position, Velocity]);
+const DT_SEC = 1 / 60; // fixed step duration
 
-export function movementSystem(dt: number): void {
+export function movementSystem(): void {
   const ents = movableQuery(world);
-  const dtSec = dt / 1000;
   for (let i = 0; i < ents.length; i++) {
     const eid = ents[i];
-    Position.x[eid] += Velocity.x[eid] * dtSec;
-    Position.y[eid] += Velocity.y[eid] * dtSec;
+    Position.x[eid] += Velocity.x[eid] * DT_SEC;
+    Position.y[eid] += Velocity.y[eid] * DT_SEC;
   }
 } 

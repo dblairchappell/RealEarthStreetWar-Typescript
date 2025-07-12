@@ -11,11 +11,13 @@ STEP 1 – Harden existing GameLoop (≈½ day)
 1.3 Delete private rAFs in CameraController (continuousZoom/Rotate) and instead expose update(delta) that the loop calls.
 1.4 Verify no other setInterval/setTimeout are doing per-frame work.
 Test: gameplay unchanged, CPU usage a bit lower; pause/resume via dev-console works.
+
 STEP 2 – Frame-time instrumentation overlay (≈½ day)
 2.1 Add lightweight HUD panel (Ctrl-Shift-F1 toggle) showing fps, ms / frame, % CPU in rAF.
 2.2 Wire it to the now-central GameLoop.
 2.3 Fail the smoke test if avg fps < 55 (for now only warns).
 Test: toggle overlay, values update, no visual regressions.
+
 STEP 3 – Introduce ECS library on main thread (≈2 days)
 3.1 Add dependency bitecs + basic World initialisation.
 3.2 Create components: Position, Rotation, Velocity, SpriteRef.
@@ -23,6 +25,7 @@ STEP 3 – Introduce ECS library on main thread (≈2 days)
 3.4 Spawn the player as first entity; keep NPC count zero for now.
 3.5 Adapt GameController → writes to ECS instead of directly mutating GameState.player.
 Test: player still moves/rotates exactly as before.
+
 STEP 4 – Fixed-timestep loop with interpolation (≈2 days)
 4.1 Replace variable-delta GameLoop logic with:
 constant SIM_DT = 16.666 ms
@@ -31,6 +34,7 @@ accumulate → run systems → commit snapshot each tick.
 4.2 Keep render thread in same rAF but read latest snapshot and do linear interpolation for sprite & camera.
 4.3 Remove clockAccumulator from GameController; time now advances by tick count.
 Test: toggle overlay—simulation ticks at 60 Hz, rendering 60 Hz+; time/date logic still correct.
+
 STEP 5 – NPC prototype & scalability sanity (≈2 days)
 5.1 Add CLI flag ?npc=N to spawn configurable dummy NPC entities with random walk.
 5.2 Add view code to instanced-render coloured squares for NPCs (simple WebGL2 instancing via MapLibre custom layer).

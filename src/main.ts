@@ -132,11 +132,11 @@ map.on('load', () => {
 
     // Start the rAF-driven game loop
     const loop = new GameLoop();
-    loop.add(controller);
-    // Runner that executes ECS systems pipeline each frame
-    const ecsRunner = { update: (dt: number) => { movementSystem(dt); } };
-    loop.add(ecsRunner as any);
-    loop.add(view);            // MapView handles per-frame sprite animation
+    loop.addFixed(controller);
+    const ecsRunner = { fixedUpdate: () => { movementSystem(); } } as any;
+    loop.addFixed(ecsRunner);
+    loop.add(view);           // still needs variable delta for animations
+    loop.addRenderable(view);
 
     const overlay = new PerfOverlay();
     loop.add(overlay);
