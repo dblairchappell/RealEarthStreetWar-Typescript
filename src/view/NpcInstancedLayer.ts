@@ -41,8 +41,16 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
   // ECS query for fallback path (no worker)
   private query = defineQuery([NpcTag, Position]);
 
-  // Desired pixel size of NPC sprite (before devicePixelRatio scaling)
-  private static readonly POINT_SIZE_PX = 64;
+  // Base marker size in pixels at reference zoom (10) matching CharacterView logic
+  private static readonly BASE_SIZE_PX = 60;
+
+  private calculatePointSizePx(zoom: number): number {
+    const referenceZoom   = 21.5;          // looks correct at this zoom
+    const scale  = Math.pow(2, (zoom - referenceZoom) / 1.4);
+    const size   = Math.max(4, Math.min(60, NpcInstancedLayer.BASE_SIZE_PX * scale));
+    console.log('size', size);
+    return size;
+  }
 
   /* ---------------- MapLibre hooks ---------------- */
   onAdd(map: maplibregl.Map, gl: WebGLRenderingContext): void {
@@ -142,9 +150,9 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
       return;
     }
 
-    if (this.dbgFrame === 0) {
-      console.debug(`NpcInstancedLayer: ${count} NPCs – first at lng=${lngLatArray[0].toFixed(5)}, lat=${lngLatArray[1].toFixed(5)}`);
-    }
+    // if (this.dbgFrame === 0) {
+    //   console.debug(`NpcInstancedLayer: ${count} NPCs – first at lng=${lngLatArray[0].toFixed(5)}, lat=${lngLatArray[1].toFixed(5)}`);
+    // }
 
     // Convert to mercator world coords expected by MapLibre matrix
     const mercArray = new Float32Array(count * 3);
@@ -185,8 +193,14 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
     }
 
     // Set point size (account for devicePixelRatio so on high-DPI displays the sprite stays crisp)
-    const sizePx = NpcInstancedLayer.POINT_SIZE_PX * (window.devicePixelRatio || 1);
+    const zoom = this.map.getZoom();
+    const sizePx = this.calculatePointSizePx(zoom) * (window.devicePixelRatio || 1);
     g.uniform1f(this.uPointSizeLocation, sizePx);
+
+    // Ensure point size from shader is respected (WebGL2 constant 0x8642)
+    if ((g as any).PROGRAM_POINT_SIZE) {
+      g.enable((g as any).PROGRAM_POINT_SIZE);
+    }
 
     // MapLibre versions provide the matrix in different locations:
     //  • v1.x: second argument is Float32Array (16)
