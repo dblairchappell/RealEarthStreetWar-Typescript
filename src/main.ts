@@ -4,6 +4,7 @@ import GameController from "./controller/GameController";
 import HUDView, { HUDViewCallbacks } from "./view/HUDView";
 import InputManager from "./input/InputManager";
 import GameLoop from "./loop/GameLoop";
+import PerfOverlay from "./debug/PerfOverlay";
 import * as turf from "@turf/turf";
 import tzLookup from "tz-lookup";          // gives us the lat/lon → TZ function
 // (Optional) If other code needs osmtogeojson globally later you can import it:
@@ -124,6 +125,9 @@ map.on('load', () => {
     const loop = new GameLoop();
     loop.add(controller);
     loop.add(view);            // MapView handles per-frame sprite animation
+
+    const overlay = new PerfOverlay();
+    loop.add(overlay);
     loop.start();
 
     // Expose for dev console (small dev aid)
