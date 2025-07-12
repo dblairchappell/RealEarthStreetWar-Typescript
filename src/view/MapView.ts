@@ -263,6 +263,11 @@ export default class MapView implements Updatable, Renderable {
       this.characterView.update(deltaMs);
     }
 
+    // Drive camera controller via the central loop
+    if (this.camera) {
+      this.camera.update(deltaMs);
+    }
+
     if (this.playerEid !== null) {
       let lng: number, lat: number, rot: number;
       if (bridge.isWorkerEnabled()) {

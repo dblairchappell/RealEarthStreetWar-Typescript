@@ -1,5 +1,6 @@
 // view/map/CameraController.ts
 import CharacterView from "../CharacterView";
+import { Updatable } from "../../loop/GameLoop";
 
 /*
  * CameraController is a view-layer helper that encapsulates all camera
@@ -7,7 +8,7 @@ import CharacterView from "../CharacterView";
  * MapView no longer needs to keep camera-specific state.
  */
 
-export class CameraController {
+export class CameraController implements Updatable {
   /* ---------------- constructor & state ---------------- */
   constructor(private map: any, private characterView: CharacterView | null = null) {}
 
@@ -38,6 +39,65 @@ export class CameraController {
   private readonly rotationAcceleration = 0.1;
   private isCameraRotating = false;
 
+  /* ------------------------------------------------------------------
+   * Per-frame update – called by the main GameLoop
+   * ------------------------------------------------------------------ */
+  public update(deltaMs: number): void {
+    // We keep speed units "per frame" to match original behaviour; dt scaling made motion too slow.
+
+    /* ---- Continuous Zoom ---- */
+    if (this.continuousZoomActive && this.continuousZoomDirection) {
+      // Accelerate speed toward max (original code added zoomAcceleration per frame ~60 fps)
+      if (this.currentZoomSpeed < this.maxZoomSpeed) {
+        this.currentZoomSpeed = Math.min(
+          this.maxZoomSpeed,
+          this.currentZoomSpeed + this.zoomAcceleration * (deltaMs / 16.666)
+        );
+      }
+
+      const currentZoom = this.map.getZoom();
+      const delta = (this.continuousZoomDirection === "in" ? 1 : -1) * this.currentZoomSpeed;
+      const newZoom = this.continuousZoomDirection === "in"
+        ? Math.min(22, currentZoom + delta)
+        : currentZoom + delta;
+
+      if (this.playerPosition) {
+        this.map.jumpTo({ center: [this.playerPosition.lng, this.playerPosition.lat], zoom: newZoom });
+      } else {
+        this.map.setZoom(newZoom);
+      }
+    }
+
+    /* ---- Continuous Rotation ---- */
+    if (this.continuousRotationActive && this.continuousRotationDirection) {
+      // Accelerate speed toward max
+      if (this.currentRotationSpeed < this.maxRotationSpeed) {
+        this.currentRotationSpeed = Math.min(
+          this.maxRotationSpeed,
+          this.currentRotationSpeed + this.rotationAcceleration * (deltaMs / 16.666)
+        );
+      }
+
+      if (this.continuousRotationDirection === "left") {
+        this.cameraBearing = (this.cameraBearing - this.currentRotationSpeed + 360) % 360;
+      } else {
+        this.cameraBearing = (this.cameraBearing + this.currentRotationSpeed) % 360;
+      }
+
+      if (this.playerPosition) {
+        this.map.jumpTo({ center: [this.playerPosition.lng, this.playerPosition.lat], bearing: this.cameraBearing });
+      } else {
+        this.map.setBearing(this.cameraBearing);
+      }
+
+      // Keep sprite facing the camera correctly
+      if (this.characterView) {
+        this.characterView.setCameraBearing(this.cameraBearing);
+        this.characterView.redraw();
+      }
+    }
+  }
+
   /* ---------------- public API ---------------- */
 
   /**
@@ -63,7 +123,6 @@ export class CameraController {
       this.isCameraZooming = true;
       this.currentZoomSpeed = this.minZoomSpeed;
       this.continuousZoomActive = true;
-      this.continuousZoom();
     }
   }
 
@@ -73,30 +132,6 @@ export class CameraController {
     this.continuousZoomDirection = null;
   }
 
-  private continuousZoom(): void {
-    if (!this.continuousZoomActive) return;
-
-    // Accelerate up to max speed
-    if (this.currentZoomSpeed < this.maxZoomSpeed) {
-      this.currentZoomSpeed += this.zoomAcceleration;
-    }
-
-    const currentZoom = this.map.getZoom();
-    const delta = this.continuousZoomDirection === 'in' ? this.currentZoomSpeed : -this.currentZoomSpeed;
-    const newZoom = this.continuousZoomDirection === 'in' ? Math.min(22, currentZoom + delta) : currentZoom + delta;
-
-    if (this.playerPosition) {
-      this.map.jumpTo({
-        center: [this.playerPosition.lng, this.playerPosition.lat],
-        zoom: newZoom,
-      });
-    } else {
-      this.map.setZoom(newZoom);
-    }
-
-    requestAnimationFrame(() => this.continuousZoom());
-  }
-
   /* ---- Rotation controls ---- */
   startRotate(direction: 'left' | 'right'): void {
     this.continuousRotationDirection = direction;
@@ -104,7 +139,6 @@ export class CameraController {
       this.isCameraRotating = true;
       this.currentRotationSpeed = this.minRotationSpeed;
       this.continuousRotationActive = true;
-      this.continuousRotate();
     }
   }
 
@@ -112,40 +146,6 @@ export class CameraController {
     this.isCameraRotating = false;
     this.continuousRotationActive = false;
     this.continuousRotationDirection = null;
-  }
-
-  private continuousRotate(): void {
-    if (!this.continuousRotationActive) return;
-
-    // Accelerate
-    if (this.currentRotationSpeed < this.maxRotationSpeed) {
-      this.currentRotationSpeed += this.rotationAcceleration;
-    }
-
-    // Update bearing
-    if (this.continuousRotationDirection === 'left') {
-      this.cameraBearing = (this.cameraBearing - this.currentRotationSpeed + 360) % 360;
-    } else {
-      this.cameraBearing = (this.cameraBearing + this.currentRotationSpeed) % 360;
-    }
-
-    // Apply rotation centred on player when possible
-    if (this.playerPosition) {
-      this.map.jumpTo({
-        center: [this.playerPosition.lng, this.playerPosition.lat],
-        bearing: this.cameraBearing,
-      });
-    } else {
-      this.map.setBearing(this.cameraBearing);
-    }
-
-    // Update sprite to compensate so it always faces the screen correctly
-    if (this.characterView) {
-      this.characterView.setCameraBearing(this.cameraBearing);
-      this.characterView.redraw();
-    }
-
-    requestAnimationFrame(() => this.continuousRotate());
   }
 
   /* ---------------- helpers ---------------- */
