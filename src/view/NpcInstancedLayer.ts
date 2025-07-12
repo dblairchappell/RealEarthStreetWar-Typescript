@@ -42,12 +42,13 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
   private query = defineQuery([NpcTag, Position]);
 
   // Base marker size in pixels at reference zoom (10) matching CharacterView logic
-  private static readonly BASE_SIZE_PX = 60;
+  private static readonly BASE_SIZE_PX = 72;
 
   private calculatePointSizePx(zoom: number): number {
-    const referenceZoom   = 21.5;          // looks correct at this zoom
-    const scale  = Math.pow(2, (zoom - referenceZoom) / 1.4);
-    const size   = Math.max(4, Math.min(60, NpcInstancedLayer.BASE_SIZE_PX * scale));
+    const referenceZoom   = 22;          // looks correct at this zoom
+    const scale  = Math.pow(2, (zoom - referenceZoom) / 1.4); //Dividing by 1.4 stretches the curve so the sprite halves every 1.4 zoom levels; it shrinks a little slower
+    // const scale  = Math.pow(2, (zoom - referenceZoom));
+    const size   = Math.max(4, Math.min(72, NpcInstancedLayer.BASE_SIZE_PX * scale));
     console.log('size', size);
     return size;
   }
