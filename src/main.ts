@@ -11,6 +11,11 @@ import * as turf from "@turf/turf";
 import tzLookup from "tz-lookup";          // gives us the lat/lon → TZ function
 // (Optional) If other code needs osmtogeojson globally later you can import it:
 // import osmtogeojson from 'osmtogeojson';
+import { randomWalkSystem } from "./ecs/systems/randomWalkSystem";
+import { NpcTag } from "./ecs/components/NpcTag";
+import { addComponent, addEntity } from "bitecs";
+import { Velocity } from "./ecs/world";
+import NpcLayer from "./view/NpcLayer";
 
 
 const state = new GameState();
@@ -133,10 +138,31 @@ map.on('load', () => {
     // Start the rAF-driven game loop
     const loop = new GameLoop();
     loop.addFixed(controller);
-    const ecsRunner = { fixedUpdate: () => { movementSystem(); } } as any;
+    const npcCount = Number(new URLSearchParams(location.search).get('npc') || '0');
+    const R = 0.001; // degrees
+    for (let i=0;i<npcCount;i++) {
+         const angle = Math.random()*Math.PI*2;
+         const dist = Math.random()*R;
+         const lng = state.player.lng + Math.cos(angle)*dist;
+         const lat = state.player.lat + Math.sin(angle)*dist;
+         const eid = addEntity(world);
+         addComponent(world, Position, eid);
+         addComponent(world, Rotation, eid);
+         addComponent(world, Velocity, eid);
+         addComponent(world, NpcTag, eid);
+         Position.x[eid] = lng; Position.y[eid] = lat;
+         Rotation.angle[eid] = 0;
+         Velocity.x[eid] = 0; Velocity.y[eid] = 0;
+    }
+    const ecsRunner = { fixedUpdate: () => { randomWalkSystem(); movementSystem(); } } as any;
     loop.addFixed(ecsRunner);
     loop.add(view);           // still needs variable delta for animations
     loop.addRenderable(view);
+
+    if (npcCount>0) {
+        const npcLayer = new NpcLayer(map);
+        loop.addRenderable(npcLayer);
+    }
 
     const overlay = new PerfOverlay();
     loop.add(overlay);
