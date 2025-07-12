@@ -123,7 +123,11 @@ map.on('load', () => {
     // Start the rAF-driven game loop
     const loop = new GameLoop();
     loop.add(controller);
+    loop.add(view);            // MapView handles per-frame sprite animation
     loop.start();
+
+    // Expose for dev console (small dev aid)
+    (window as any).loop = loop;
 
         /* ──────────────────────────────────────────────────────────
        Game clock: every second, get the game date, work out which 

@@ -6,6 +6,7 @@ import { IInputService } from "../input/IInputService";
 import { InputState } from "../input/InputTypes";
 import { GTA1_STYLE_TOP_DOWN } from "../config";
 import { InfluenceLayer, MarkerLayer, CameraController, FeatureQuery } from './map';
+import { Updatable } from "../loop/GameLoop";
 import maplibregl from 'maplibre-gl';
 import { Protocol } from 'pmtiles';
 
@@ -15,7 +16,7 @@ export interface MapViewCallbacks {
   isPlanting: () => boolean;
 }
 
-export default class MapView {
+export default class MapView implements Updatable {
   private map: any;
   private featureQuery: FeatureQuery | null = null;
   private markerLayer: MarkerLayer | null = null;
@@ -229,6 +230,16 @@ export default class MapView {
     // This logic is now handled by CharacterView. We just trigger it.
     if (this.characterView) {
       this.characterView.updateMovementState();
+    }
+  }
+
+  /* ------------------------------------------------------------------
+   * Updatable implementation – called each GameLoop tick
+   * ------------------------------------------------------------------ */
+  public update(deltaMs: number): void {
+    // Advance animations that live inside CharacterView (and later camera, markers…)
+    if (this.characterView) {
+      this.characterView.update(deltaMs);
     }
   }
 

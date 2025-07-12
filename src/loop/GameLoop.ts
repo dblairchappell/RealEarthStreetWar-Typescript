@@ -18,17 +18,35 @@ export default class GameLoop {
     this.updatables.push(u);
   }
 
-  /** Start the loop (idempotent) */
+  /** Unregister an updatable */
+  remove(u: Updatable): void {
+    const idx = this.updatables.indexOf(u);
+    if (idx !== -1) {
+      this.updatables.splice(idx, 1);
+    }
+  }
+
+  /** Start the loop (idempotent) – kept for backward compatibility */
   start(): void {
+    this.resume();
+  }
+
+  /** Pause the loop without clearing subscriptions */
+  pause(): void {
+    this.running = false;
+  }
+
+  /** Resume after pause */
+  resume(): void {
     if (this.running) return;
     this.running = true;
     this.lastTime = performance.now();
     requestAnimationFrame(this.tick);
   }
 
-  /** Stop the loop – useful for cleanup / tests */
+  /** Stop the loop – alias for pause for backward-compat */
   stop(): void {
-    this.running = false;
+    this.pause();
   }
 
   private tick = () => {
@@ -41,7 +59,8 @@ export default class GameLoop {
     // Cap to 200 ms to avoid giant leaps after tab was hidden.
     if (delta > 200) delta = 200;
 
-    for (const u of this.updatables) {
+    // Iterate over a shallow copy so removals during update are safe.
+    for (const u of [...this.updatables]) {
       u.update(delta);
     }
 

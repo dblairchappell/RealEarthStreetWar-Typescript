@@ -5,8 +5,9 @@
  */
 
 import { GTA1_STYLE_TOP_DOWN } from "../config";
+import { Updatable } from "../loop/GameLoop";
 
-export default class CharacterView {
+export default class CharacterView implements Updatable {
   // Map instance reference
   private map: any;
   
@@ -23,7 +24,8 @@ export default class CharacterView {
 
   // Animation state
   private currentFrame = 0;
-  private animationTimer: number | null = null;
+  // `setInterval` removed – we advance frames inside update()
+  private frameAccumulator = 0;
   private frameRate = 12;
   private isPlayerMoving = false;
   private currentAnimationType: "idle" | "walking" | "running" = "idle";
@@ -224,10 +226,8 @@ export default class CharacterView {
   }
 
   private stopPlayerAnimation(): void {
-    if (this.animationTimer) {
-      clearInterval(this.animationTimer);
-      this.animationTimer = null;
-    }
+    // No timer to clear now, but keep for symmetry/legacy calls.
+    this.frameAccumulator = 0;
   }
 
   /**
@@ -278,13 +278,8 @@ export default class CharacterView {
     }
     this.frameRate = animation.frameRate;
 
-    this.animationTimer = window.setInterval(() => {
-        const anim = this.animations[this.currentAnimationType];
-        if (!anim) return;
-        
-        this.currentFrame = (this.currentFrame + 1) % anim.frames;
-        this.updateSpriteFrame(this.currentFrame);
-    }, 1000 / this.frameRate);
+    // Reset accumulator so frame advances start fresh
+    this.frameAccumulator = 0;
   }
 
   /**
@@ -298,5 +293,22 @@ export default class CharacterView {
     this.playerElement = null;
     this.spriteSlices = [];
     this.playerPosition = null;
+  }
+
+  /* ------------------------------------------------------------------
+   * Updatable implementation – called each GameLoop tick
+   * ------------------------------------------------------------------ */
+  public update(deltaMs: number): void {
+    const anim = this.animations[this.currentAnimationType];
+    if (!anim) return;
+
+    const frameDuration = 1000 / this.frameRate;
+    this.frameAccumulator += deltaMs;
+
+    while (this.frameAccumulator >= frameDuration) {
+      this.currentFrame = (this.currentFrame + 1) % anim.frames;
+      this.updateSpriteFrame(this.currentFrame);
+      this.frameAccumulator -= frameDuration;
+    }
   }
 }
