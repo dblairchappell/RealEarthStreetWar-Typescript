@@ -15,9 +15,10 @@ import { randomWalkSystem } from "./ecs/systems/randomWalkSystem";
 import { NpcTag } from "./ecs/components/NpcTag";
 import { addComponent, addEntity } from "bitecs";
 import { Velocity } from "./ecs/world";
-import NpcLayer from "./view/NpcLayer";
+import NpcInstancedLayer from "./view/NpcInstancedLayer";
 import { bridge } from "./sim/SimulationBridge";
 import { CommandType } from "./sim/Command";
+import NpcLayer from "./view/NpcLayer";
 
 
 const state = new GameState();
@@ -186,9 +187,25 @@ map.on('load', () => {
     loop.add(view);           // still needs variable delta for animations
     loop.addRenderable(view);
 
-    if (npcCount>0) {
-        const npcLayer = new NpcLayer(map);
-        loop.addRenderable(npcLayer);
+    if (npcCount > 0) {
+        const projectionInfo: any = (map as any).getProjection?.();
+        const projName: string = projectionInfo?.name || projectionInfo?.type || 'mercator';
+
+        if (projName === 'mercator') {
+            // Fast WebGL path works reliably in Mercator.
+            const npcGlLayer = new NpcInstancedLayer();
+            map.addLayer(npcGlLayer as any);
+
+            // Drive map repaint so the custom layer updates each frame
+            const repaintDriver = {
+                update: () => map.triggerRepaint(),
+            } as any;
+            loop.add(repaintDriver);
+        } else {
+            // Globe or other projections – fallback to Canvas overlay that uses map.project()
+            const npcCanvasLayer = new NpcLayer(map);
+            loop.addRenderable(npcCanvasLayer);
+        }
     }
 
     const overlay = new PerfOverlay();

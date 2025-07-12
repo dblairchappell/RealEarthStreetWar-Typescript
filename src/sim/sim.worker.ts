@@ -4,8 +4,27 @@ import { addComponent, addEntity } from 'bitecs';
 import { world, Position, Rotation, Velocity } from '../ecs/world';
 import { NpcTag } from '../ecs/components/NpcTag';
 import { movementSystem } from '../ecs/systems/movementSystem';
-import { randomWalkSystem } from '../ecs/systems/randomWalkSystem';
+// We will implement a custom random-walk that can operate on subsets to allow LOD.
 import { defineQuery } from 'bitecs';
+
+/* ---------------- Random-walk AI helper (subset-capable) ---------------- */
+const RW_SPEED = 0.00002;
+const RW_CHANGE_TIMER = 180;
+const rwChangeCounter: number[] = [];
+
+function runRandomWalk(ids: number[]) {
+  for (let i = 0; i < ids.length; i++) {
+    const eid = ids[i];
+    rwChangeCounter[eid] = (rwChangeCounter[eid] || 0) - 1;
+    if (rwChangeCounter[eid] <= 0) {
+      rwChangeCounter[eid] = Math.floor(Math.random() * RW_CHANGE_TIMER) + RW_CHANGE_TIMER;
+      const angleRad = Math.random() * Math.PI * 2;
+      Rotation.angle[eid] = (angleRad * 180) / Math.PI;
+      Velocity.x[eid] = Math.cos(angleRad) * RW_SPEED;
+      Velocity.y[eid] = Math.sin(angleRad) * RW_SPEED;
+    }
+  }
+}
 
 /* ───────── Uniform grid for spatial queries (Step 9.1) ───────── */
 const CELL_SIZE_DEG = 0.0006; // ~64 m at equator
@@ -116,8 +135,28 @@ self.onmessage = (evt: MessageEvent<any>) => {
 
   // Start fixed-step loop (60 Hz)
   const DT_MS = 1000 / 60;
+  let lodTick = 0; // New variable for LOD tick
+  const NEAR_DEG = 0.0005; // ~50 m radius for near entities
+  const MID_DEG = 0.001; // ~100 m radius for mid entities
+
   setInterval(() => {
-    randomWalkSystem();
+    /* ---------------- LOD-aware systems ---------------- */
+    lodTick++;
+
+    // Spatial bands around camera/player (player snapshot may be stale but good enough for v1)
+    const camLng = player.lng;
+    const camLat = player.lat;
+
+    const nearEnts = queryNear(camLng, camLat, NEAR_DEG);
+    const midEnts  = queryNear(camLng, camLat, MID_DEG);
+    const farEnts  = npcQuery(world).filter(eid => !midEnts.includes(eid));
+
+    // Run AI for far band every 6th tick, mid every 3rd, near every tick
+    if (lodTick % 6 === 0) runRandomWalk(farEnts);
+    if (lodTick % 3 === 0) runRandomWalk(midEnts);
+    runRandomWalk(nearEnts);
+
+    // Movement integration stays full rate for all entities (cheap)
     movementSystem();
 
     // ───── Rebuild uniform grid for spatial queries ─────

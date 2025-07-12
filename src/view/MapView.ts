@@ -105,6 +105,7 @@ export default class MapView implements Updatable, Renderable {
     });
 
     this.map.on('load', () => {
+      // Switch to globe projection for an earth-view experience.
       this.map.setProjection({ type: 'globe' });
       // Initialise influence layer (moved out to its own class)
       this.influenceLayer = new InfluenceLayer(this.map);

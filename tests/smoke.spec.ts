@@ -3,8 +3,9 @@ import { test, expect } from '@playwright/test';
 // Fail if average FPS over a 1-second sample falls below this value
 const FPS_THRESHOLD = 55;
 
-test('map boots and maintains acceptable frame-rate', async ({ page }) => {
-  await page.goto('/');
+test('map boots and maintains acceptable frame-rate under load', async ({ page }) => {
+  // Load the game with 1000 NPCs and the simulation running in a worker
+  await page.goto('/?npc=1000&worker=1');
   await page.waitForSelector('#map canvas');
   // Wait until PerfOverlay exists – indicates GameLoop is up
   await page.waitForSelector('#perf-overlay');
@@ -32,8 +33,6 @@ test('map boots and maintains acceptable frame-rate', async ({ page }) => {
   const avgFps = (frames * 1000) / duration;
   console.log(`Smoke test – ${frames} frames in ${duration.toFixed(0)} ms → avg ${avgFps.toFixed(1)} fps`);
 
-  // Guardrail: warn (do not fail yet) if frame-rate too low
-  if (avgFps < FPS_THRESHOLD) {
-    console.warn(`⚠️  Average FPS ${avgFps.toFixed(1)} below threshold (${FPS_THRESHOLD}) – investigate performance.`);
-  }
+  // Guardrail: hard fail if frame-rate too low
+  expect(avgFps).toBeGreaterThanOrEqual(FPS_THRESHOLD);
 }); 

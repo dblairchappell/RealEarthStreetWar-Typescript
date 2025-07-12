@@ -55,8 +55,6 @@ Test: measure latency (< 1 ms) between worker write and render read; game still 
 STEP 8 – Command queue & hot-reload hooks (≈1 day)
 8.1 Define Command enum (SpawnEntity, Destroy, SetVelocity …).
 8.2 UI thread enqueues commands into SAB ring; worker consumes before each tick.
-8.3 Expose /reloadSystem(name) dev helper that reimports a system module and swaps it in live.
-Test: issue commands from console (spawnTrafficker()), see entities appear; hot-reload a system without page refresh.
 
 STEP 9 – Performance guardrails & LOD (≈3 days)
 9.1 Implement simple uniform grid; systems can query “entities near camera”.
