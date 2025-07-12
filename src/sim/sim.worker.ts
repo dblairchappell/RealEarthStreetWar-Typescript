@@ -11,6 +11,8 @@ interface InitMessage {
   type: 'init';
   npcCount: number;
   player: { lng: number; lat: number; rot: number };
+  sharedBuffer?: SharedArrayBuffer;
+  floatsPerSnap?: number;
 }
 
 // Query to read NPC positions efficiently
@@ -40,22 +42,51 @@ self.onmessage = (evt: MessageEvent<InitMessage>) => {
     Velocity.y[eid] = 0;
   }
 
+  const useSharedBuffer = Boolean(data.sharedBuffer && data.floatsPerSnap);
+
+  // If SAB path: set up views
+  let ctrl: Int32Array | null = null;
+  let buffer: Float32Array | null = null;
+  let floatsPerSnap = 0;
+  if (useSharedBuffer) {
+    floatsPerSnap = data.floatsPerSnap!;
+    const HEADER_SIZE = Int32Array.BYTES_PER_ELEMENT;
+    ctrl = new Int32Array(data.sharedBuffer!, 0, 1);
+    buffer = new Float32Array(data.sharedBuffer!, HEADER_SIZE);
+  }
+
+  let writeIndex = 0; // toggles 0/1 for double buffer
+
   // Start fixed-step loop (60 Hz)
   const DT_MS = 1000 / 60;
   setInterval(() => {
     randomWalkSystem();
     movementSystem();
 
-    // Collect snapshot: 3 floats (lng, lat, rot) per NPC
     const ents = npcQuery(world);
-    const snap = new Float32Array(ents.length * 3);
-    for (let i = 0; i < ents.length; i++) {
-      const eid = ents[i];
-      snap[i * 3] = Position.x[eid];
-      snap[i * 3 + 1] = Position.y[eid];
-      snap[i * 3 + 2] = Rotation.angle[eid];
+
+    if (useSharedBuffer && ctrl && buffer) {
+      const offset = writeIndex * floatsPerSnap;
+      for (let i = 0; i < ents.length; i++) {
+        const eid = ents[i];
+        const base = offset + i * 3;
+        buffer[base] = Position.x[eid];
+        buffer[base + 1] = Position.y[eid];
+        buffer[base + 2] = Rotation.angle[eid];
+      }
+      Atomics.store(ctrl, 0, writeIndex);
+      Atomics.notify(ctrl, 0);
+      writeIndex ^= 1; // toggle between 0 and 1
+    } else {
+      // Fallback copy-based path
+      const snap = new Float32Array(ents.length * 3);
+      for (let i = 0; i < ents.length; i++) {
+        const eid = ents[i];
+        snap[i * 3] = Position.x[eid];
+        snap[i * 3 + 1] = Position.y[eid];
+        snap[i * 3 + 2] = Rotation.angle[eid];
+      }
+      (self as any).postMessage(snap, [snap.buffer]);
     }
-    // Post snapshot to UI thread (copy semantics for now)
-    (self as any).postMessage(snap, [snap.buffer]);
   }, DT_MS);
 }; 

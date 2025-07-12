@@ -1,7 +1,8 @@
 // controller/GameController.ts
 import GameState from "../model/GameState";
 import MapView from "../view/MapView";
-import { Position, Rotation, Velocity } from "../ecs/world";
+import { Position, Rotation } from "../ecs/world";
+import { bridge } from "../sim/SimulationBridge";
 import { FixedUpdatable } from "../loop/GameLoop";
 
 export default class GameController implements FixedUpdatable {
@@ -71,9 +72,9 @@ export default class GameController implements FixedUpdatable {
 
     const eid = this.playerEid;
 
-    // Reset velocity each frame; will be set if movement keys active
-    Velocity.x[eid] = 0;
-    Velocity.y[eid] = 0;
+    // We'll integrate position directly in this controller to avoid relying
+    // on the main-thread ECS movementSystem (which may be disabled when the
+    // simulation is running in a WebWorker).
 
     // Handle rotation
     if (this.currentInput.rotateLeft) {
@@ -126,20 +127,27 @@ export default class GameController implements FixedUpdatable {
         deltaLng += Math.sin(strafeRadians) * step;
       }
       
-      // Apply latitude correction for longitude movement
+      // Apply latitude correction for longitude movement so we move equal
+      // distances in metres regardless of latitude.
       const latRadians = (Position.y[eid] * Math.PI) / 180;
-      const correctedLngSpeed = deltaLng / Math.cos(latRadians);
+      const correctedLng = deltaLng / Math.cos(latRadians);
 
-      Velocity.x[eid] = correctedLngSpeed / deltaSec;
-      Velocity.y[eid] = deltaLat / deltaSec;
+      Position.x[eid] += correctedLng;
+      Position.y[eid] += deltaLat;
 
       positionChanged = true;
     }
 
-    // Update view if anything changed
-    // Keep GameState mirror (for HUD etc.)
-    this.state.player.lng = Position.x[eid];
-    this.state.player.lat = Position.y[eid];
-    this.state.player.rotation = Rotation.angle[eid];
+    // Sync GameState and notify bridge (even if worker is active) so the
+    // render thread has the latest authoritative coordinates.
+    if (positionChanged || rotationChanged) {
+      this.state.player.lng = Position.x[eid];
+      this.state.player.lat = Position.y[eid];
+      this.state.player.rotation = Rotation.angle[eid];
+
+      // Update shared snapshot for MapView
+      // (updateFromMainThread will no-op if the worker is already overriding.)
+      bridge.updateFromMainThread(Position.x[eid], Position.y[eid], Rotation.angle[eid]);
+    }
   }
 }

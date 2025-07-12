@@ -14,6 +14,9 @@ export class CameraController {
   /* player position to follow */
   private playerPosition: { lng: number; lat: number } | null = null;
 
+  // Remember the last centre we jumpTo so we avoid redundant calls
+  private lastCenter: { lng: number; lat: number } | null = null;
+
   /* bearing bookkeeping */
   private cameraBearing = 0;
 
@@ -46,7 +49,10 @@ export class CameraController {
     this.playerPosition = coords;
     // Avoid interrupting cinematic easeTo or other map animations
     if (!this.isBusy() && !this.map.isMoving()) {
-      this.map.setCenter([coords.lng, coords.lat]);
+      if (!this.lastCenter || coords.lng !== this.lastCenter.lng || coords.lat !== this.lastCenter.lat) {
+        this.map.jumpTo({ center: [coords.lng, coords.lat] });
+        this.lastCenter = { ...coords };
+      }
     }
   }
 
@@ -80,10 +86,9 @@ export class CameraController {
     const newZoom = this.continuousZoomDirection === 'in' ? Math.min(22, currentZoom + delta) : currentZoom + delta;
 
     if (this.playerPosition) {
-      this.map.easeTo({
+      this.map.jumpTo({
         center: [this.playerPosition.lng, this.playerPosition.lat],
         zoom: newZoom,
-        duration: 0, // instantaneous for smoothness
       });
     } else {
       this.map.setZoom(newZoom);
@@ -126,10 +131,9 @@ export class CameraController {
 
     // Apply rotation centred on player when possible
     if (this.playerPosition) {
-      this.map.easeTo({
+      this.map.jumpTo({
         center: [this.playerPosition.lng, this.playerPosition.lat],
         bearing: this.cameraBearing,
-        duration: 0,
       });
     } else {
       this.map.setBearing(this.cameraBearing);

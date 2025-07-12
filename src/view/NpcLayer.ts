@@ -34,7 +34,8 @@ export default class NpcLayer implements Renderable {
     if (!ctx) return;
 
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    const size = Math.max(2, Math.pow(2, this.map.getZoom() - 12));
+    // Draw much smaller squares so they don't cover the map (≈ 3 px at typical zoom).
+    const size = 3; // constant size in screen pixels
     ctx.fillStyle = 'rgba(200,0,0,0.6)';
 
     if (bridge.isWorkerEnabled()) {
