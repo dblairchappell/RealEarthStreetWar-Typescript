@@ -19,7 +19,8 @@ import NpcInstancedLayer from "./view/NpcInstancedLayer";
 import { bridge } from "./sim/SimulationBridge";
 import { CommandType } from "./sim/Command";
 import NpcLayer from "./view/NpcLayer";
-import { ENABLE_GLOBE } from "./config";
+import { ENABLE_GLOBE, SHOW_PERF_OVERLAY } from "./config";
+import { SpriteRef } from "./ecs/components/SpriteRef";
 
 
 const state = new GameState();
@@ -169,11 +170,13 @@ map.on('load', () => {
             addComponent(world, Rotation, eid);
             addComponent(world, Velocity, eid);
             addComponent(world, NpcTag, eid);
+            addComponent(world, SpriteRef, eid);
             Position.x[eid] = lng;
             Position.y[eid] = lat;
             Rotation.angle[eid] = 0;
             Velocity.x[eid] = 0;
             Velocity.y[eid] = 0;
+            SpriteRef.id[eid] = 0;
         }
 
         const ecsRunner = {
@@ -206,8 +209,10 @@ map.on('load', () => {
         }
     }
 
-    const overlay = new PerfOverlay();
-    loop.add(overlay);
+    if (SHOW_PERF_OVERLAY) {
+        const overlay = new PerfOverlay();
+        loop.add(overlay);
+    }
     loop.start();
 
     // Expose for dev console (small dev aid)

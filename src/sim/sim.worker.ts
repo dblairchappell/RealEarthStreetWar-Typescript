@@ -2,6 +2,7 @@
 
 import { addComponent, addEntity } from 'bitecs';
 import { world, Position, Rotation, Velocity } from '../ecs/world';
+import { SpriteRef } from '../ecs/components/SpriteRef';
 import { NpcTag } from '../ecs/components/NpcTag';
 import { movementSystem } from '../ecs/systems/movementSystem';
 // We will implement a custom random-walk that can operate on subsets to allow LOD.
@@ -99,11 +100,13 @@ self.onmessage = (evt: MessageEvent<any>) => {
     addComponent(world, Rotation, eid);
     addComponent(world, Velocity, eid);
     addComponent(world, NpcTag, eid);
+    addComponent(world, SpriteRef, eid);
     Position.x[eid] = lng;
     Position.y[eid] = lat;
     Rotation.angle[eid] = 0;
     Velocity.x[eid] = 0;
     Velocity.y[eid] = 0;
+    SpriteRef.id[eid] = 0;
   }
 
   const useSharedBuffer = Boolean(data.sharedBuffer && data.floatsPerSnap);
@@ -183,11 +186,13 @@ self.onmessage = (evt: MessageEvent<any>) => {
             addComponent(world, Rotation, eid);
             addComponent(world, Velocity, eid);
             addComponent(world, NpcTag, eid);
+            addComponent(world, SpriteRef, eid);
             Position.x[eid] = lng;
             Position.y[eid] = lat;
             Rotation.angle[eid] = c;
             Velocity.x[eid] = 0;
             Velocity.y[eid] = 0;
+            SpriteRef.id[eid] = 0;
             break;
           case 2: // DestroyEntity
             // not implemented yet

@@ -28,6 +28,9 @@ export default class GameLoop {
   public static readonly FIXED_DT = 1000 / 60; // 16.666… ms
   private readonly MAX_STEPS = 5;
 
+  // Expose per-frame CPU usage (percentage of rAF delta spent inside GameLoop)
+  public static cpuPercent = 0;
+
   /** Register a subsystem that implements `update(deltaMs)` */
   add(u: Updatable): void {
     this.updatables.push(u);
@@ -94,6 +97,8 @@ export default class GameLoop {
     }
 
     // Variable-delta updates (legacy)
+    // Measure work time – start when we enter the heavy work section
+    const workStart = performance.now();
     for (const u of [...this.updatables]) {
       u.update(delta);
     }
@@ -102,6 +107,10 @@ export default class GameLoop {
     for (const r of this.renderables) {
       r.render(alpha);
     }
+
+    // Compute CPU utilisation for this frame (cap at 100%)
+    const workTime = performance.now() - workStart;
+    GameLoop.cpuPercent = delta > 0 ? Math.min(100, (workTime / delta) * 100) : 0;
 
     requestAnimationFrame(this.tick);
   };

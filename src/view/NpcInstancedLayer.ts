@@ -26,6 +26,14 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
   private posBuffer!: WebGLBuffer;
   private aPosLocation = 0;
   private uMatrixLocation!: WebGLUniformLocation;
+  private uTexLocation!: WebGLUniformLocation;
+  private uPointSizeLocation!: WebGLUniformLocation;
+
+  /* ───────── Sprite texture ───────── */
+  private texture!: WebGLTexture;
+  private textureLoaded = false;
+  // Hard-coded path to the first frame of the player idle strip (31×1 atlas).
+  private static readonly SPRITE_SRC = 'sprites/brian/brian_idling/0000.png';
 
   // Debug helper
   private dbgFrame = 0;
@@ -33,25 +41,47 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
   // ECS query for fallback path (no worker)
   private query = defineQuery([NpcTag, Position]);
 
+  // Desired pixel size of NPC sprite (before devicePixelRatio scaling)
+  private static readonly POINT_SIZE_PX = 64;
+
   /* ---------------- MapLibre hooks ---------------- */
   onAdd(map: maplibregl.Map, gl: WebGLRenderingContext): void {
     this.map = map;
     // Ensure we are working with a WebGL2 context – MapLibre creates WebGL1 but we can cast.
     this.gl = gl as WebGLRenderingContext;
 
+    /* -------- Load sprite texture -------- */
+    const img = new Image();
+    img.src = NpcInstancedLayer.SPRITE_SRC.startsWith('/') ? NpcInstancedLayer.SPRITE_SRC : '/' + NpcInstancedLayer.SPRITE_SRC;
+    img.onload = () => {
+      this.texture = this.gl.createTexture()!;
+      this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture);
+      this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, img);
+      this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
+      this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST);
+      this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
+      this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
+      this.textureLoaded = true;
+    };
+
     const vertSrc = `
     precision mediump float;
     uniform mat4 u_matrix;
+    uniform float u_pointSize;
     attribute vec3 a_pos;
     void main() {
       gl_Position = u_matrix * vec4(a_pos, 1.0);
-      gl_PointSize = 10.0; // pixel size of NPC square for better visibility
+      gl_PointSize = u_pointSize;
     }`;
 
     const fragSrc = `
     precision mediump float;
+    uniform sampler2D u_tex;
     void main() {
-      gl_FragColor = vec4(0.8, 0.0, 0.0, 0.6);
+      vec2 uv = gl_PointCoord.xy;
+      vec4 color = texture2D(u_tex, uv);
+      if (color.a < 0.1) discard;
+      gl_FragColor = color;
     }`;
 
     const vert = compileShader(this.gl, this.gl.VERTEX_SHADER, vertSrc);
@@ -65,7 +95,9 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
     }
 
     this.aPosLocation = this.gl.getAttribLocation(this.program, 'a_pos');
-    this.uMatrixLocation = this.gl.getUniformLocation(this.program, 'u_matrix')!;
+    this.uMatrixLocation     = this.gl.getUniformLocation(this.program, 'u_matrix')!;
+    this.uTexLocation        = this.gl.getUniformLocation(this.program, 'u_tex')!;
+    this.uPointSizeLocation  = this.gl.getUniformLocation(this.program, 'u_pointSize')!;
 
     // Create empty buffer upfront; we re-populate each frame
     this.posBuffer = this.gl.createBuffer()!;
@@ -145,6 +177,17 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
 
     // Set state and draw
     g.useProgram(this.program);
+    // Bind texture if ready
+    if (this.textureLoaded) {
+      g.activeTexture(g.TEXTURE0);
+      g.bindTexture(g.TEXTURE_2D, this.texture);
+      g.uniform1i(this.uTexLocation, 0);
+    }
+
+    // Set point size (account for devicePixelRatio so on high-DPI displays the sprite stays crisp)
+    const sizePx = NpcInstancedLayer.POINT_SIZE_PX * (window.devicePixelRatio || 1);
+    g.uniform1f(this.uPointSizeLocation, sizePx);
+
     // MapLibre versions provide the matrix in different locations:
     //  • v1.x: second argument is Float32Array (16)
     //  • v2.x+: second argument is an object implementing CustomRenderMethodInput

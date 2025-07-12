@@ -1,4 +1,5 @@
 import { Updatable } from "../loop/GameLoop";
+import GameLoop from "../loop/GameLoop";
 
 export default class PerfOverlay implements Updatable {
   private el: HTMLDivElement;
@@ -7,6 +8,7 @@ export default class PerfOverlay implements Updatable {
 
   private frameCount = 0;
   private timeAccum = 0;
+  private cpuAccum = 0;
 
   constructor() {
     // Create DOM element
@@ -38,12 +40,17 @@ export default class PerfOverlay implements Updatable {
   update(deltaMs: number): void {
     this.frameCount++;
     this.timeAccum += deltaMs;
+    this.cpuAccum += GameLoop.cpuPercent;
     if (this.timeAccum >= 1000) {
       const fps = (this.frameCount * 1000) / this.timeAccum;
       const avgMs = this.timeAccum / this.frameCount;
-      this.el.textContent = `${fps.toFixed(1)} fps | ${avgMs.toFixed(2)} ms`; // simple average
+      const avgCpuSingle = this.cpuAccum / this.frameCount; // utilisation of main JS thread (max 100)
+      const hwThreads = navigator.hardwareConcurrency || 1;
+      const avgCpuProcess = Math.min(100, avgCpuSingle / hwThreads);
+      this.el.textContent = `${fps.toFixed(1)} fps | ${avgMs.toFixed(2)} ms | ${avgCpuSingle.toFixed(0)}% core | ${avgCpuProcess.toFixed(1)}% sys`;
       this.frameCount = 0;
       this.timeAccum = 0;
+      this.cpuAccum = 0;
     }
   }
 
