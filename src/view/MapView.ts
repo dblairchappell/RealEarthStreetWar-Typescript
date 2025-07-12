@@ -6,6 +6,7 @@ import { IInputService } from "../input/IInputService";
 import { InputState } from "../input/InputTypes";
 import { GTA1_STYLE_TOP_DOWN } from "../config";
 import { InfluenceLayer, MarkerLayer, CameraController, FeatureQuery } from './map';
+import { Position, Rotation } from "../ecs/world";
 import { Updatable } from "../loop/GameLoop";
 import maplibregl from 'maplibre-gl';
 import { Protocol } from 'pmtiles';
@@ -32,6 +33,9 @@ export default class MapView implements Updatable {
   private inputManager: IInputService;
   private createdOwnInputManager: boolean = false;
   private influenceLayer: InfluenceLayer | null = null;
+
+  // ECS player entity id (optional)
+  private playerEid: number | null = null;
 
   constructor(containerId: string = 'map', inputService?: IInputService) {
     // Set up PMTiles protocol for loading .pmtiles files
@@ -241,6 +245,19 @@ export default class MapView implements Updatable {
     if (this.characterView) {
       this.characterView.update(deltaMs);
     }
+
+    if (this.playerEid !== null) {
+      const lng = Position.x[this.playerEid];
+      const lat = Position.y[this.playerEid];
+      const rot = Rotation.angle[this.playerEid];
+
+      this.updatePlayerPosition({ lng, lat }, rot);
+    }
+  }
+
+  /** Set the ECS entity id representing the player */
+  public setPlayerEntity(id: number) {
+    this.playerEid = id;
   }
 
   public destroy(): void {

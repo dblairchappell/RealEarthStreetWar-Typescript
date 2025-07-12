@@ -44,7 +44,8 @@ export class CameraController {
    */
   follow(coords: { lng: number; lat: number }): void {
     this.playerPosition = coords;
-    if (!this.isBusy()) {
+    // Avoid interrupting cinematic easeTo or other map animations
+    if (!this.isBusy() && !this.map.isMoving()) {
       this.map.setCenter([coords.lng, coords.lat]);
     }
   }

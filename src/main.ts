@@ -1,6 +1,8 @@
 import GameState, { HQType } from "./model/GameState";
 import MapView, { MapViewCallbacks } from "./view/MapView";
 import GameController from "./controller/GameController";
+import { world, createPlayerEntity, Position, Rotation } from "./ecs/world";
+import { movementSystem } from "./ecs/systems/movementSystem";
 import HUDView, { HUDViewCallbacks } from "./view/HUDView";
 import InputManager from "./input/InputManager";
 import GameLoop from "./loop/GameLoop";
@@ -18,6 +20,9 @@ const hud = new HUDView();
 const input = new InputManager();
 
 const view = new MapView('map', input);
+// Player entity will be created once map is ready; placeholder id -1 for now
+let playerEid: number = -1;
+
 const controller = new GameController(state, view);
 
 // Get the map instance from the view
@@ -112,10 +117,14 @@ map.on('load', () => {
     // Set up MapView callbacks
     view.setCallbacks(mapCallbacks);
     
-    // Create player character at the player's starting position
+    // Create ECS entity for player and corresponding sprite
+    playerEid = createPlayerEntity(state.player.lng, state.player.lat, state.player.rotation);
+    controller.setPlayerEntity(playerEid);
+    view.setPlayerEntity(playerEid);
+
     view.createPlayerCharacter(
-        { lng: state.player.lng, lat: state.player.lat }, 
-        state.player.rotation
+        { lng: Position.x[playerEid], lat: Position.y[playerEid] }, 
+        Rotation.angle[playerEid]
     );
     
     // Initial view update
@@ -124,6 +133,9 @@ map.on('load', () => {
     // Start the rAF-driven game loop
     const loop = new GameLoop();
     loop.add(controller);
+    // Runner that executes ECS systems pipeline each frame
+    const ecsRunner = { update: (dt: number) => { movementSystem(dt); } };
+    loop.add(ecsRunner as any);
     loop.add(view);            // MapView handles per-frame sprite animation
 
     const overlay = new PerfOverlay();

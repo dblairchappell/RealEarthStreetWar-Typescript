@@ -1,6 +1,7 @@
 // controller/GameController.ts
 import GameState from "../model/GameState";
 import MapView from "../view/MapView";
+import { Position, Rotation, Velocity } from "../ecs/world";
 
 export default class GameController {
   /**
@@ -20,7 +21,12 @@ export default class GameController {
     running: false
   };
 
-  constructor(private state: GameState, private view: MapView) {
+  constructor(private state: GameState, private view: MapView) {}
+
+  private playerEid: number | null = null;
+
+  public setPlayerEntity(id: number) {
+    this.playerEid = id;
   }
 
   /**
@@ -56,25 +62,33 @@ export default class GameController {
 
   // Update the movement logic — deltaSec is seconds since last frame
   private updatePlayerMovement(deltaSec: number) {
+    if (this.playerEid === null) return;
+
     let positionChanged = false;
     let rotationChanged = false;
 
+    const eid = this.playerEid;
+
+    // Reset velocity each frame; will be set if movement keys active
+    Velocity.x[eid] = 0;
+    Velocity.y[eid] = 0;
+
     // Handle rotation
     if (this.currentInput.rotateLeft) {
-      this.state.player.rotation -= GameState.PLAYER_ROTATION_SPEED * deltaSec;
-      this.state.player.rotation = ((this.state.player.rotation % 360) + 360) % 360; // Normalize to 0-360
+      Rotation.angle[eid] -= GameState.PLAYER_ROTATION_SPEED * deltaSec;
+      Rotation.angle[eid] = ((Rotation.angle[eid] % 360) + 360) % 360;
       rotationChanged = true;
     }
     
     if (this.currentInput.rotateRight) {
-      this.state.player.rotation += GameState.PLAYER_ROTATION_SPEED * deltaSec;
-      this.state.player.rotation = ((this.state.player.rotation % 360) + 360) % 360; // Normalize to 0-360
+      Rotation.angle[eid] += GameState.PLAYER_ROTATION_SPEED * deltaSec;
+      Rotation.angle[eid] = ((Rotation.angle[eid] % 360) + 360) % 360;
       rotationChanged = true;
     }
 
     // Handle movement (forward/backward and strafing)
     if (this.currentInput.forward || this.currentInput.backward || this.currentInput.left || this.currentInput.right) {
-      const radians = (this.state.player.rotation * Math.PI) / 180;
+      const radians = (Rotation.angle[eid] * Math.PI) / 180;
       
       // Choose speed based on whether player is running
       const moveSpeedDegPerSec = this.currentInput.running ? GameState.PLAYER_RUN_SPEED : GameState.PLAYER_MOVE_SPEED;
@@ -111,21 +125,19 @@ export default class GameController {
       }
       
       // Apply latitude correction for longitude movement
-      const latRadians = (this.state.player.lat * Math.PI) / 180;
-      const correctedDeltaLng = deltaLng / Math.cos(latRadians);
-      
-      this.state.player.lat += deltaLat;
-      this.state.player.lng += correctedDeltaLng;
-      
+      const latRadians = (Position.y[eid] * Math.PI) / 180;
+      const correctedLngSpeed = deltaLng / Math.cos(latRadians);
+
+      Velocity.x[eid] = correctedLngSpeed / deltaSec;
+      Velocity.y[eid] = deltaLat / deltaSec;
+
       positionChanged = true;
     }
 
     // Update view if anything changed
-    if (positionChanged || rotationChanged) {
-      this.view.updatePlayerPosition(
-        { lng: this.state.player.lng, lat: this.state.player.lat },
-        this.state.player.rotation
-      );
-    }
+    // Keep GameState mirror (for HUD etc.)
+    this.state.player.lng = Position.x[eid];
+    this.state.player.lat = Position.y[eid];
+    this.state.player.rotation = Rotation.angle[eid];
   }
 }
