@@ -20,6 +20,9 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
   type: 'custom' = 'custom';
   renderingMode: '2d' | '3d' = '3d';
 
+  // Flag to choose coordinate conversion method
+  private static readonly USE_SCREEN_COORDS = false; // Set to false for Mercator approach
+
   private map!: maplibregl.Map;
   private gl!: WebGLRenderingContext;
   private program!: WebGLProgram;
@@ -49,7 +52,7 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
     const scale  = Math.pow(2, (zoom - referenceZoom) / 1.4); //Dividing by 1.4 stretches the curve so the sprite halves every 1.4 zoom levels; it shrinks a little slower
     // const scale  = Math.pow(2, (zoom - referenceZoom));
     const size   = Math.max(4, Math.min(72, NpcInstancedLayer.BASE_SIZE_PX * scale));
-    console.log('size', size);
+    // console.log('size', size);
     return size;
   }
 
@@ -73,18 +76,25 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
       this.textureLoaded = true;
     };
 
-    const vertSrc = `
-    precision mediump float;
+    const vertSrc = NpcInstancedLayer.USE_SCREEN_COORDS ? `
+    precision highp float;
+    uniform float u_pointSize;
+    attribute vec2 a_pos;
+    void main() {
+      gl_Position = vec4(a_pos / vec2(512.0, 512.0) * 2.0 - 1.0, 0.0, 1.0);
+      gl_PointSize = u_pointSize;
+    }` : `
+    precision highp float;
     uniform mat4 u_matrix;
     uniform float u_pointSize;
-    attribute vec3 a_pos;
+    attribute vec3 a_pos;   // relative world-pixel offset from centre (centre baked into matrix)
     void main() {
       gl_Position = u_matrix * vec4(a_pos, 1.0);
       gl_PointSize = u_pointSize;
     }`;
 
     const fragSrc = `
-    precision mediump float;
+    precision highp float;
     uniform sampler2D u_tex;
     void main() {
       vec2 uv = gl_PointCoord.xy;
@@ -156,33 +166,76 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
     // }
 
     // Convert to mercator world coords expected by MapLibre matrix
-    const mercArray = new Float32Array(count * 3);
-    const worldSize = (this.map as any).transform?.worldSize || 512;
-    // MapLibre expects coordinates in "world" units where the full map width at the
-    // current zoom equals `transform.worldSize`. Multiply the normalised Mercator
-    // [0-1] coordinate by this `worldSize` to get the correct value for every zoom.
-    const scale = worldSize;
-    for (let i = 0; i < count; i++) {
-      const lng = lngLatArray[i * 2];
-      const lat = lngLatArray[i * 2 + 1];
-      const merc = maplibregl.MercatorCoordinate.fromLngLat({ lng, lat });
-      // MapLibre's matrix expects world coordinates where the full world at zoom 0
-      // spans 512 units. Multiply by 512 so points land at the right spot regardless
-      // of projection (mercator vs. globe).
-      mercArray[i * 3] = merc.x * scale;
-      mercArray[i * 3 + 1] = merc.y * scale;
-      mercArray[i * 3 + 2] = 0.0; // altitude 0
-    }
+    // Variables for centre translation uniform (populated when using Mercator coordinates)
+    let centrePxX = 0;
+    let centrePxY = 0;
 
-    // Upload data to buffer
-    g.bindBuffer(g.ARRAY_BUFFER, this.posBuffer);
-    // Resize buffer if needed
-    const neededBytes = mercArray.byteLength;
-    const currentSize = g.getBufferParameter(g.ARRAY_BUFFER, g.BUFFER_SIZE);
-    if (neededBytes > currentSize) {
-      g.bufferData(g.ARRAY_BUFFER, neededBytes, g.DYNAMIC_DRAW);
+    if (NpcInstancedLayer.USE_SCREEN_COORDS) {
+      // Screen coordinate approach - should fix precision issues
+      const screenArray = new Float32Array(count * 2);
+      for (let i = 0; i < count; i++) {
+        const lng = lngLatArray[i * 2];
+        const lat = lngLatArray[i * 2 + 1];
+        const screenPos = this.map.project({ lng, lat });
+        screenArray[i * 2] = screenPos.x;
+        screenArray[i * 2 + 1] = screenPos.y;
+      }
+      
+      // Upload screen coordinates (2D instead of 3D)
+      g.bindBuffer(g.ARRAY_BUFFER, this.posBuffer);
+      const neededBytes = screenArray.byteLength;
+      const currentSize = g.getBufferParameter(g.ARRAY_BUFFER, g.BUFFER_SIZE);
+      if (neededBytes > currentSize) {
+        g.bufferData(g.ARRAY_BUFFER, neededBytes, g.DYNAMIC_DRAW);
+      }
+      g.bufferSubData(g.ARRAY_BUFFER, 0, screenArray);
+      
+      // Draw with 2D coordinates
+      g.vertexAttribPointer(this.aPosLocation, 2, g.FLOAT, false, 0, 0);
+      
+    } else {
+      // Original Mercator coordinate approach
+      const mercArray = new Float32Array(count * 3);
+      // Calculate map centre in Mercator coordinates to obtain a stable, small-offset origin
+      const centreMerc = maplibregl.MercatorCoordinate.fromLngLat(this.map.getCenter());
+      const worldSize = (this.map as any).transform?.worldSize || 512;
+      const scale = worldSize;
+      // Precompute world-pixel centre for shader uniform
+      centrePxX = centreMerc.x * scale;
+      centrePxY = centreMerc.y * scale;
+      for (let i = 0; i < count; i++) {
+        const lng = lngLatArray[i * 2];
+        const lat = lngLatArray[i * 2 + 1];
+        const merc = maplibregl.MercatorCoordinate.fromLngLat({ lng, lat });
+        const dx = (merc.x - centreMerc.x) * scale;   //  <-- subtract first, then scale
+        const dy = (merc.y - centreMerc.y) * scale;
+        mercArray[i * 3] = dx;
+        mercArray[i * 3 + 1] = dy;
+        mercArray[i * 3 + 2] = 0.0; // altitude 0
+      }
+
+      // Upload data to buffer
+      g.bindBuffer(g.ARRAY_BUFFER, this.posBuffer);
+      const neededBytes = mercArray.byteLength;
+      const currentSize = g.getBufferParameter(g.ARRAY_BUFFER, g.BUFFER_SIZE);
+      if (neededBytes > currentSize) {
+        g.bufferData(g.ARRAY_BUFFER, neededBytes, g.DYNAMIC_DRAW);
+      }
+      g.bufferSubData(g.ARRAY_BUFFER, 0, mercArray);
+      
+      // Draw with 3D coordinates
+      g.vertexAttribPointer(this.aPosLocation, 3, g.FLOAT, false, 0, 0);
+
+      // Debug code - move here
+      if (this.dbgFrame === 0 && count > 0) {
+        console.log(`WebGL Debug - First NPC:`);
+        console.log(`  lng/lat: ${lngLatArray[0].toFixed(9)}, ${lngLatArray[1].toFixed(9)}`);
+        console.log(`  mercator: ${mercArray[0].toFixed(9)}, ${mercArray[1].toFixed(9)}`);
+        console.log(`  worldSize: ${worldSize}`);
+        console.log(`  map center: ${this.map.getCenter().lng.toFixed(9)}, ${this.map.getCenter().lat.toFixed(9)}`);
+        console.log(`  map zoom: ${this.map.getZoom().toFixed(3)}`);
+      }
     }
-    g.bufferSubData(g.ARRAY_BUFFER, 0, mercArray);
 
     // Set state and draw
     g.useProgram(this.program);
@@ -192,6 +245,8 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
       g.bindTexture(g.TEXTURE_2D, this.texture);
       g.uniform1i(this.uTexLocation, 0);
     }
+
+    // No need for centre uniform – baked into adjusted matrix
 
     // Set point size (account for devicePixelRatio so on high-DPI displays the sprite stays crisp)
     const zoom = this.map.getZoom();
@@ -226,6 +281,27 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
       return; // skip this frame to avoid GL error
     }
 
+    // ─── Inject centre translation so vertex coords remain relative (small) ───
+    if (!NpcInstancedLayer.USE_SCREEN_COORDS) {
+      // Construct a new matrix: matF32 * Translate(centrePxX, centrePxY)
+      const tx = centrePxX;
+      const ty = centrePxY;
+      // Manual multiplication of matF32 * translation matrix [1 0 0 tx; 0 1 0 ty; 0 0 1 0; 0 0 0 1]
+      // Only the 4th column changes: newCol = mat * vec4(tx, ty, 0, 1)
+      const m = matF32;
+      const newMat = new Float32Array(16);
+      // Copy first three columns (indices 0..11)
+      newMat[0] = m[0];  newMat[1] = m[1];  newMat[2] = m[2];  newMat[3] = m[3];
+      newMat[4] = m[4];  newMat[5] = m[5];  newMat[6] = m[6];  newMat[7] = m[7];
+      newMat[8] = m[8];  newMat[9] = m[9];  newMat[10]= m[10]; newMat[11]= m[11];
+      // Compute translated 4th column
+      newMat[12] = m[0]*tx + m[4]*ty + m[12];
+      newMat[13] = m[1]*tx + m[5]*ty + m[13];
+      newMat[14] = m[2]*tx + m[6]*ty + m[14];
+      newMat[15] = m[3]*tx + m[7]*ty + m[15];
+      matF32 = newMat;
+    }
+
     // Ensure we draw above the basemap — disable depth test for this 2-D layer
     g.disable(g.DEPTH_TEST);
     // Enable alpha blending so semi-transparent points blend correctly
@@ -234,7 +310,7 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
     g.uniformMatrix4fv(this.uMatrixLocation, false, matF32);
 
     g.enableVertexAttribArray(this.aPosLocation);
-    g.vertexAttribPointer(this.aPosLocation, 3, g.FLOAT, false, 0, 0);
+    // g.vertexAttribPointer(this.aPosLocation, 3, g.FLOAT, false, 0, 0); // This line is now handled by the if/else block
 
     g.drawArrays(g.POINTS, 0, count);
 

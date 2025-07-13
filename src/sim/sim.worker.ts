@@ -7,9 +7,11 @@ import { NpcTag } from '../ecs/components/NpcTag';
 import { movementSystem } from '../ecs/systems/movementSystem';
 // We will implement a custom random-walk that can operate on subsets to allow LOD.
 import { defineQuery } from 'bitecs';
+// import { randomWalkSystem } from '../ecs/systems/randomWalkSystem';
+import { straightWalkSystem, initializeStraightWalkNpcs } from '../ecs/systems/straightWalkSystem';
 
 /* ---------------- Random-walk AI helper (subset-capable) ---------------- */
-const RW_SPEED = 0.00002;
+const RW_SPEED = 0.000000225;
 const RW_CHANGE_TIMER = 180;
 const rwChangeCounter: number[] = [];
 
@@ -109,6 +111,9 @@ self.onmessage = (evt: MessageEvent<any>) => {
     SpriteRef.id[eid] = 0;
   }
 
+  // Initialize NPCs to walk in straight lines radiating outward
+  initializeStraightWalkNpcs(player.lng, player.lat);
+
   const useSharedBuffer = Boolean(data.sharedBuffer && data.floatsPerSnap);
 
   // If SAB path: set up views
@@ -154,10 +159,15 @@ self.onmessage = (evt: MessageEvent<any>) => {
     const midEnts  = queryNear(camLng, camLat, MID_DEG);
     const farEnts  = npcQuery(world).filter(eid => !midEnts.includes(eid));
 
-    // Run AI for far band every 6th tick, mid every 3rd, near every tick
-    if (lodTick % 6 === 0) runRandomWalk(farEnts);
-    if (lodTick % 3 === 0) runRandomWalk(midEnts);
-    runRandomWalk(nearEnts);
+    // // Run AI for far band every 6th tick, mid every 3rd, near every tick
+    // if (lodTick % 6 === 0) runRandomWalk(farEnts);
+    // if (lodTick % 3 === 0) runRandomWalk(midEnts);
+    // runRandomWalk(nearEnts);
+
+    // Temporarily disable LOD - run all NPCs at full rate
+    // const allNpcs = npcQuery(world);
+    // runRandomWalk(allNpcs);
+    straightWalkSystem();
 
     // Movement integration stays full rate for all entities (cheap)
     movementSystem();

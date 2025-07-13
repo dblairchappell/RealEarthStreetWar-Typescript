@@ -5,17 +5,30 @@ import { NpcTag } from '../components/NpcTag';
 
 const npcQuery = defineQuery([NpcTag, Position, Velocity, Rotation]);
 
-const SPEED = 0.00002;    
-const CHANGE_TIMER = 180;  // change direction every frame
+const SPEED = 0.000000225;    
+const CHANGE_TIMER = 180;  
 
 // Local timer per entity (sparse array)
 const changeCounter: number[] = [];
 
+// Debug tracking
+let systemCallCount = 0;
+let lastLogTime = 0;
+
 export function randomWalkSystem(): void {
+  systemCallCount++;
+  const now = performance.now();
+  
+  // Log system call frequency
+  if (now - lastLogTime > 1000) {
+    console.log(`randomWalkSystem called ${systemCallCount} times in last second`);
+    systemCallCount = 0;
+    lastLogTime = now;
+  }
+  
   const ents = npcQuery(world);
   for (let i = 0; i < ents.length; i++) {
     const eid = ents[i];
-    // if (i === 0) console.log('vel', SPEED, Velocity.x[eid].toFixed(6));
     changeCounter[eid] = (changeCounter[eid] || 0) - 1;
     if (changeCounter[eid] <= 0) {
       changeCounter[eid] = Math.floor(Math.random()*CHANGE_TIMER)+CHANGE_TIMER;
@@ -23,6 +36,11 @@ export function randomWalkSystem(): void {
       Rotation.angle[eid] = angleRad * 180 / Math.PI;
       Velocity.x[eid] = Math.cos(angleRad) * SPEED;
       Velocity.y[eid] = Math.sin(angleRad) * SPEED;
+      
+      // Debug velocity changes
+      if (i === 0) {
+        console.log(`NPC ${eid} direction change: angle=${angleRad.toFixed(3)}, velocity=(${Velocity.x[eid].toFixed(10)}, ${Velocity.y[eid].toFixed(10)})`);
+      }
     }
   }
 } 
