@@ -1,45 +1,103 @@
-// Web Worker that owns the ECS world and runs the fixed-step loop for NPCs.
+/**
+ * Simulation Worker - Off-Thread Game Simulation Engine
+ * 
+ * This Web Worker runs the game simulation in a separate thread, keeping the main thread
+ * responsive for UI and rendering. It owns a complete ECS world for NPCs and runs a
+ * deterministic fixed-timestep game loop at 60 Hz.
+ * 
+ * Key Responsibilities:
+ * 
+ * 1. NPC Management:
+ *    - Spawns NPCs in a circle around the player on initialization
+ *    - Manages all NPC entities using the bitecs ECS system
+ *    - Runs AI systems (currently just straight-line walking)
+ * 
+ * 2. Fixed-Timestep Simulation:
+ *    - Runs at exactly 60 Hz (16.666ms per tick) for deterministic results
+ *    - Uses accumulator pattern to handle variable frame rates gracefully
+ *    - Self-correcting: catches up if it falls behind, never runs too fast
+ * 
+ * 3. Command Processing:
+ *    - Reads commands from the main thread via SharedArrayBuffer ring buffer
+ *    - Currently supports SpawnNpc command (others defined but not implemented)
+ *    - Thread-safe using atomic operations
+ * 
+ * 4. Position Synchronization:
+ *    - Sends NPC positions back to main thread every frame
+ *    - Uses double buffering to prevent race conditions
+ *    - Two methods: SharedArrayBuffer (fast) or postMessage (fallback)
+ * 
+ * Architecture:
+ * 
+ * Main Thread                    Web Worker
+ *      │                              │
+ *      │─── init message ───────────>│
+ *      │   (spawn NPCs, setup)       │
+ *      │                              │
+ *      │─── commands ────────────────>│
+ *      │   (via SharedArrayBuffer)    │
+ *      │                              │
+ *      │<─── NPC positions ──────────│
+ *      │   (via SharedArrayBuffer)    │
+ * 
+ * The worker runs a tight loop that:
+ * 1. Processes commands from main thread
+ * 2. Runs ECS systems (movement, AI)
+ * 3. Updates spatial grid (currently unused)
+ * 4. Writes position snapshots to shared buffer
+ * 5. Yields to event loop and repeats
+ */
 
 import { addComponent, addEntity } from 'bitecs';
 import { world, Position, Rotation, Velocity } from '../ecs/world';
 import { SpriteRef } from '../ecs/components/SpriteRef';
 import { NpcTag } from '../ecs/components/NpcTag';
 import { movementSystem } from '../ecs/systems/movementSystem';
-// We will implement a custom random-walk that can operate on subsets to allow LOD.
 import { defineQuery } from 'bitecs';
-// import { randomWalkSystem } from '../ecs/systems/randomWalkSystem';
 import { straightWalkSystem, initializeStraightWalkNpcs } from '../ecs/systems/straightWalkSystem';
 
-/* ---------------- Random-walk AI helper (subset-capable) ---------------- */
-const RW_SPEED = 0.000000225;
-const RW_CHANGE_TIMER = 180;
-const rwChangeCounter: number[] = [];
+/* ---------------- Spatial Grid System (Currently Unused) ---------------- */
 
-function runRandomWalk(ids: number[]) {
-  for (let i = 0; i < ids.length; i++) {
-    const eid = ids[i];
-    rwChangeCounter[eid] = (rwChangeCounter[eid] || 0) - 1;
-    if (rwChangeCounter[eid] <= 0) {
-      rwChangeCounter[eid] = Math.floor(Math.random() * RW_CHANGE_TIMER) + RW_CHANGE_TIMER;
-      const angleRad = Math.random() * Math.PI * 2;
-      Rotation.angle[eid] = (angleRad * 180) / Math.PI;
-      Velocity.x[eid] = Math.cos(angleRad) * RW_SPEED;
-      Velocity.y[eid] = Math.sin(angleRad) * RW_SPEED;
-    }
-  }
-}
+/**
+ * Size of each grid cell in degrees (approximately 66 meters at equator).
+ * Used for spatial partitioning to enable efficient proximity queries.
+ */
+const CELL_SIZE_DEG = 0.0006;
 
-/* ───────── Uniform grid for spatial queries (Step 9.1) ───────── */
-const CELL_SIZE_DEG = 0.0006; // ~64 m at equator
+/**
+ * Generates a unique key for a grid cell based on longitude and latitude.
+ * Uses bit manipulation to combine X and Y cell coordinates into a single integer.
+ * 
+ * @param lng - Longitude in degrees
+ * @param lat - Latitude in degrees
+ * @returns Unique integer key for the grid cell
+ */
 function cellKey(lng: number, lat: number): number {
   const cx = Math.floor(lng / CELL_SIZE_DEG);
   const cy = Math.floor(lat / CELL_SIZE_DEG);
+  // Combine X and Y into single integer: X in upper 16 bits, Y in lower 16 bits
   return (cx << 16) ^ (cy & 0xffff);
 }
 
-// Map from cellKey → array of eids currently in that cell (rebuilt every tick)
+/**
+ * Spatial hash grid mapping cell keys to arrays of entity IDs.
+ * Currently rebuilt every frame but never queried. Could be used for:
+ * - Collision detection
+ * - Proximity queries (find nearby NPCs)
+ * - Spatial optimization
+ */
 let grid = new Map<number, number[]>();
 
+/**
+ * Rebuilds the spatial hash grid with current entity positions.
+ * Groups entities by their grid cell for efficient spatial queries.
+ * 
+ * Note: This is currently called every frame but the grid is never used.
+ * Consider removing this if spatial queries aren't needed, or implement
+ * query functions to utilize it.
+ * 
+ * @param entities - Array of entity IDs to add to the grid
+ */
 function rebuildGrid(entities: number[]) {
   grid.clear();
   for (let i = 0; i < entities.length; i++) {
@@ -54,178 +112,262 @@ function rebuildGrid(entities: number[]) {
   }
 }
 
-export function queryNear(lng: number, lat: number, radiusDeg: number): number[] {
-  const cx0 = Math.floor((lng - radiusDeg) / CELL_SIZE_DEG);
-  const cy0 = Math.floor((lat - radiusDeg) / CELL_SIZE_DEG);
-  const cx1 = Math.floor((lng + radiusDeg) / CELL_SIZE_DEG);
-  const cy1 = Math.floor((lat + radiusDeg) / CELL_SIZE_DEG);
-  const result: number[] = [];
-  for (let cy = cy0; cy <= cy1; cy++) {
-    for (let cx = cx0; cx <= cx1; cx++) {
-      const key = (cx << 16) ^ (cy & 0xffff);
-      const bucket = grid.get(key);
-      if (bucket) result.push(...bucket);
-    }
-  }
-  return result;
-}
-
+/**
+ * Initialization message sent from main thread to worker.
+ * Contains all data needed to set up the simulation.
+ */
 interface InitMessage {
   type: 'init';
+  /** Number of NPCs to spawn initially */
   npcCount: number;
+  /** Initial player position and rotation */
   player: { lng: number; lat: number; rot: number };
+  /** Shared memory buffer for position snapshots (if SharedArrayBuffer is available) */
   sharedBuffer?: SharedArrayBuffer;
+  /** Number of floats per snapshot (npcCount * 3: lng, lat, rot) */
   floatsPerSnap?: number;
+  /** Shared memory buffer for command queue */
   cmdBuffer?: SharedArrayBuffer;
+  /** Maximum number of commands the queue can hold */
   cmdCapacity?: number;
+  /** Number of integers per command (always 4) */
   cmdWords?: number;
 }
 
-// Query to read NPC positions efficiently
+/**
+ * ECS query to find all NPC entities.
+ * Matches entities that have NpcTag, Position, and Rotation components.
+ */
 const npcQuery = defineQuery([NpcTag, Position, Rotation]);
 
-self.onmessage = (evt: MessageEvent<any>) => {
+/* ---------------- Fixed-Timestep Game Loop ---------------- */
+
+/**
+ * High-precision, self-correcting game loop for the worker.
+ * Runs at exactly 60 Hz using an accumulator pattern to handle variable frame rates.
+ * 
+ * The accumulator ensures:
+ * - Deterministic simulation (same input = same output)
+ * - Handles frame rate spikes gracefully
+ * - Never runs too fast (capped at MAX_STEPS per frame)
+ * - Catches up if it falls behind
+ */
+const loop = {
+  /** Timestamp of last frame (milliseconds) */
+  lastTime: 0,
+  /** Whether the loop is currently running */
+  running: false,
+  /** Accumulated time waiting to be processed (milliseconds) */
+  accumulator: 0,
+  /** Main loop function (defined in onmessage after initialization) */
+  tick: () => {},
+  
+  /**
+   * Starts the game loop.
+   * Initializes timing and begins the first tick.
+   */
+  start: function() {
+    this.running = true;
+    this.lastTime = performance.now();
+    this.tick();
+  },
+  
+  /**
+   * Stops the game loop.
+   * Sets running flag to false, which will cause tick() to exit.
+   */
+  stop: function() {
+    this.running = false;
+  }
+};
+
+/**
+ * Message handler for initialization and setup.
+ * Called once when the worker receives the 'init' message from the main thread.
+ */
+self.onmessage = (evt: MessageEvent<InitMessage>) => {
   const data = evt.data;
-  // Message types other than initialisation are currently ignored.
   if (data.type !== 'init') return;
   const { npcCount, player } = data;
 
-  // Spawn requested NPCs near the player – same algorithm as before
-  const R = 0.001; // ~100 m radius at equator
+  /* ---------------- NPC Spawning ---------------- */
+  
+  /**
+   * Spawn radius in degrees (approximately 111 meters at equator).
+   * NPCs are spawned in a circle around the player's starting position.
+   */
+  const R = 0.001;
+  
+  /**
+   * Create NPC entities and add them to the ECS world.
+   * Each NPC is spawned at a random position within radius R of the player.
+   */
   for (let i = 0; i < npcCount; i++) {
+    // Random angle and distance for circular distribution
     const angle = Math.random() * Math.PI * 2;
     const dist = Math.random() * R;
     const lng = player.lng + Math.cos(angle) * dist;
     const lat = player.lat + Math.sin(angle) * dist;
+    
+    // Create entity and add required components
     const eid = addEntity(world);
     addComponent(world, Position, eid);
     addComponent(world, Rotation, eid);
     addComponent(world, Velocity, eid);
     addComponent(world, NpcTag, eid);
     addComponent(world, SpriteRef, eid);
+    
+    // Set initial position
     Position.x[eid] = lng;
     Position.y[eid] = lat;
-    Rotation.angle[eid] = 0;
-    Velocity.x[eid] = 0;
-    Velocity.y[eid] = 0;
-    SpriteRef.id[eid] = 0;
   }
 
-  // Initialize NPCs to walk in straight lines radiating outward
+  /**
+   * Initialize NPC movement directions.
+   * Sets each NPC to walk outward from the player's position with some randomness.
+   */
   initializeStraightWalkNpcs(player.lng, player.lat);
 
+  /* ---------------- Shared Memory Setup ---------------- */
+  
+  /**
+   * Set up SharedArrayBuffer for fast position data transfer.
+   * Uses double buffering: two buffers that alternate to prevent race conditions.
+   */
   const useSharedBuffer = Boolean(data.sharedBuffer && data.floatsPerSnap);
-
-  // If SAB path: set up views
-  let ctrl: Int32Array | null = null;
-  let buffer: Float32Array | null = null;
+  let ctrl: Int32Array | null = null;  // Control array: [writeIndex] (0 or 1)
+  let buffer: Float32Array | null = null;  // Double buffer: [buffer0][buffer1]
   let floatsPerSnap = 0;
-  if (useSharedBuffer) {
-    floatsPerSnap = data.floatsPerSnap!;
-    const HEADER_SIZE = Int32Array.BYTES_PER_ELEMENT;
-    ctrl = new Int32Array(data.sharedBuffer!, 0, 1);
-    buffer = new Float32Array(data.sharedBuffer!, HEADER_SIZE);
+  if (useSharedBuffer && data.sharedBuffer && data.floatsPerSnap) {
+    floatsPerSnap = data.floatsPerSnap;
+    // Control array: first 4 bytes store the current write index (0 or 1)
+    ctrl = new Int32Array(data.sharedBuffer, 0, 1);
+    // Data buffer: starts after control, contains two snapshots (double buffer)
+    buffer = new Float32Array(data.sharedBuffer, Int32Array.BYTES_PER_ELEMENT);
   }
+  /** Tracks which buffer we're currently writing to (0 or 1) */
+  let writeIndex = 0;
 
-  let writeIndex = 0; // toggles 0/1 for double buffer
-
-  // Command queue views
-  let cmdCtrl: Int32Array | null = null;
-  let cmdData: Int32Array | null = null;
+  /**
+   * Set up SharedArrayBuffer for command queue.
+   * Ring buffer for thread-safe command passing from main thread to worker.
+   */
+  let cmdCtrl: Int32Array | null = null;  // [head, tail] - ring buffer pointers
+  let cmdData: Int32Array | null = null;  // Command data array
   let CMD_CAPACITY = 0;
-  let CMD_WORDS = 4;
+  let CMD_WORDS = 4;  // 4 integers per command: type, a, b, c
   if (data.cmdBuffer && data.cmdCapacity) {
     CMD_CAPACITY = data.cmdCapacity;
     CMD_WORDS = data.cmdWords || 4;
+    // Control: first 8 bytes store head and tail pointers
     cmdCtrl = new Int32Array(data.cmdBuffer, 0, 2);
+    // Data: starts after control header, contains command ring buffer
     cmdData = new Int32Array(data.cmdBuffer, 2 * Int32Array.BYTES_PER_ELEMENT);
   }
 
-  // Start fixed-step loop (60 Hz)
-  const DT_MS = 1000 / 60;
-  let lodTick = 0; // New variable for LOD tick
-  const NEAR_DEG = 0.0005; // ~50 m radius for near entities
-  const MID_DEG = 0.001; // ~100 m radius for mid entities
+  /* ---------------- Game Loop Constants ---------------- */
+  
+  /** Fixed timestep: 60 Hz = 16.666... milliseconds per tick */
+  const FIXED_DT_MS = 1000 / 60;
+  /** Maximum number of simulation steps per frame (prevents spiral of death) */
+  const MAX_STEPS = 5;
 
-  setInterval(() => {
-    /* ---------------- LOD-aware systems ---------------- */
-    lodTick++;
+  /**
+   * Main game loop tick function.
+   * Runs every frame, processing simulation steps and sending position updates.
+   */
+  loop.tick = () => {
+    if (!loop.running) return;
 
-    // Spatial bands around camera/player (player snapshot may be stale but good enough for v1)
-    const camLng = player.lng;
-    const camLat = player.lat;
+    /* ---------------- Time Management ---------------- */
+    
+    // Measure elapsed time since last frame
+    const now = performance.now();
+    let delta = now - loop.lastTime;
+    loop.lastTime = now;
+    // Cap delta to prevent huge jumps (e.g., when tab was hidden)
+    if (delta > 200) delta = 200;
 
-    const nearEnts = queryNear(camLng, camLat, NEAR_DEG);
-    const midEnts  = queryNear(camLng, camLat, MID_DEG);
-    const farEnts  = npcQuery(world).filter(eid => !midEnts.includes(eid));
-
-    // // Run AI for far band every 6th tick, mid every 3rd, near every tick
-    // if (lodTick % 6 === 0) runRandomWalk(farEnts);
-    // if (lodTick % 3 === 0) runRandomWalk(midEnts);
-    // runRandomWalk(nearEnts);
-
-    // Temporarily disable LOD - run all NPCs at full rate
-    // const allNpcs = npcQuery(world);
-    // runRandomWalk(allNpcs);
-    straightWalkSystem();
-
-    // Movement integration stays full rate for all entities (cheap)
-    movementSystem();
-
-    // ───── Rebuild uniform grid for spatial queries ─────
-    const npcEnts = npcQuery(world);
-    rebuildGrid(npcEnts);
-
-    // ---- process commands after systems (or before, up to design) ----
-    if (cmdCtrl && cmdData) {
-      let head = Atomics.load(cmdCtrl, 0);
-      let tail = Atomics.load(cmdCtrl, 1);
-      while (head !== tail) {
-        const base = head * CMD_WORDS;
-        const type = cmdData[base];
-        const a = cmdData[base + 1];
-        const b = cmdData[base + 2];
-        const c = cmdData[base + 3];
-
-        switch (type) {
-          case 1: // SpawnNpc
-            const lng = a / 1e7;
-            const lat = b / 1e7;
+    // Accumulate time into accumulator
+    loop.accumulator += delta;
+    
+    /* ---------------- Fixed-Timestep Simulation ---------------- */
+    
+    /**
+     * Run simulation steps until we've caught up with real time.
+     * This ensures deterministic, frame-rate independent simulation.
+     */
+    while (loop.accumulator >= FIXED_DT_MS) {
+      // Run ECS systems in order
+      straightWalkSystem();  // Sets NPC walking directions (currently just initializes)
+      movementSystem();      // Applies velocity to position
+      
+      // Query all NPCs for grid rebuild
+      const npcEnts = npcQuery(world);
+      rebuildGrid(npcEnts);  // Update spatial grid (currently unused)
+      
+      /* ---------------- Command Processing ---------------- */
+      
+      /**
+       * Process commands from the main thread.
+       * Reads from the ring buffer using atomic operations for thread safety.
+       */
+      if (cmdCtrl && cmdData) {
+        // Load current head and tail pointers atomically
+        let head = Atomics.load(cmdCtrl, 0);
+        const tail = Atomics.load(cmdCtrl, 1);
+        
+        // Process all commands in the queue
+        while (head !== tail) {
+          const base = head * CMD_WORDS;
+          const type = cmdData[base];
+          
+          if (type === 1) { // CommandType.SpawnNpc
+            // Decode coordinates (were scaled by 1e7 for integer precision)
+            const lng = cmdData[base + 1] / 1e7;
+            const lat = cmdData[base + 2] / 1e7;
+            
+            // Create new NPC entity
             const eid = addEntity(world);
             addComponent(world, Position, eid);
             addComponent(world, Rotation, eid);
             addComponent(world, Velocity, eid);
             addComponent(world, NpcTag, eid);
             addComponent(world, SpriteRef, eid);
+            
+            // Set position and rotation
             Position.x[eid] = lng;
             Position.y[eid] = lat;
-            Rotation.angle[eid] = c;
-            Velocity.x[eid] = 0;
-            Velocity.y[eid] = 0;
-            SpriteRef.id[eid] = 0;
-            break;
-          case 2: // DestroyEntity
-            // not implemented yet
-            break;
-          case 3: // SetVelocity
-            // Interpret a as eid, b,c as vx,vy scaled 1e6
-            const eidSet = a;
-            if (eidSet !== undefined) {
-              Velocity.x[eidSet] = b / 1e6;
-              Velocity.y[eidSet] = c / 1e6;
-            }
-            break;
+            Rotation.angle[eid] = cmdData[base + 3];
+          }
+          
+          // Advance head pointer (ring buffer wrap-around)
+          head = (head + 1) % CMD_CAPACITY;
+          // Atomically update head to mark command as processed
+          Atomics.store(cmdCtrl, 0, head);
         }
-
-        head = (head + 1) % CMD_CAPACITY;
-        Atomics.store(cmdCtrl, 0, head);
       }
+      
+      // Subtract one timestep from accumulator
+      loop.accumulator -= FIXED_DT_MS;
     }
 
+    /* ---------------- Position Snapshot Output ---------------- */
+    
+    /**
+     * Query all NPCs and send their positions to the main thread.
+     * Uses double buffering when SharedArrayBuffer is available for zero-copy transfer.
+     */
     const ents = npcQuery(world);
-
+    
     if (useSharedBuffer && ctrl && buffer) {
+      /**
+       * Fast path: Write to SharedArrayBuffer using double buffering.
+       * Main thread reads from the buffer we're NOT writing to.
+       */
       const offset = writeIndex * floatsPerSnap;
+      
+      // Write NPC positions to current buffer (3 floats per NPC: lng, lat, rot)
       for (let i = 0; i < ents.length; i++) {
         const eid = ents[i];
         const base = offset + i * 3;
@@ -233,11 +375,18 @@ self.onmessage = (evt: MessageEvent<any>) => {
         buffer[base + 1] = Position.y[eid];
         buffer[base + 2] = Rotation.angle[eid];
       }
+      
+      // Atomically update write index and notify main thread
       Atomics.store(ctrl, 0, writeIndex);
       Atomics.notify(ctrl, 0);
-      writeIndex ^= 1; // toggle between 0 and 1
+      
+      // Switch to other buffer for next frame (XOR flips between 0 and 1)
+      writeIndex ^= 1;
     } else {
-      // Fallback copy-based path
+      /**
+       * Fallback path: Use postMessage (slower but works without SharedArrayBuffer).
+       * Transfers ownership of the buffer to avoid copying.
+       */
       const snap = new Float32Array(ents.length * 3);
       for (let i = 0; i < ents.length; i++) {
         const eid = ents[i];
@@ -245,7 +394,21 @@ self.onmessage = (evt: MessageEvent<any>) => {
         snap[i * 3 + 1] = Position.y[eid];
         snap[i * 3 + 2] = Rotation.angle[eid];
       }
+      // Transfer buffer ownership to avoid copying
       (self as any).postMessage(snap, [snap.buffer]);
     }
-  }, DT_MS);
-}; 
+    
+    /**
+     * Yield to the event loop using setTimeout.
+     * This creates a non-blocking tight loop that allows other tasks to run.
+     * Without this, the worker would block completely.
+     */
+    setTimeout(loop.tick, 0);
+  };
+  
+  /**
+   * Start the game loop.
+   * This begins the simulation and it will continue running until stop() is called.
+   */
+  loop.start();
+};

@@ -1,3 +1,51 @@
+/**
+ * SimulationBridge - Communication Layer Between Main Thread and Web Worker
+ * 
+ * This class acts as a bridge/communication layer between the main thread (UI/rendering)
+ * and a Web Worker (game simulation). Its primary purpose is to enable running the game
+ * simulation off the main thread, keeping the UI responsive even with many NPCs.
+ * 
+ * Key Responsibilities:
+ * 
+ * 1. Worker Management:
+ *    - Starts/stops the Web Worker that runs the simulation
+ *    - Supports two modes:
+ *      * Worker mode: Simulation runs in a separate thread (better performance)
+ *      * Main thread mode: Simulation runs on main thread (fallback)
+ * 
+ * 2. Data Synchronization:
+ *    - Retrieves NPC positions from the worker
+ *    - Uses two communication methods:
+ *      * SharedArrayBuffer (preferred): Zero-copy, lock-free data sharing using Atomics
+ *      * postMessage (fallback): Slower but works when SharedArrayBuffer isn't available
+ * 
+ * 3. Player Position Tracking:
+ *    - Maintains the latest player position (lastPlayer)
+ *    - Main thread remains authoritative for player (worker doesn't control player)
+ * 
+ * 4. Command Queue:
+ *    - Allows main thread to send commands to worker (e.g., spawn NPCs)
+ *    - Uses a ring buffer with atomic operations for thread-safe communication
+ * 
+ * Architecture:
+ * 
+ * Main Thread                    Web Worker
+ *      │                              │
+ *      │─── startInWorker() ────────>│
+ *      │   (sends SharedArrayBuffer) │
+ *      │                              │
+ *      │<─── NPC positions ───────────│
+ *      │   (via SharedArrayBuffer)    │
+ *      │                              │
+ *      │─── enqueueCommand() ────────>│
+ *      │   (spawn NPC, etc.)          │
+ * 
+ * Benefits:
+ * - Performance: Keeps simulation off main thread, preventing UI lag
+ * - Scalability: Can handle thousands of NPCs without blocking rendering
+ * - Flexibility: Gracefully falls back to main-thread mode if needed
+ */
+
 export interface PlayerSnapshot {
   lng: number;
   lat: number;
@@ -118,8 +166,12 @@ class SimulationBridge {
     if (this.sharedCtrl && this.sharedData) {
       const index = Atomics.load(this.sharedCtrl, 0); // 0 or 1
       if (this.floatsPerSnap === 0) return null;
-      return this.sharedData.subarray(index * this.floatsPerSnap, (index + 1) * this.floatsPerSnap);
+      
+      // Create a COPY of the subarray, not a view. This is critical to prevent a race condition.
+      const view = this.sharedData.subarray(index * this.floatsPerSnap, (index + 1) * this.floatsPerSnap);
+      return new Float32Array(view);
     }
+    // Fallback for when SharedArrayBuffer is not used
     return this.latestNpcSnapshot;
   }
 
