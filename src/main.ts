@@ -41,6 +41,9 @@ import { randomWalkSystem } from "./ecs/systems/randomWalkSystem";
 import { NpcTag } from "./ecs/components/NpcTag";
 import { addComponent, addEntity } from "bitecs";
 import { Velocity } from "./ecs/world";
+import { SpatialGrid } from "./utils/spatialGrid";
+import { entityCollisionSystem } from "./ecs/systems/collisionSystem";
+import { defineQuery } from "bitecs";
 import NpcInstancedLayer from "./view/NpcInstancedLayer";
 import { bridge } from "./sim/SimulationBridge";
 import { CommandType } from "./sim/Command";
@@ -400,12 +403,23 @@ map.on('load', () => {
 
         /**
          * ECS runner for main-thread NPC simulation.
-         * Runs randomWalkSystem and movementSystem each fixed update.
+         * Runs randomWalkSystem, movementSystem, and collision detection each fixed update.
          */
+        // Create spatial grid for collision detection
+        const spatialGrid = new SpatialGrid();
+        const npcQuery = defineQuery([NpcTag, Position, Velocity]);
+        
         const ecsRunner = {
             fixedUpdate: () => {
                 randomWalkSystem();  // Sets NPC walking directions
                 movementSystem();    // Applies velocity to position
+                
+                // Rebuild spatial grid with current NPC positions
+                const npcEnts = npcQuery(world);
+                spatialGrid.rebuild(npcEnts, Position);
+                
+                // Run collision detection and resolution
+                entityCollisionSystem(spatialGrid, Position, Velocity);
             },
         } as any;
         loop.addFixed(ecsRunner);

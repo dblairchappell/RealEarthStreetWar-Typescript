@@ -55,62 +55,8 @@ import { NpcTag } from '../ecs/components/NpcTag';
 import { movementSystem } from '../ecs/systems/movementSystem';
 import { defineQuery } from 'bitecs';
 import { straightWalkSystem, initializeStraightWalkNpcs } from '../ecs/systems/straightWalkSystem';
-
-/* ---------------- Spatial Grid System (Currently Unused) ---------------- */
-
-/**
- * Size of each grid cell in degrees (approximately 66 meters at equator).
- * Used for spatial partitioning to enable efficient proximity queries.
- */
-const CELL_SIZE_DEG = 0.0006;
-
-/**
- * Generates a unique key for a grid cell based on longitude and latitude.
- * Uses bit manipulation to combine X and Y cell coordinates into a single integer.
- * 
- * @param lng - Longitude in degrees
- * @param lat - Latitude in degrees
- * @returns Unique integer key for the grid cell
- */
-function cellKey(lng: number, lat: number): number {
-  const cx = Math.floor(lng / CELL_SIZE_DEG);
-  const cy = Math.floor(lat / CELL_SIZE_DEG);
-  // Combine X and Y into single integer: X in upper 16 bits, Y in lower 16 bits
-  return (cx << 16) ^ (cy & 0xffff);
-}
-
-/**
- * Spatial hash grid mapping cell keys to arrays of entity IDs.
- * Currently rebuilt every frame but never queried. Could be used for:
- * - Collision detection
- * - Proximity queries (find nearby NPCs)
- * - Spatial optimization
- */
-let grid = new Map<number, number[]>();
-
-/**
- * Rebuilds the spatial hash grid with current entity positions.
- * Groups entities by their grid cell for efficient spatial queries.
- * 
- * Note: This is currently called every frame but the grid is never used.
- * Consider removing this if spatial queries aren't needed, or implement
- * query functions to utilize it.
- * 
- * @param entities - Array of entity IDs to add to the grid
- */
-function rebuildGrid(entities: number[]) {
-  grid.clear();
-  for (let i = 0; i < entities.length; i++) {
-    const eid = entities[i];
-    const key = cellKey(Position.x[eid], Position.y[eid]);
-    let arr = grid.get(key);
-    if (!arr) {
-      arr = [];
-      grid.set(key, arr);
-    }
-    arr.push(eid);
-  }
-}
+import { SpatialGrid } from '../utils/spatialGrid';
+import { entityCollisionSystem } from '../ecs/systems/collisionSystem';
 
 /**
  * Initialization message sent from main thread to worker.
@@ -139,6 +85,13 @@ interface InitMessage {
  * Matches entities that have NpcTag, Position, and Rotation components.
  */
 const npcQuery = defineQuery([NpcTag, Position, Rotation]);
+
+/**
+ * Spatial grid for efficient collision detection.
+ * Rebuilt every frame with current NPC positions.
+ * Initialized when worker receives init message.
+ */
+let spatialGrid: SpatialGrid | null = null;
 
 /* ---------------- Fixed-Timestep Game Loop ---------------- */
 
@@ -228,6 +181,12 @@ self.onmessage = (evt: MessageEvent<InitMessage>) => {
    */
   initializeStraightWalkNpcs(player.lng, player.lat);
 
+  /**
+   * Initialize spatial grid for collision detection.
+   * Creates a new grid instance that will be rebuilt every frame.
+   */
+  spatialGrid = new SpatialGrid();
+
   /* ---------------- Shared Memory Setup ---------------- */
   
   /**
@@ -302,9 +261,15 @@ self.onmessage = (evt: MessageEvent<InitMessage>) => {
       straightWalkSystem();  // Sets NPC walking directions (currently just initializes)
       movementSystem();      // Applies velocity to position
       
-      // Query all NPCs for grid rebuild
-      const npcEnts = npcQuery(world);
-      rebuildGrid(npcEnts);  // Update spatial grid (currently unused)
+      // Rebuild spatial grid with current NPC positions
+      // This must be done after movement but before collision detection
+      if (spatialGrid) {
+        const npcEnts = npcQuery(world);
+        spatialGrid.rebuild(npcEnts, Position);
+        
+        // Run collision detection and resolution
+        entityCollisionSystem(spatialGrid, Position, Velocity);
+      }
       
       /* ---------------- Command Processing ---------------- */
       
