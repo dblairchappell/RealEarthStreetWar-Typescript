@@ -135,8 +135,17 @@ export default class NpcLayer implements Renderable, Updatable {
     // Disable pointer events so clicks pass through to the map
     this.canvas.style.pointerEvents = 'none';
     
+    // Apply CSS image-rendering for crisp pixel art (matches player sprite styling)
+    this.canvas.style.imageRendering = 'pixelated';
+    this.canvas.style.imageRendering = '-moz-crisp-edges';
+    this.canvas.style.imageRendering = 'crisp-edges';
+    
     // Get 2D rendering context
     this.ctx = this.canvas.getContext('2d')!;
+    
+    // Disable image smoothing for crisp pixel art sprites
+    // This prevents blurriness when scaling sprites
+    this.ctx.imageSmoothingEnabled = false;
     
     // Add canvas to map container
     this.map.getContainer().appendChild(this.canvas);
@@ -266,11 +275,29 @@ export default class NpcLayer implements Renderable, Updatable {
    * 
    * Called on initialization and whenever the map is resized.
    * Ensures the canvas always covers the entire map viewport.
+   * 
+   * Accounts for device pixel ratio to prevent blurriness on high-DPI displays.
+   * The canvas internal resolution is scaled up, but CSS size matches display size.
    */
   private resize() {
     const { clientWidth, clientHeight } = this.map.getContainer();
-    this.canvas.width = clientWidth;
-    this.canvas.height = clientHeight;
+    const dpr = window.devicePixelRatio || 1;
+    
+    // Set canvas internal resolution (scaled by device pixel ratio)
+    this.canvas.width = clientWidth * dpr;
+    this.canvas.height = clientHeight * dpr;
+    
+    // Set canvas CSS size to match display size (not internal resolution)
+    this.canvas.style.width = `${clientWidth}px`;
+    this.canvas.style.height = `${clientHeight}px`;
+    
+    // Reset transform and scale the context to account for device pixel ratio
+    // This ensures 1 canvas unit = 1 CSS pixel
+    // Note: Setting canvas.width/height resets the context, so we need to re-apply settings
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    
+    // Re-apply image smoothing setting (lost when canvas is resized)
+    this.ctx.imageSmoothingEnabled = false;
   }
 
   /**
@@ -294,11 +321,20 @@ export default class NpcLayer implements Renderable, Updatable {
     const ctx = this.ctx;
     if (!ctx) return;
 
+    // Ensure image smoothing is disabled (may be reset by browser)
+    // This is critical for crisp pixel art rendering
+    ctx.imageSmoothingEnabled = false;
+
     /**
      * Clear the entire canvas before redrawing.
      * This ensures NPCs don't leave trails when they move.
+     * 
+     * Note: clearRect uses the current coordinate system (after transform).
+     * Since we scale by devicePixelRatio, we need to clear in CSS pixels,
+     * not canvas pixels. The transform will scale it correctly.
      */
-    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    const { clientWidth, clientHeight } = this.map.getContainer();
+    ctx.clearRect(0, 0, clientWidth, clientHeight);
     
     // Get current zoom for size calculation
     const zoom = this.map.getZoom();
@@ -446,15 +482,20 @@ export default class NpcLayer implements Renderable, Updatable {
     const anim = this.animations[animType];
     
     // Calculate source rectangle for this frame
+    // Round to integers to prevent sub-pixel sampling (causes blurriness)
     const frameWidth = spriteImage.width / anim.frames;
-    const sx = frame * frameWidth;
+    const sx = Math.round(frame * frameWidth);
     const sy = 0;
-    const sWidth = frameWidth;
+    const sWidth = Math.round(frameWidth);
     const sHeight = spriteImage.height;
     
     // Round coordinates to prevent sub-pixel blurring
     const screenX = Math.round(x);
     const screenY = Math.round(y);
+    
+    // Round destination size to integer for crisp rendering
+    const destSize = Math.round(size);
+    const halfSize = destSize / 2;
     
     // Save context state
     ctx.save();
@@ -464,10 +505,11 @@ export default class NpcLayer implements Renderable, Updatable {
     ctx.rotate(rotation); // Rotate around center
     
     // Draw sprite frame (centered on origin after translate)
+    // Use integer coordinates for crisp pixel art rendering
     ctx.drawImage(
       spriteImage,
-      sx, sy, sWidth, sHeight, // Source rectangle (from sprite sheet)
-      -size / 2, -size / 2, size, size // Destination rectangle (centered, sized)
+      sx, sy, sWidth, sHeight, // Source rectangle (from sprite sheet, integer coordinates)
+      -halfSize, -halfSize, destSize, destSize // Destination rectangle (centered, integer size)
     );
     
     // Restore context state

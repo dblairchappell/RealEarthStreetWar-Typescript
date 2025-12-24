@@ -390,9 +390,12 @@ self.onmessage = (evt: MessageEvent<InitMessage>) => {
           // So we need to negate to match: rotation = -(atan2(velocityY, velocityX) - π/2)
           rotation = -(Math.atan2(velocityY, velocityX) - Math.PI / 2);
         } else {
-          // Idle: use stored rotation (convert from degrees to radians, then apply Canvas offset)
+          // Idle: use stored rotation (convert from degrees to radians)
+          // Rotation.angle uses game system (0° = north), same as player
+          // Convert from game system (0° = north) to Canvas system (0 = east)
+          // Same conversion as moving NPCs: subtract π/2 and negate
           const rotationDeg = Rotation.angle[eid] || 0;
-          rotation = (rotationDeg * Math.PI) / 180 - Math.PI / 2;
+          rotation = -((rotationDeg * Math.PI) / 180 - Math.PI / 2);
         }
         buffer[base + 2] = rotation;
       }
@@ -430,9 +433,12 @@ self.onmessage = (evt: MessageEvent<InitMessage>) => {
           // So we need to negate to match: rotation = -(atan2(velocityY, velocityX) - π/2)
           rotation = -(Math.atan2(velocityY, velocityX) - Math.PI / 2);
         } else {
-          // Idle: use stored rotation (convert from degrees to radians, then apply Canvas offset)
+          // Idle: use stored rotation (convert from degrees to radians)
+          // Rotation.angle uses game system (0° = north), same as player
+          // Convert from game system (0° = north) to Canvas system (0 = east)
+          // Same conversion as moving NPCs: subtract π/2 and negate
           const rotationDeg = Rotation.angle[eid] || 0;
-          rotation = (rotationDeg * Math.PI) / 180 - Math.PI / 2;
+          rotation = -((rotationDeg * Math.PI) / 180 - Math.PI / 2);
         }
         snap[i * 3 + 2] = rotation;
       }

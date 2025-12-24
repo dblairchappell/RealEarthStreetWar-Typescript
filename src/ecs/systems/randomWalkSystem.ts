@@ -21,7 +21,7 @@ export function randomWalkSystem(): void {
   
   // Log system call frequency
   if (now - lastLogTime > 1000) {
-    console.log(`randomWalkSystem called ${systemCallCount} times in last second`);
+    //console.log(`randomWalkSystem called ${systemCallCount} times in last second`);
     systemCallCount = 0;
     lastLogTime = now;
   }
@@ -38,9 +38,9 @@ export function randomWalkSystem(): void {
       Velocity.y[eid] = Math.sin(angleRad) * SPEED;
       
       // Debug velocity changes
-      if (i === 0) {
-        console.log(`NPC ${eid} direction change: angle=${angleRad.toFixed(3)}, velocity=(${Velocity.x[eid].toFixed(10)}, ${Velocity.y[eid].toFixed(10)})`);
-      }
+      // if (i === 0) {
+      //   console.log(`NPC ${eid} direction change: angle=${angleRad.toFixed(3)}, velocity=(${Velocity.x[eid].toFixed(10)}, ${Velocity.y[eid].toFixed(10)})`);
+      // }
     }
   }
 } 

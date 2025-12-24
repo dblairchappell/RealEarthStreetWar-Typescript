@@ -18,7 +18,7 @@ export function movementSystem(): void {
       Position.x[eid] += Velocity.x[eid];
       Position.y[eid] += Velocity.y[eid];
       
-      console.log(`Movement: ${oldX.toFixed(9)} -> ${Position.x[eid].toFixed(9)} (Δ${(Position.x[eid] - oldX).toFixed(9)})`);
+      //console.log(`Movement: ${oldX.toFixed(9)} -> ${Position.x[eid].toFixed(9)} (Δ${(Position.x[eid] - oldX).toFixed(9)})`);
     } else {
       Position.x[eid] += Velocity.x[eid];
       Position.y[eid] += Velocity.y[eid];
