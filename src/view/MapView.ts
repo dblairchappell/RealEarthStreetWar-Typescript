@@ -29,8 +29,8 @@
  * - `render(alpha)`: Called each frame for smooth interpolation between fixed updates
  * 
  * **Player Position Management:**
- * - Tracks player position from ECS (via `playerEid`) or SimulationBridge
- * - Supports both worker mode (SharedArrayBuffer) and main-thread mode
+ * - Tracks player position from ECS (via `playerEid`)
+ * - Queries ECS world directly for NPC positions
  * - Handles interpolation for smooth rendering between fixed updates
  * 
  * **Camera Behavior:**
@@ -49,7 +49,6 @@ import { GTA1_STYLE_TOP_DOWN, ENABLE_GLOBE, MAP_PROJECTION } from "../config";
 import { InfluenceLayer, MarkerLayer, CameraController, FeatureQuery } from './map';
 import { Position, Rotation } from "../ecs/world";
 import { Renderable, Updatable } from "../loop/GameLoop";
-import { bridge } from "../sim/SimulationBridge";
 import maplibregl from 'maplibre-gl';
 import { Protocol } from 'pmtiles';
 
@@ -100,7 +99,7 @@ export default class MapView implements Updatable, Renderable {
   private createdOwnInputManager: boolean = false; // True if we created InputManager, false if injected
 
   // ECS integration: player entity ID (set via setPlayerEntity())
-  // When set, MapView reads player position/rotation from ECS components or SimulationBridge
+  // When set, MapView reads player position/rotation from ECS components
   private playerEid: number | null = null;
 
   /**
@@ -442,13 +441,13 @@ export default class MapView implements Updatable, Renderable {
   /**
    * Updatable implementation – called each fixed timestep by GameLoop.
    * 
-   * Updates all time-based animations and reads player position from ECS/SimulationBridge.
+   * Updates all time-based animations and reads player position from ECS.
    * Note: This uses the authoritative position from the fixed timestep, not interpolated.
    * 
    * Process:
    * 1. Advance character animations (sprite frame updates)
    * 2. Update camera controller (continuous zoom/rotation)
-   * 3. Read player position from ECS or SimulationBridge
+   * 3. Read player position from ECS
    * 4. Update player sprite position (non-interpolated, authoritative)
    * 
    * @param deltaMs - Time elapsed since last update (milliseconds)
@@ -464,20 +463,12 @@ export default class MapView implements Updatable, Renderable {
       this.camera.update(deltaMs);
     }
 
-    // If player entity ID is set, read position from ECS or SimulationBridge
+    // If player entity ID is set, read position from ECS
     if (this.playerEid !== null) {
-      let lng: number, lat: number, rot: number;
-      
-      // Read from appropriate source based on worker mode
-      if (bridge.isWorkerEnabled()) {
-        // Worker mode: read from SimulationBridge (which syncs from SharedArrayBuffer)
-        ({ lng, lat, rot } = bridge.lastPlayer);
-      } else {
-        // Main thread mode: read directly from ECS components
-        lng = Position.x[this.playerEid];
-        lat = Position.y[this.playerEid];
-        rot = Rotation.angle[this.playerEid];
-      }
+      // Read directly from ECS components
+      const lng = Position.x[this.playerEid];
+      const lat = Position.y[this.playerEid];
+      const rot = Rotation.angle[this.playerEid];
 
       // Update player position with authoritative (non-interpolated) values
       this.updatePlayerPosition({ lng, lat }, rot);
@@ -506,15 +497,10 @@ export default class MapView implements Updatable, Renderable {
     // Early exit if player entity not set or no previous position (first frame)
     if (this.playerEid === null || !this.prevPosition) return;
     
-    // Read current authoritative position from ECS or SimulationBridge
-    let currLng: number, currLat: number, currRot: number;
-    if (bridge.isWorkerEnabled()) {
-      ({ lng: currLng, lat: currLat, rot: currRot } = bridge.lastPlayer);
-    } else {
-      currLng = Position.x[this.playerEid];
-      currLat = Position.y[this.playerEid];
-      currRot = Rotation.angle[this.playerEid];
-    }
+    // Read current authoritative position from ECS
+    const currLng = Position.x[this.playerEid];
+    const currLat = Position.y[this.playerEid];
+    const currRot = Rotation.angle[this.playerEid];
 
     // Interpolate between previous and current position
     // This provides smooth rendering even if frame rate doesn't match fixed timestep
@@ -534,7 +520,7 @@ export default class MapView implements Updatable, Renderable {
   /**
    * Sets the ECS entity ID representing the player.
    * Once set, MapView will automatically read player position/rotation from ECS components
-   * or SimulationBridge (depending on worker mode) each frame.
+   * from ECS each frame.
    * 
    * @param id - ECS entity ID of the player
    */

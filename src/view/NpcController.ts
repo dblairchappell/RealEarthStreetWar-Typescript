@@ -1,13 +1,12 @@
 /**
  * NpcController - NPC Position Management and Rendering Coordination
  * 
- * NpcController acts as the bridge between the game simulation (worker or main thread)
+ * NpcController acts as the bridge between the game simulation and rendering
  * and the WebGL rendering layer (NpcInstancedLayer). It handles position interpolation,
  * coordinate projection, and prepares data for efficient GPU rendering.
  * 
  * **Key Responsibilities:**
- * - **Position Retrieval**: Gets NPC positions from SimulationBridge (worker mode) or
- *   ECS directly (main thread mode)
+ * - **Position Retrieval**: Gets NPC positions from ECS world
  * - **Position History**: Maintains previous and current position snapshots for interpolation
  * - **Interpolation**: Smoothly interpolates between fixed-timestep positions using alpha
  * - **Coordinate Projection**: Converts lat/lng coordinates to screen space for rendering
@@ -16,7 +15,7 @@
  * **Architecture:**
  * - Implements `Renderable` interface, called each frame by GameLoop with interpolation alpha
  * - Works with `NpcInstancedLayer` which performs the actual WebGL rendering
- * - Supports both worker mode (SharedArrayBuffer) and main-thread mode (ECS queries)
+ * - Queries ECS world directly for NPC positions
  * 
  * **Interpolation Strategy:**
  * Unlike NpcLayer (which interpolates in screen space), NpcController interpolates in
@@ -35,11 +34,10 @@
  * 
  * **Usage:**
  * Created by MapView and registered with GameLoop as a Renderable. Automatically
- * handles both worker and main-thread simulation modes.
+ * queries ECS world directly for NPC positions.
  */
 
 import { Renderable } from "../loop/GameLoop";
-import { bridge } from "../sim/SimulationBridge";
 import { world, Position } from '../ecs/world';
 import { NpcTag } from '../ecs/components/NpcTag';
 import { defineQuery } from "bitecs";
@@ -57,7 +55,7 @@ export default class NpcController implements Renderable {
   // WebGL rendering layer that actually draws the NPCs
   private npcLayer: NpcInstancedLayer;
   
-  // ECS query for finding all NPC entities (used in main-thread mode)
+  // ECS query for finding all NPC entities
   // Finds entities that have both NpcTag and Position components
   private query = defineQuery([NpcTag, Position]);
 
@@ -81,7 +79,7 @@ export default class NpcController implements Renderable {
    * Renderable implementation – called each frame by GameLoop for smooth interpolation.
    * 
    * Process:
-   * 1. Retrieve latest NPC positions from simulation (worker or main thread)
+   * 1. Retrieve latest NPC positions from ECS world
    * 2. Update position history (previous → current)
    * 3. Interpolate between previous and current positions in lat/lng space
    * 4. Project interpolated coordinates to screen space
@@ -96,38 +94,17 @@ export default class NpcController implements Renderable {
   render(alpha: number): void {
     /* ---------------- Step 1: Get Latest Position Data ---------------- */
     
-    // Retrieve NPC positions from appropriate source based on simulation mode
-    let latestLngLat: Float32Array;
-    let count: number;
-
-    if (bridge.isWorkerEnabled()) {
-      // Worker mode: Read from SimulationBridge snapshot
-      // Snapshot format: [lng0, lat0, rot0, lng1, lat1, rot1, ...] (3 floats per NPC)
-      const snap = bridge.getLatestNpcSnapshot();
-      if (!snap) return; // No data available yet
-      
-      count = snap.length / 3; // Calculate NPC count (3 floats per NPC)
-      latestLngLat = new Float32Array(count * 2); // Allocate array for lat/lng pairs
-      
-      // Extract lat/lng from snapshot (skip rotation data)
-      for (let i = 0; i < count; i++) {
-        latestLngLat[i * 2] = snap[i * 3];         // lng
-        latestLngLat[i * 2 + 1] = snap[i * 3 + 1]; // lat
-        // Note: Rotation (snap[i * 3 + 2]) is available but not used here
-      }
-    } else {
-      // Main thread mode: Query ECS world directly
-      // Uses bitecs query to find all entities with NpcTag and Position components
-      const ents = this.query(world);
-      count = ents.length;
-      latestLngLat = new Float32Array(count * 2);
-      
-      // Extract positions from ECS components
-      for (let i = 0; i < count; i++) {
-        const eid = ents[i]; // Entity ID
-        latestLngLat[i * 2] = Position.x[eid];     // lng (stored in Position.x)
-        latestLngLat[i * 2 + 1] = Position.y[eid]; // lat (stored in Position.y)
-      }
+    // Query ECS world directly for NPC positions
+    // Uses bitecs query to find all entities with NpcTag and Position components
+    const ents = this.query(world);
+    const count = ents.length;
+    const latestLngLat = new Float32Array(count * 2);
+    
+    // Extract positions from ECS components
+    for (let i = 0; i < count; i++) {
+      const eid = ents[i]; // Entity ID
+      latestLngLat[i * 2] = Position.x[eid];     // lng (stored in Position.x)
+      latestLngLat[i * 2 + 1] = Position.y[eid]; // lat (stored in Position.y)
     }
 
     // Early exit if no NPCs to render

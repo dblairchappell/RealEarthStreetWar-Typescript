@@ -2,7 +2,6 @@
 import GameState from "../model/GameState";
 import MapView from "../view/MapView";
 import { Position, Rotation } from "../ecs/world";
-import { bridge } from "../sim/SimulationBridge";
 import { FixedUpdatable } from "../loop/GameLoop";
 
 export default class GameController implements FixedUpdatable {
@@ -81,7 +80,7 @@ export default class GameController implements FixedUpdatable {
 
     // We'll integrate position directly in this controller to avoid relying
     // on the main-thread ECS movementSystem (which may be disabled when the
-    // simulation is running in a WebWorker).
+    // simulation runs on the main thread).
 
     // Handle rotation
     if (this.currentInput.rotateLeft) {
@@ -145,16 +144,11 @@ export default class GameController implements FixedUpdatable {
       positionChanged = true;
     }
 
-    // Sync GameState and notify bridge (even if worker is active) so the
-    // render thread has the latest authoritative coordinates.
+    // Sync GameState with latest player position
     if (positionChanged || rotationChanged) {
       this.state.player.lng = Position.x[eid];
       this.state.player.lat = Position.y[eid];
       this.state.player.rotation = Rotation.angle[eid];
-
-      // Update shared snapshot for MapView
-      // (updateFromMainThread will no-op if the worker is already overriding.)
-      bridge.updateFromMainThread(Position.x[eid], Position.y[eid], Rotation.angle[eid]);
     }
   }
 }

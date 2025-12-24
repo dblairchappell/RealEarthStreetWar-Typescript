@@ -6,7 +6,7 @@
  * 2. Sets up communication channels (callbacks) between systems
  * 3. Waits for the map to load, then initializes game entities
  * 4. Starts the game loop and registers all update/render systems
- * 5. Configures NPC simulation (worker or main thread)
+ * 5. Configures NPC simulation (main thread)
  * 6. Sets up rendering layers for NPCs
  * 7. Exposes dev tools for debugging
  * 8. Starts the game clock for timezone-aware time display
@@ -45,8 +45,6 @@ import { SpatialGrid } from "./utils/spatialGrid";
 import { entityCollisionSystem } from "./ecs/systems/collisionSystem";
 import { defineQuery } from "bitecs";
 import NpcInstancedLayer from "./view/NpcInstancedLayer";
-import { bridge } from "./sim/SimulationBridge";
-import { CommandType } from "./sim/Command";
 import NpcLayer from "./view/NpcLayer";
 import { ENABLE_GLOBE, SHOW_PERF_OVERLAY } from "./config";
 import { SpriteRef } from "./ecs/components/SpriteRef";
@@ -294,12 +292,6 @@ map.on('load', () => {
     controller.setPlayerEntity(playerEid);
     view.setPlayerEntity(playerEid);
 
-    /**
-     * Initialize simulation bridge with player position.
-     * This keeps the bridge snapshot in sync when running on main thread,
-     * and provides initial position when starting worker mode.
-     */
-    bridge.updateFromMainThread(Position.x[playerEid], Position.y[playerEid], Rotation.angle[playerEid]);
 
     /**
      * Create the visual representation of the player character.
@@ -334,39 +326,19 @@ map.on('load', () => {
      * Parse URL parameters for configuration.
      * Allows testing different scenarios via URL:
      * - ?npc=100 - Spawn 100 NPCs
-     * - ?worker=1 - Enable Web Worker simulation
      */
     const params = new URLSearchParams(location.search);
     const npcCount = Number(params.get('npc') || '0');
-    const workerEnabled = params.get('worker') === '1';
 
     /* ---------------- NPC Simulation Setup ---------------- */
     
     /**
-     * Start NPC simulation in worker or main thread.
-     * 
-     * Worker mode (workerEnabled = true):
-     * - Simulation runs in separate thread for better performance
-     * - Uses SharedArrayBuffer for fast data transfer
-     * - Can handle thousands of NPCs without blocking UI
-     * 
-     * Main thread mode (workerEnabled = false):
-     * - Simulation runs on main thread (fallback)
-     * - Simpler but can cause UI lag with many NPCs
-     */
-    bridge.startInWorker(
-        workerEnabled,
-        npcCount,
-        { lng: Position.x[playerEid], lat: Position.y[playerEid], rot: Rotation.angle[playerEid] }
-    );
-
-    /**
-     * Fallback: If worker is disabled, spawn NPCs on main thread.
+     * Spawn NPCs on main thread.
      * 
      * This creates NPCs directly in the main ECS world and registers
      * an ECS runner to update them each frame.
      */
-    if (!workerEnabled) {
+    if (npcCount > 0) {
         /**
          * Spawn radius in degrees (approximately 111 meters at equator).
          * NPCs spawn in a circle around the player's starting position.
@@ -458,7 +430,7 @@ map.on('load', () => {
 
             /**
              * NPC controller handles interpolation and data management.
-             * Reads NPC positions from simulation bridge and passes interpolated
+             * Reads NPC positions from ECS and passes interpolated
              * screen coordinates to the rendering layer.
              */
             const npcController = new NpcController(map, npcGlLayer);
@@ -516,8 +488,22 @@ map.on('load', () => {
      */
     (window as any).spawnNpc = (lng?: number, lat?: number) => {
         const center = lng !== undefined && lat !== undefined ? {lng, lat} : map.getCenter();
-        // Scale coordinates by 1e7 for integer precision in command buffer
-        bridge.enqueueCommand(CommandType.SpawnNpc, Math.round(center.lng * 1e7), Math.round(center.lat * 1e7), 0);
+        
+        // Create NPC entity in ECS world
+        const eid = addEntity(world);
+        addComponent(world, Position, eid);
+        addComponent(world, Rotation, eid);
+        addComponent(world, Velocity, eid);
+        addComponent(world, NpcTag, eid);
+        addComponent(world, SpriteRef, eid);
+        
+        // Set initial values
+        Position.x[eid] = center.lng;
+        Position.y[eid] = center.lat;
+        Rotation.angle[eid] = 0;
+        Velocity.x[eid] = 0;
+        Velocity.y[eid] = 0;
+        SpriteRef.id[eid] = 0;
     };
 
     // (Hot-reload functionality intentionally omitted.)

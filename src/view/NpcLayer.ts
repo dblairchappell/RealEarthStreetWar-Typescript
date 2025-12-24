@@ -10,7 +10,7 @@
  * - Creates an HTML5 Canvas element positioned absolutely over the map
  * - Renders NPCs as sprites (reusing player sprite) with rotation support
  * - Uses map.project() to convert lat/lng to screen coordinates (works with any projection)
- * - Supports both worker mode and main-thread simulation
+ * - Queries ECS world directly for NPC positions
  * - Falls back to red squares if sprite fails to load
  * 
  * Comparison with NpcInstancedLayer:
@@ -37,7 +37,6 @@ import { defineQuery } from "bitecs";
 import { world } from "../ecs/world";
 import { Position, Rotation, Velocity } from "../ecs/world";
 import { NpcTag } from "../ecs/components/NpcTag";
-import { bridge } from "../sim/SimulationBridge";
 import { SHOW_COLLISION_BOUNDS } from "../config";
 import { CHARACTER_RADIUS_DEG } from "../ecs/systems/collisionSystem";
 
@@ -54,7 +53,7 @@ export default class NpcLayer implements Renderable, Updatable {
   private canvas: HTMLCanvasElement;
   /** 2D rendering context for the canvas */
   private ctx: CanvasRenderingContext2D;
-  /** ECS query to find all NPC entities (used in main-thread mode) */
+  /** ECS query to find all NPC entities */
   private query = defineQuery([NpcTag, Position, Rotation, Velocity]);
   
   // Animation definitions: sprite sheet URLs, frame counts, and playback rates
@@ -378,10 +377,7 @@ export default class NpcLayer implements Renderable, Updatable {
    * Called each frame by the game loop. Clears the canvas and redraws
    * all NPCs as sprites at their current positions with rotation.
    * 
-   * Supports two data sources:
-   * - Worker mode: Reads positions from SimulationBridge snapshot
-   * - Main thread: Queries ECS world directly
-   * 
+   * Queries ECS world directly for NPC positions and renders them.
    * Falls back to red squares if sprite is not loaded.
    * 
    * Note: The alpha parameter is currently unused but could be used
@@ -413,57 +409,11 @@ export default class NpcLayer implements Renderable, Updatable {
     const spriteSize = this.calculateSpriteSize(zoom);
 
     /**
-     * Get NPC positions from appropriate source based on simulation mode.
+     * Query ECS world directly for NPC positions.
+     * Uses bitecs query to find all entities with NpcTag, Position, and Rotation components.
      */
-    if (bridge.isWorkerEnabled()) {
-      /**
-       * Worker mode: Read positions from simulation bridge snapshot.
-       * The snapshot contains 3 floats per NPC: lng, lat, rot (rotation in radians).
-       */
-      const snap = bridge.getLatestNpcSnapshot();
-      if (!snap) return;
-      
-      // Iterate through snapshot (3 floats per NPC)
-      // Account for camera bearing (same as player sprite does)
-      const cameraBearingRad = (this.map.getBearing() * Math.PI) / 180;
-      
-      for (let i = 0; i < snap.length; i += 3) {
-        const lng = snap[i];      // Longitude
-        const lat = snap[i + 1];   // Latitude
-        const baseRotation = snap[i + 2]; // Rotation in radians (from worker)
-        
-        // Subtract camera bearing to match player sprite behavior
-        // Player uses: rotateZ(${this.playerRotation - this.cameraBearing}deg)
-        const rotation = baseRotation - cameraBearingRad;
-        
-        // Project lat/lng to screen coordinates (works with any projection)
-        const p = this.map.project({ lng, lat });
-        
-        // In worker mode, assume all NPCs are walking (velocity not in snapshot)
-        // In the future, we could add velocity to snapshot or calculate from position deltas
-        const animType: 'idle' | 'walking' | 'running' = 'walking';
-        
-        // Draw sprite or fallback square
-        if (this.spritesLoaded[animType] && this.spriteImages[animType]) {
-          const frame = this.currentFrames[animType];
-          this.drawSprite(ctx, p.x, p.y, rotation, spriteSize, animType, frame);
-        } else {
-          this.drawFallbackSquare(ctx, p.x, p.y, spriteSize);
-        }
-
-        // Draw collision bounds if enabled
-        if (SHOW_COLLISION_BOUNDS) {
-          const radiusPx = this.calculateCollisionRadiusPx(lng, lat);
-          this.drawCollisionCircle(ctx, p.x, p.y, radiusPx);
-        }
-      }
-    } else {
-      /**
-       * Main thread mode: Query ECS world directly.
-       * Uses bitecs query to find all entities with NpcTag, Position, and Rotation components.
-       */
-      const ents = this.query(world);
-      for (let i = 0; i < ents.length; i++) {
+    const ents = this.query(world);
+    for (let i = 0; i < ents.length; i++) {
         const eid = ents[i];
         const lng = Position.x[eid];
         const lat = Position.y[eid];
@@ -536,7 +486,6 @@ export default class NpcLayer implements Renderable, Updatable {
           this.drawCollisionCircle(ctx, p.x, p.y, radiusPx);
         }
       }
-    }
   }
   
   /**
