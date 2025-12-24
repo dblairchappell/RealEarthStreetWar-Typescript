@@ -5,6 +5,8 @@ export const GTA1_STYLE_TOP_DOWN = true;   // ← flip to false for 3-D mode
 export const ENABLE_GLOBE = true;
 // Toggle developer performance overlay (fps / frame time / CPU)
 export const SHOW_PERF_OVERLAY = true;
+// Toggle collision bounds visualization (shows collision circles around NPCs)
+export const SHOW_COLLISION_BOUNDS = false; // Set to true to enable
 
 // Map projection type: 'mercator' (default), 'globe', or 'vertical-perspective'
 // Note: MapLibre GL JS v5.6.1 only supports these three projections.

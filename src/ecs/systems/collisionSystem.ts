@@ -14,8 +14,9 @@
  * 
  * ```typescript
  * const grid = new SpatialGrid();
- * grid.rebuild(allEntities, Position);
- * entityCollisionSystem(grid, Position, Velocity);
+ * const entities = npcQuery(world);
+ * grid.rebuild(entities, Position);
+ * entityCollisionSystem(entities, grid, Position, Velocity);
  * ```
  */
 
@@ -26,7 +27,14 @@ import { SpatialGrid } from '../../utils/spatialGrid';
  * Approximately 2-3 meters at the equator.
  * This represents the "personal space" around each character.
  */
-export const CHARACTER_RADIUS_DEG = 0.000002; // adjust to effect how close characters have to be to each other before collision takes place
+export const CHARACTER_RADIUS_DEG = 0.0000028; // adjust to effect how close characters have to be to each other before collision takes place
+
+/**
+ * Maximum collision distance squared for early exit optimization.
+ * Entities beyond this distance are guaranteed not to collide.
+ * Set to 2.5x radius to account for spatial grid cell size.
+ */
+const MAX_COLLISION_DIST_SQ = (CHARACTER_RADIUS_DEG * 2.5) ** 2;
 
 /**
  * Collision response parameters - adjust these to change collision behavior
@@ -62,35 +70,17 @@ export const MIN_SEPARATION_BUFFER = 0.0;
 export const RESTITUTION = 0.0;
 
 /**
- * Circle-circle collision detection.
- * Returns true if two circles overlap.
- * 
- * @param x1 - X coordinate of first circle center
- * @param y1 - Y coordinate of first circle center
- * @param r1 - Radius of first circle
- * @param x2 - X coordinate of second circle center
- * @param y2 - Y coordinate of second circle center
- * @param r2 - Radius of second circle
- * @returns True if circles overlap
- */
-function circlesCollide(
-  x1: number, y1: number, r1: number,
-  x2: number, y2: number, r2: number
-): boolean {
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const distSq = dx * dx + dy * dy;
-  const radiusSum = r1 + r2;
-  return distSq < radiusSum * radiusSum;
-}
-
-/**
  * Resolves collision between two entities using simple separation.
  * Moves entities apart along the collision normal and applies velocity damping.
+ * 
+ * Optimized to reuse pre-calculated distance and delta values.
  * 
  * @param eid1 - First entity ID
  * @param eid2 - Second entity ID
  * @param overlap - Amount of overlap between entities (positive value)
+ * @param dist - Pre-calculated distance between entities
+ * @param dx - Pre-calculated delta X (eid2.x - eid1.x)
+ * @param dy - Pre-calculated delta Y (eid2.y - eid1.y)
  * @param Position - Position component from ECS world (typed array)
  * @param Velocity - Velocity component from ECS world (typed array)
  */
@@ -98,13 +88,12 @@ function resolveCollision(
   eid1: number,
   eid2: number,
   overlap: number,
+  dist: number,
+  dx: number,
+  dy: number,
   Position: { x: { [key: number]: number }; y: { [key: number]: number } },
   Velocity: { x: { [key: number]: number }; y: { [key: number]: number } }
 ): void {
-  const dx = Position.x[eid2] - Position.x[eid1];
-  const dy = Position.y[eid2] - Position.y[eid1];
-  const dist = Math.sqrt(dx * dx + dy * dy);
-  
   if (dist === 0) {
     // Entities are exactly on top of each other - random separation
     const angle = Math.random() * Math.PI * 2;
@@ -164,71 +153,71 @@ function resolveCollision(
  * Main collision system.
  * Detects and resolves collisions between all entities.
  * 
+ * Optimizations:
+ * - Uses ordered pair tracking to avoid duplicate checks (each pair checked once)
+ * - Reuses distance calculations (no redundant sqrt calls)
+ * - Early exit for distant entities (spatial grid optimization)
+ * - Accepts entities array directly (avoids grid scanning)
+ * 
  * Should run after movementSystem in the fixed update loop.
  * Requires the spatial grid to be rebuilt before calling this function.
  * 
- * @param grid - Spatial grid containing entity positions
+ * @param entities - Array of entity IDs to check for collisions (from ECS query)
+ * @param grid - Spatial grid containing entity positions (must be rebuilt before calling)
  * @param Position - Position component from ECS world (typed array)
  * @param Velocity - Velocity component from ECS world (typed array)
  */
 export function entityCollisionSystem(
+  entities: number[],
   grid: SpatialGrid,
   Position: { x: { [key: number]: number }; y: { [key: number]: number } },
   Velocity: { x: { [key: number]: number }; y: { [key: number]: number } }
 ): void {
-  // Get all entities with positions (we'll query grid for nearby ones)
-  // We need to iterate through entities, but use grid to find potential collisions
-  // For efficiency, we'll track processed pairs to avoid duplicate checks
+  // Radius sum squared for collision detection (avoids recalculating)
+  const radiusSum = CHARACTER_RADIUS_DEG * 2;
+  const radiusSumSq = radiusSum * radiusSum;
   
-  const processed = new Set<number>();
-  const allEntities = new Set<number>();
-  
-  // Collect all entities by scanning grid cells
-  // This is more efficient than querying world directly
-  for (const cellEntities of (grid as any).grid.values()) {
-    for (const eid of cellEntities) {
-      allEntities.add(eid);
-    }
-  }
-  
-  const entitiesArray = Array.from(allEntities);
-  
-  for (let i = 0; i < entitiesArray.length; i++) {
-    const eid1 = entitiesArray[i];
-    if (processed.has(eid1)) continue;
-    
+  for (let i = 0; i < entities.length; i++) {
+    const eid1 = entities[i];
     const x1 = Position.x[eid1];
     const y1 = Position.y[eid1];
     
-    // Get nearby entities using spatial grid
+    // Get nearby entities using spatial grid (3x3 cell area)
     const nearby = grid.getNearbyEntities(x1, y1);
     
     for (let j = 0; j < nearby.length; j++) {
       const eid2 = nearby[j];
       
-      // Skip self and already processed pairs
-      if (eid1 === eid2 || processed.has(eid2)) continue;
+      // Skip self
+      if (eid1 === eid2) continue;
+      
+      // Only check pairs where eid1 < eid2 to avoid duplicate checks
+      // This naturally ensures each pair is checked exactly once without Set lookups
+      if (eid1 >= eid2) continue;
       
       const x2 = Position.x[eid2];
       const y2 = Position.y[eid2];
       
-      // Check collision
-      if (circlesCollide(
-        x1, y1, CHARACTER_RADIUS_DEG,
-        x2, y2, CHARACTER_RADIUS_DEG
-      )) {
-        const dx = x2 - x1;
-        const dy = y2 - y1;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const overlap = CHARACTER_RADIUS_DEG * 2 - dist;
+      // Calculate delta and distance squared (for early exit)
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const distSq = dx * dx + dy * dy;
+      
+      // Early exit: entities too far apart to collide
+      if (distSq > MAX_COLLISION_DIST_SQ) continue;
+      
+      // Check collision using squared distance (avoids sqrt)
+      if (distSq < radiusSumSq) {
+        // Calculate actual distance and overlap
+        const dist = Math.sqrt(distSq);
+        const overlap = radiusSum - dist;
         
         if (overlap > 0) {
-          resolveCollision(eid1, eid2, overlap, Position, Velocity);
+          // Resolve collision using pre-calculated values
+          resolveCollision(eid1, eid2, overlap, dist, dx, dy, Position, Velocity);
         }
       }
     }
-    
-    processed.add(eid1);
   }
 }
 

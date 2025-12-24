@@ -38,6 +38,8 @@ import { world } from "../ecs/world";
 import { Position, Rotation, Velocity } from "../ecs/world";
 import { NpcTag } from "../ecs/components/NpcTag";
 import { bridge } from "../sim/SimulationBridge";
+import { SHOW_COLLISION_BOUNDS } from "../config";
+import { CHARACTER_RADIUS_DEG } from "../ecs/systems/collisionSystem";
 
 /**
  * Canvas-based NPC rendering layer.
@@ -271,6 +273,76 @@ export default class NpcLayer implements Renderable, Updatable {
   }
 
   /**
+   * Calculates collision radius in screen pixels for a given NPC position.
+   * 
+   * The collision radius is stored in degrees (CHARACTER_RADIUS_DEG).
+   * To accurately convert to screen pixels, we project two points:
+   * - The NPC center position
+   * - A point offset by the collision radius (to the east/north)
+   * Then measure the screen distance between them.
+   * 
+   * This approach correctly handles:
+   * - Map projection (Mercator, Globe, etc.)
+   * - Latitude scaling (Mercator stretches at higher latitudes)
+   * - Zoom level (automatically handled by map.project())
+   * 
+   * @param lng - NPC longitude in degrees
+   * @param lat - NPC latitude in degrees
+   * @returns Collision radius in screen pixels
+   */
+  private calculateCollisionRadiusPx(lng: number, lat: number): number {
+    // Project the NPC center position to screen coordinates
+    const center = this.map.project({ lng, lat });
+    
+    // Project a point offset by the collision radius to the east
+    // Using east direction for simplicity (works at all latitudes)
+    const offsetPoint = this.map.project({ 
+      lng: lng + CHARACTER_RADIUS_DEG, 
+      lat: lat 
+    });
+    
+    // Calculate screen distance between center and offset point
+    const dx = offsetPoint.x - center.x;
+    const dy = offsetPoint.y - center.y;
+    const radiusPx = Math.sqrt(dx * dx + dy * dy);
+    
+    return radiusPx;
+  }
+
+  /**
+   * Draws a collision circle around an NPC position.
+   * 
+   * @param ctx - Canvas 2D context
+   * @param x - Screen X coordinate (center of circle)
+   * @param y - Screen Y coordinate (center of circle)
+   * @param radiusPx - Circle radius in pixels
+   */
+  private drawCollisionCircle(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    radiusPx: number
+  ): void {
+    ctx.save();
+    
+    // Draw circle outline
+    ctx.strokeStyle = 'rgba(255, 0, 0, 0.6)'; // Semi-transparent red
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]); // Dashed line for visibility
+    ctx.beginPath();
+    ctx.arc(x, y, radiusPx, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // Optional: Draw center point
+    ctx.fillStyle = 'rgba(255, 0, 0, 0.8)';
+    ctx.beginPath();
+    ctx.arc(x, y, 2, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.restore();
+  }
+
+  /**
    * Resize canvas to match map container dimensions.
    * 
    * Called on initialization and whenever the map is resized.
@@ -378,6 +450,12 @@ export default class NpcLayer implements Renderable, Updatable {
         } else {
           this.drawFallbackSquare(ctx, p.x, p.y, spriteSize);
         }
+
+        // Draw collision bounds if enabled
+        if (SHOW_COLLISION_BOUNDS) {
+          const radiusPx = this.calculateCollisionRadiusPx(lng, lat);
+          this.drawCollisionCircle(ctx, p.x, p.y, radiusPx);
+        }
       }
     } else {
       /**
@@ -450,6 +528,12 @@ export default class NpcLayer implements Renderable, Updatable {
           this.drawSprite(ctx, p.x, p.y, rotation, spriteSize, animType, frame);
         } else {
           this.drawFallbackSquare(ctx, p.x, p.y, spriteSize);
+        }
+
+        // Draw collision bounds if enabled
+        if (SHOW_COLLISION_BOUNDS) {
+          const radiusPx = this.calculateCollisionRadiusPx(lng, lat);
+          this.drawCollisionCircle(ctx, p.x, p.y, radiusPx);
         }
       }
     }

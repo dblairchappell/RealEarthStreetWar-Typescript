@@ -268,7 +268,7 @@ self.onmessage = (evt: MessageEvent<InitMessage>) => {
         spatialGrid.rebuild(npcEnts, Position);
         
         // Run collision detection and resolution
-        entityCollisionSystem(spatialGrid, Position, Velocity);
+        entityCollisionSystem(npcEnts, spatialGrid, Position, Velocity);
       }
       
       /* ---------------- Command Processing ---------------- */

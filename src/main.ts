@@ -419,7 +419,7 @@ map.on('load', () => {
                 spatialGrid.rebuild(npcEnts, Position);
                 
                 // Run collision detection and resolution
-                entityCollisionSystem(spatialGrid, Position, Velocity);
+                entityCollisionSystem(npcEnts, spatialGrid, Position, Velocity);
             },
         } as any;
         loop.addFixed(ecsRunner);
