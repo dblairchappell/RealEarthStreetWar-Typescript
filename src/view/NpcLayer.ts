@@ -8,9 +8,10 @@
  * Architecture:
  * 
  * - Creates an HTML5 Canvas element positioned absolutely over the map
- * - Renders NPCs as small red squares (3px) for simple visualization
+ * - Renders NPCs as sprites (reusing player sprite) with rotation support
  * - Uses map.project() to convert lat/lng to screen coordinates (works with any projection)
  * - Supports both worker mode and main-thread simulation
+ * - Falls back to red squares if sprite fails to load
  * 
  * Comparison with NpcInstancedLayer:
  * 
@@ -19,8 +20,8 @@
  * | Technology          | WebGL (GPU)       | Canvas 2D (CPU) |
  * | Performance         | Fast              | Slower          |
  * | Projection Support  | Mercator only     | Any projection  |
- * | Visual Quality      | Sprites           | Simple squares  |
- * | Complexity          | High              | Low             |
+ * | Visual Quality      | Sprites           | Sprites         |
+ * | Complexity          | High              | Medium          |
  * 
  * Usage:
  * 
@@ -31,26 +32,88 @@
  * Interpolation could be added in the future for smoother movement.
  */
 
-import { Renderable } from "../loop/GameLoop";
+import { Renderable, Updatable } from "../loop/GameLoop";
 import { defineQuery } from "bitecs";
 import { world } from "../ecs/world";
-import { Position } from "../ecs/world";
+import { Position, Rotation, Velocity } from "../ecs/world";
 import { NpcTag } from "../ecs/components/NpcTag";
 import { bridge } from "../sim/SimulationBridge";
 
 /**
  * Canvas-based NPC rendering layer.
  * 
- * Renders NPCs as small red squares on a canvas overlay positioned above the map.
+ * Renders NPCs as sprites on a canvas overlay positioned above the map.
  * Works with any map projection by using map.project() for coordinate conversion.
+ * Supports sprite animations (idle, walking, running) similar to player character.
+ * Falls back to red squares if sprite fails to load.
  */
-export default class NpcLayer implements Renderable {
+export default class NpcLayer implements Renderable, Updatable {
   /** HTML5 Canvas element for drawing NPCs */
   private canvas: HTMLCanvasElement;
   /** 2D rendering context for the canvas */
   private ctx: CanvasRenderingContext2D;
   /** ECS query to find all NPC entities (used in main-thread mode) */
-  private query = defineQuery([NpcTag, Position]);
+  private query = defineQuery([NpcTag, Position, Rotation, Velocity]);
+  
+  // Animation definitions: sprite sheet URLs, frame counts, and playback rates
+  // Same as CharacterView for consistency
+  private animations = {
+    idle: {
+      url: 'sprites/brian/brian_idling_31x1.png',
+      frames: 31,
+      frameRate: 12 // 12 frames per second
+    },
+    walking: {
+      url: 'sprites/brian/brian_walking_forward_31x1.png',
+      frames: 31,
+      frameRate: 24 // Faster frame rate for walking animation
+    },
+    running: {
+      url: 'sprites/brian/brian_running_forward_23x1.png',
+      frames: 23,
+      frameRate: 30 // Fastest frame rate for running animation
+    }
+  };
+  
+  // Sprite images and loading state (one per animation type)
+  private spriteImages: {
+    idle: HTMLImageElement | null;
+    walking: HTMLImageElement | null;
+    running: HTMLImageElement | null;
+  } = {
+    idle: null,
+    walking: null,
+    running: null
+  };
+  
+  private spritesLoaded = {
+    idle: false,
+    walking: false,
+    running: false
+  };
+  
+  // Animation frame accumulators (one per animation type)
+  // Uses accumulator pattern to advance frames at correct rate
+  private frameAccumulators = {
+    idle: 0,
+    walking: 0,
+    running: 0
+  };
+  
+  // Current frame indices (one per animation type)
+  private currentFrames = {
+    idle: 0,
+    walking: 0,
+    running: 0
+  };
+  
+  // Velocity threshold for determining animation type
+  // Below this threshold: idle, above: walking or running
+  private readonly velocityThreshold = 0.0000001; // Small threshold to detect movement
+  private readonly runningSpeedMultiplier = 1.5; // Running is 1.5x walking speed
+  
+  // Base size multiplier (same as CharacterView for consistency)
+  private readonly npcBaseSize = 0.075;
 
   /**
    * Constructor - sets up the canvas overlay.
@@ -82,6 +145,120 @@ export default class NpcLayer implements Renderable {
     this.resize();
     // Listen for map resize events to keep canvas in sync
     this.map.on('resize', () => this.resize());
+    
+    // Load all sprite images asynchronously
+    this.loadSprites();
+  }
+  
+  /**
+   * Loads all sprite images asynchronously (idle, walking, running).
+   * Sets spritesLoaded flags when ready.
+   */
+  private loadSprites(): void {
+    // Load idle sprite
+    const idleImg = new Image();
+    idleImg.onload = () => {
+      this.spriteImages.idle = idleImg;
+      this.spritesLoaded.idle = true;
+    };
+    idleImg.onerror = () => {
+      console.warn('[NpcLayer] Failed to load idle sprite:', this.animations.idle.url);
+    };
+    idleImg.src = this.animations.idle.url;
+    
+    // Load walking sprite
+    const walkingImg = new Image();
+    walkingImg.onload = () => {
+      this.spriteImages.walking = walkingImg;
+      this.spritesLoaded.walking = true;
+    };
+    walkingImg.onerror = () => {
+      console.warn('[NpcLayer] Failed to load walking sprite:', this.animations.walking.url);
+    };
+    walkingImg.src = this.animations.walking.url;
+    
+    // Load running sprite
+    const runningImg = new Image();
+    runningImg.onload = () => {
+      this.spriteImages.running = runningImg;
+      this.spritesLoaded.running = true;
+    };
+    runningImg.onerror = () => {
+      console.warn('[NpcLayer] Failed to load running sprite:', this.animations.running.url);
+    };
+    runningImg.src = this.animations.running.url;
+  }
+  
+  /**
+   * Determines which animation type to use based on velocity.
+   * 
+   * @param velocityX - Velocity X component
+   * @param velocityY - Velocity Y component
+   * @returns Animation type: 'idle', 'walking', or 'running'
+   */
+  private determineAnimationType(velocityX: number, velocityY: number): 'idle' | 'walking' | 'running' {
+    // Calculate velocity magnitude
+    const speed = Math.sqrt(velocityX * velocityX + velocityY * velocityY);
+    
+    if (speed < this.velocityThreshold) {
+      return 'idle';
+    }
+    
+    // For now, assume all moving NPCs are walking
+    // In the future, we could compare speed to a running threshold
+    // const walkingSpeed = 0.000000225; // From straightWalkSystem
+    // if (speed > walkingSpeed * this.runningSpeedMultiplier) {
+    //   return 'running';
+    // }
+    
+    return 'walking';
+  }
+  
+  /**
+   * Updatable implementation – called each frame by GameLoop.
+   * 
+   * Advances sprite animation frames using an accumulator pattern.
+   * This ensures animations play at the correct rate regardless of frame time variations.
+   * 
+   * @param deltaMs - Time elapsed since last update (milliseconds)
+   */
+  public update(deltaMs: number): void {
+    // Update each animation type independently
+    for (const animType of ['idle', 'walking', 'running'] as const) {
+      const anim = this.animations[animType];
+      const frameRate = anim.frameRate;
+      const frameDuration = 1000 / frameRate;
+      
+      // Accumulate elapsed time
+      this.frameAccumulators[animType] += deltaMs;
+      
+      // Advance frames until caught up (handles frame drops)
+      while (this.frameAccumulators[animType] >= frameDuration) {
+        // Advance to next frame (wraps around using modulo)
+        this.currentFrames[animType] = (this.currentFrames[animType] + 1) % anim.frames;
+        
+        // Subtract frame duration from accumulator (preserve remainder)
+        this.frameAccumulators[animType] -= frameDuration;
+      }
+    }
+  }
+  
+  /**
+   * Calculates sprite size in pixels based on map zoom level.
+   * Uses the same formula as CharacterView for consistency.
+   * 
+   * Formula: size = baseSize * 2^((zoom - 10) / 1.2)
+   * - At zoom 10: size = baseSize
+   * - Zooming in: size increases exponentially
+   * - Zooming out: size decreases exponentially
+   * - Clamped between 1px (min) and 200px (max) to prevent extreme sizes
+   * 
+   * @param zoom - Current map zoom level
+   * @returns Sprite size in pixels
+   */
+  private calculateSpriteSize(zoom: number): number {
+    const scale = Math.pow(2, (zoom - 10) / 1.2); // Same formula as CharacterView
+    return Math.max(1, Math.min(200, this.npcBaseSize * scale));
   }
 
   /**
@@ -100,11 +277,13 @@ export default class NpcLayer implements Renderable {
    * Render NPCs on the canvas.
    * 
    * Called each frame by the game loop. Clears the canvas and redraws
-   * all NPCs as small red squares at their current positions.
+   * all NPCs as sprites at their current positions with rotation.
    * 
    * Supports two data sources:
    * - Worker mode: Reads positions from SimulationBridge snapshot
    * - Main thread: Queries ECS world directly
+   * 
+   * Falls back to red squares if sprite is not loaded.
    * 
    * Note: The alpha parameter is currently unused but could be used
    * for interpolation between fixed timesteps in the future.
@@ -121,13 +300,9 @@ export default class NpcLayer implements Renderable {
      */
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     
-    /**
-     * NPC visualization: small red squares.
-     * Size is constant in screen pixels (3px) so NPCs remain visible
-     * at all zoom levels but don't cover the map.
-     */
-    const size = 3; // constant size in screen pixels
-    ctx.fillStyle = 'rgba(200,0,0,0.6)';  // Semi-transparent red
+    // Get current zoom for size calculation
+    const zoom = this.map.getZoom();
+    const spriteSize = this.calculateSpriteSize(zoom);
 
     /**
      * Get NPC positions from appropriate source based on simulation mode.
@@ -135,27 +310,43 @@ export default class NpcLayer implements Renderable {
     if (bridge.isWorkerEnabled()) {
       /**
        * Worker mode: Read positions from simulation bridge snapshot.
-       * The snapshot contains 3 floats per NPC: lng, lat, rot.
+       * The snapshot contains 3 floats per NPC: lng, lat, rot (rotation in radians).
        */
       const snap = bridge.getLatestNpcSnapshot();
       if (!snap) return;
       
       // Iterate through snapshot (3 floats per NPC)
+      // Account for camera bearing (same as player sprite does)
+      const cameraBearingRad = (this.map.getBearing() * Math.PI) / 180;
+      
       for (let i = 0; i < snap.length; i += 3) {
         const lng = snap[i];      // Longitude
         const lat = snap[i + 1];   // Latitude
-        // Rotation (snap[i + 2]) is available but not used for simple squares
+        const baseRotation = snap[i + 2]; // Rotation in radians (from worker)
+        
+        // Subtract camera bearing to match player sprite behavior
+        // Player uses: rotateZ(${this.playerRotation - this.cameraBearing}deg)
+        const rotation = baseRotation - cameraBearingRad;
         
         // Project lat/lng to screen coordinates (works with any projection)
         const p = this.map.project({ lng, lat });
         
-        // Draw square centered on NPC position
-        ctx.fillRect(p.x - size / 2, p.y - size / 2, size, size);
+        // In worker mode, assume all NPCs are walking (velocity not in snapshot)
+        // In the future, we could add velocity to snapshot or calculate from position deltas
+        const animType: 'idle' | 'walking' | 'running' = 'walking';
+        
+        // Draw sprite or fallback square
+        if (this.spritesLoaded[animType] && this.spriteImages[animType]) {
+          const frame = this.currentFrames[animType];
+          this.drawSprite(ctx, p.x, p.y, rotation, spriteSize, animType, frame);
+        } else {
+          this.drawFallbackSquare(ctx, p.x, p.y, spriteSize);
+        }
       }
     } else {
       /**
        * Main thread mode: Query ECS world directly.
-       * Uses bitecs query to find all entities with NpcTag and Position components.
+       * Uses bitecs query to find all entities with NpcTag, Position, and Rotation components.
        */
       const ents = this.query(world);
       for (let i = 0; i < ents.length; i++) {
@@ -163,12 +354,142 @@ export default class NpcLayer implements Renderable {
         const lng = Position.x[eid];
         const lat = Position.y[eid];
         
+        // Get velocity to determine animation type and rotation
+        const velocityX = Velocity.x[eid] || 0;
+        const velocityY = Velocity.y[eid] || 0;
+        const animType = this.determineAnimationType(velocityX, velocityY);
+        
+        // Calculate rotation from velocity direction (ensures NPC faces movement direction)
+        // 
+        // Coordinate system analysis:
+        // - Player movement: rotation 0° = north (deltaLat = cos(0) = 1, deltaLng = sin(0) = 0)
+        // - Velocity (0, 1) = moving north → atan2(velocityY, velocityX) = atan2(1, 0) = π/2 radians
+        // - Canvas rotate(): rotates clockwise from positive X axis (east)
+        //   - rotate(0) = facing east
+        //   - rotate(π/2) = facing south (clockwise)
+        //   - rotate(-π/2) = facing north (counter-clockwise)
+        //   - rotate(π) = facing west
+        // - To match player system (0° = north), we need: canvasRotation = gameRotation - π/2
+        // - But atan2 already gives us the angle from east, so we need to subtract π/2 to get north=0
+        // - However, if sprite faces east by default, no offset needed
+        // - If sprite faces north by default, need -π/2 offset
+        // 
+        // Testing: Try NO offset first (assumes sprite faces east like Canvas default)
+        let rotation: number;
+        const speed = Math.sqrt(velocityX * velocityX + velocityY * velocityY);
+        if (speed > this.velocityThreshold) {
+          // Calculate rotation from velocity to match player's coordinate system
+          // Player system: rotation 0° = north (deltaLat = cos(0) = 1, deltaLng = sin(0) = 0)
+          // When moving north: velocityY = 1, velocityX = 0
+          // atan2(1, 0) = π/2 radians = 90°, but player rotation for north = 0°
+          // So we need: rotation = atan2(velocityY, velocityX) - π/2
+          // Canvas rotate() rotates clockwise, CSS rotateZ() rotates counter-clockwise
+          // So we need to negate to match: rotation = -(atan2(velocityY, velocityX) - π/2)
+          const baseRotation = -(Math.atan2(velocityY, velocityX) - Math.PI / 2);
+          
+          // Account for camera bearing (same as player sprite does)
+          // Player uses: rotateZ(${this.playerRotation - this.cameraBearing}deg)
+          // So we subtract camera bearing from rotation (convert bearing from degrees to radians)
+          const cameraBearingRad = (this.map.getBearing() * Math.PI) / 180;
+          rotation = baseRotation - cameraBearingRad;
+        } else {
+          // Idle: use stored rotation (stored in degrees, convert to radians)
+          // Rotation.angle uses game system (0° = north), same as player
+          // Convert from game system (0° = north) to Canvas system (0 = east)
+          // Same conversion as moving NPCs: subtract π/2 and negate
+          const rotationDeg = Rotation.angle[eid] || 0;
+          const baseRotation = -((rotationDeg * Math.PI) / 180 - Math.PI / 2);
+          
+          // Account for camera bearing (same as player sprite does)
+          const cameraBearingRad = (this.map.getBearing() * Math.PI) / 180;
+          rotation = baseRotation - cameraBearingRad;
+        }
+        
         // Project lat/lng to screen coordinates
         const p = this.map.project({ lng, lat });
         
-        // Draw square centered on NPC position
-        ctx.fillRect(p.x - size / 2, p.y - size / 2, size, size);
+        // Draw sprite or fallback square
+        if (this.spritesLoaded[animType] && this.spriteImages[animType]) {
+          const frame = this.currentFrames[animType];
+          this.drawSprite(ctx, p.x, p.y, rotation, spriteSize, animType, frame);
+        } else {
+          this.drawFallbackSquare(ctx, p.x, p.y, spriteSize);
+        }
       }
     }
+  }
+  
+  /**
+   * Draws a sprite at the given position with rotation.
+   * Extracts a single frame from the sprite sheet based on animation type.
+   * 
+   * @param ctx - Canvas 2D context
+   * @param x - Screen X coordinate
+   * @param y - Screen Y coordinate
+   * @param rotation - Rotation in radians
+   * @param size - Sprite size in pixels
+   * @param animType - Animation type ('idle', 'walking', or 'running')
+   * @param frame - Frame index (0-based) from sprite sheet
+   */
+  private drawSprite(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    rotation: number,
+    size: number,
+    animType: 'idle' | 'walking' | 'running',
+    frame: number
+  ): void {
+    const spriteImage = this.spriteImages[animType];
+    if (!spriteImage) return;
+    
+    const anim = this.animations[animType];
+    
+    // Calculate source rectangle for this frame
+    const frameWidth = spriteImage.width / anim.frames;
+    const sx = frame * frameWidth;
+    const sy = 0;
+    const sWidth = frameWidth;
+    const sHeight = spriteImage.height;
+    
+    // Round coordinates to prevent sub-pixel blurring
+    const screenX = Math.round(x);
+    const screenY = Math.round(y);
+    
+    // Save context state
+    ctx.save();
+    
+    // Translate to sprite center, rotate, then translate back
+    ctx.translate(screenX, screenY);
+    ctx.rotate(rotation); // Rotate around center
+    
+    // Draw sprite frame (centered on origin after translate)
+    ctx.drawImage(
+      spriteImage,
+      sx, sy, sWidth, sHeight, // Source rectangle (from sprite sheet)
+      -size / 2, -size / 2, size, size // Destination rectangle (centered, sized)
+    );
+    
+    // Restore context state
+    ctx.restore();
+  }
+  
+  /**
+   * Draws a fallback red square if sprite fails to load.
+   * 
+   * @param ctx - Canvas 2D context
+   * @param x - Screen X coordinate
+   * @param y - Screen Y coordinate
+   * @param size - Square size in pixels
+   */
+  private drawFallbackSquare(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    size: number
+  ): void {
+    ctx.fillStyle = 'rgba(200,0,0,0.6)';
+    const fallbackSize = Math.max(3, Math.min(size, 10)); // Clamp fallback size
+    ctx.fillRect(x - fallbackSize / 2, y - fallbackSize / 2, fallbackSize, fallbackSize);
   }
 } 

@@ -457,7 +457,8 @@ map.on('load', () => {
              * Slower than WebGL but more flexible.
              */
             const npcCanvasLayer = new NpcLayer(map);
-            loop.addRenderable(npcCanvasLayer);
+            loop.add(npcCanvasLayer); // Register as Updatable for animation frame advancement
+            loop.addRenderable(npcCanvasLayer); // Register as Renderable for rendering
         }
     }
 

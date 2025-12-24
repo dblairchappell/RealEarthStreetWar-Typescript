@@ -373,7 +373,28 @@ self.onmessage = (evt: MessageEvent<InitMessage>) => {
         const base = offset + i * 3;
         buffer[base] = Position.x[eid];
         buffer[base + 1] = Position.y[eid];
-        buffer[base + 2] = Rotation.angle[eid];
+        
+        // Calculate rotation from velocity direction (ensures NPC faces movement direction)
+        // Testing: Try NO offset first (assumes sprite faces east by default, matching Canvas rotate(0))
+        const velocityX = Velocity.x[eid] || 0;
+        const velocityY = Velocity.y[eid] || 0;
+        const speed = Math.sqrt(velocityX * velocityX + velocityY * velocityY);
+        let rotation: number;
+        if (speed > 0.0000001) { // Small threshold to detect movement
+          // Calculate rotation from velocity to match player's coordinate system
+          // Player system: rotation 0° = north (deltaLat = cos(0) = 1, deltaLng = sin(0) = 0)
+          // When moving north: velocityY = 1, velocityX = 0
+          // atan2(1, 0) = π/2 radians = 90°, but player rotation for north = 0°
+          // So we need: rotation = atan2(velocityY, velocityX) - π/2
+          // Canvas rotate() rotates clockwise, CSS rotateZ() rotates counter-clockwise
+          // So we need to negate to match: rotation = -(atan2(velocityY, velocityX) - π/2)
+          rotation = -(Math.atan2(velocityY, velocityX) - Math.PI / 2);
+        } else {
+          // Idle: use stored rotation (convert from degrees to radians, then apply Canvas offset)
+          const rotationDeg = Rotation.angle[eid] || 0;
+          rotation = (rotationDeg * Math.PI) / 180 - Math.PI / 2;
+        }
+        buffer[base + 2] = rotation;
       }
       
       // Atomically update write index and notify main thread
@@ -392,7 +413,28 @@ self.onmessage = (evt: MessageEvent<InitMessage>) => {
         const eid = ents[i];
         snap[i * 3] = Position.x[eid];
         snap[i * 3 + 1] = Position.y[eid];
-        snap[i * 3 + 2] = Rotation.angle[eid];
+        
+        // Calculate rotation from velocity direction (ensures NPC faces movement direction)
+        // Testing: Try NO offset first (assumes sprite faces east by default, matching Canvas rotate(0))
+        const velocityX = Velocity.x[eid] || 0;
+        const velocityY = Velocity.y[eid] || 0;
+        const speed = Math.sqrt(velocityX * velocityX + velocityY * velocityY);
+        let rotation: number;
+        if (speed > 0.0000001) { // Small threshold to detect movement
+          // Calculate rotation from velocity to match player's coordinate system
+          // Player system: rotation 0° = north (deltaLat = cos(0) = 1, deltaLng = sin(0) = 0)
+          // When moving north: velocityY = 1, velocityX = 0
+          // atan2(1, 0) = π/2 radians = 90°, but player rotation for north = 0°
+          // So we need: rotation = atan2(velocityY, velocityX) - π/2
+          // Canvas rotate() rotates clockwise, CSS rotateZ() rotates counter-clockwise
+          // So we need to negate to match: rotation = -(atan2(velocityY, velocityX) - π/2)
+          rotation = -(Math.atan2(velocityY, velocityX) - Math.PI / 2);
+        } else {
+          // Idle: use stored rotation (convert from degrees to radians, then apply Canvas offset)
+          const rotationDeg = Rotation.angle[eid] || 0;
+          rotation = (rotationDeg * Math.PI) / 180 - Math.PI / 2;
+        }
+        snap[i * 3 + 2] = rotation;
       }
       // Transfer buffer ownership to avoid copying
       (self as any).postMessage(snap, [snap.buffer]);
