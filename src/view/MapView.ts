@@ -45,7 +45,7 @@ import CharacterView from "./CharacterView";
 import InputManager from "../input/InputManager";
 import { IInputService } from "../input/IInputService";
 import { InputState } from "../input/InputTypes";
-import { GTA1_STYLE_TOP_DOWN, ENABLE_GLOBE } from "../config";
+import { GTA1_STYLE_TOP_DOWN, ENABLE_GLOBE, MAP_PROJECTION } from "../config";
 import { InfluenceLayer, MarkerLayer, CameraController, FeatureQuery } from './map';
 import { Position, Rotation } from "../ecs/world";
 import { Renderable, Updatable } from "../loop/GameLoop";
@@ -126,6 +126,24 @@ export default class MapView implements Updatable, Renderable {
 
     // Create MapLibre GL JS map instance
     // MapLibre GL JS doesn't require an access token for open data sources
+    
+    // Build projection configuration based on config
+    // Note: MapLibre GL JS v5.6.1 only supports: 'mercator', 'globe', 'vertical-perspective'
+    let projectionConfig: any = undefined;
+    if (ENABLE_GLOBE) {
+      projectionConfig = { type: 'globe' };
+    } else if (MAP_PROJECTION !== 'mercator') {
+      // Only 'globe' and 'vertical-perspective' are supported (besides 'mercator')
+      projectionConfig = { type: MAP_PROJECTION };
+    }
+    // Mercator is the default, so no need to set projectionConfig
+    
+    if (projectionConfig) {
+      console.log(`[MapView] Setting projection to: ${projectionConfig.type}`, projectionConfig);
+    } else {
+      console.log('[MapView] Using default Mercator projection');
+    }
+    
     this.map = new maplibregl.Map({
       container: containerId, // HTML element to render map into
       style: 'offline-map-style.json', // Map style configuration (defines layers, sources, etc.)
@@ -141,7 +159,8 @@ export default class MapView implements Updatable, Renderable {
       pitchWithRotate: GTA1_STYLE_TOP_DOWN ? false : true, // Change pitch when rotating (disabled in top-down)
       touchZoomRotate: GTA1_STYLE_TOP_DOWN ? false : true, // Allow touch gestures for zoom/rotate (disabled in top-down)
       keyboard: false, // Disable built-in keyboard navigation to prevent conflicts with game controls
-      maxPitch: 90 // Maximum camera pitch angle (90 = looking straight down)
+      maxPitch: 90, // Maximum camera pitch angle (90 = looking straight down)
+      projection: projectionConfig // Set projection at initialization (required for proper reprojection)
     } as any);
 
     // Create CharacterView for player sprite rendering (created early, before map loads)
@@ -189,9 +208,17 @@ export default class MapView implements Updatable, Renderable {
     // Map load event: Initialize all sub-components after map is ready
     // This is when the map style has loaded and the map is ready for interaction
     this.map.on('load', () => {
-      // Switch to globe projection if enabled (3D Earth view instead of flat Mercator)
+      // Verify and set projection (some MapLibre versions require setProjection after load)
+      // This ensures projection is applied even if constructor option didn't work
+      // Note: Only 'mercator', 'globe', and 'vertical-perspective' are supported
       if (ENABLE_GLOBE) {
         this.map.setProjection({ type: 'globe' });
+        console.log('[MapView] Projection set to: globe');
+      } else if (MAP_PROJECTION !== 'mercator') {
+        this.map.setProjection({ type: MAP_PROJECTION });
+        console.log(`[MapView] Projection set to: ${MAP_PROJECTION}`);
+      } else {
+        console.log('[MapView] Using default Mercator projection');
       }
       
       // Initialize all specialized sub-components (they need the map to be loaded)
