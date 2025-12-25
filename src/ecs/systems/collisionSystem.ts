@@ -159,7 +159,7 @@ function resolveCollision(
  * - Early exit for distant entities (spatial grid optimization)
  * - Accepts entities array directly (avoids grid scanning)
  * 
- * Should run after movementSystem in the fixed update loop.
+ * Note: This system is used on the server. On the server, it runs after movementSystem in the fixed update loop.
  * Requires the spatial grid to be rebuilt before calling this function.
  * 
  * @param entities - Array of entity IDs to check for collisions (from ECS query)

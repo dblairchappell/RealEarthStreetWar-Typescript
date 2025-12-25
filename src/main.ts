@@ -40,7 +40,7 @@ import NpcLayer from "./view/NpcLayer";
 import { ENABLE_GLOBE, SHOW_PERF_OVERLAY } from "./config";
 import NpcController from "./view/NpcController";
 import { GameClient } from "./network/GameClient";
-import { ENABLE_NETWORK, SERVER_URL } from "./config";
+import { SERVER_URL } from "./config";
 
 /* ───────── Core System Initialization ───────── */
 
@@ -85,44 +85,40 @@ const map = view.mapInstance;
  * Network client for server communication.
  * Handles WebSocket connection, sends input, receives state snapshots.
  */
-let gameClient: GameClient | null = null;
+const gameClient = new GameClient(SERVER_URL);
 
-if (ENABLE_NETWORK) {
-    gameClient = new GameClient(SERVER_URL);
-    
-    gameClient.setCallbacks({
-        onConnected: () => {
-            console.log('[Client] Connected to server');
-        },
-        onDisconnected: () => {
-            console.log('[Client] Disconnected from server');
-        },
-        onStateSnapshot: (snapshot) => {
-            // Apply server state to local game state and ECS
-            controller.applyServerState(snapshot);
-        },
-        onError: (error) => {
-            console.error('[Client] Network error:', error);
-        },
-    });
-    
-    // Connect to server
-    gameClient.connect();
-}
+gameClient.setCallbacks({
+    onConnected: () => {
+        console.log('[Client] Connected to server');
+    },
+    onDisconnected: () => {
+        console.log('[Client] Disconnected from server');
+    },
+    onStateSnapshot: (snapshot) => {
+        // Apply server state to local game state and ECS
+        controller.applyServerState(snapshot);
+    },
+    onError: (error) => {
+        console.error('[Client] Network error:', error);
+    },
+});
+
+// Connect to server
+gameClient.connect();
 
 /**
  * Input callbacks - connect input manager to game controller and network client.
  * 
  * The input manager captures keyboard events and distributes them to registered callbacks.
- * When network is enabled, input is sent to server; otherwise processed locally.
+ * Input is sent to server for authoritative processing.
  */
 input.addCallbacks({
     /** Forward player input (WASD, arrows) to controller and server */
     onPlayerInput: (inp) => {
         controller.handlePlayerInput(inp);
         
-        // Send input to server if network is enabled
-        if (ENABLE_NETWORK && gameClient && gameClient.isConnected()) {
+        // Send input to server
+        if (gameClient.isConnected()) {
             // Only log if there's actual movement input
             if (inp.forward || inp.backward || inp.left || inp.right || inp.rotateLeft || inp.rotateRight) {
                 console.log('[Input] Sending to server:', { forward: inp.forward, backward: inp.backward, left: inp.left, right: inp.right });

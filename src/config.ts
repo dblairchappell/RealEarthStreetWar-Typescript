@@ -18,4 +18,3 @@ export const MAP_PROJECTION: 'mercator' | 'globe' | 'vertical-perspective' = 'me
 // Network configuration
 // Vite uses import.meta.env instead of process.env in the browser
 export const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'ws://localhost:8080';
-export const ENABLE_NETWORK = true; // Set to false to run in offline mode

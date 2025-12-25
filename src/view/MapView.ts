@@ -20,7 +20,7 @@
  * - **Delegation**: Delegates specific responsibilities to specialized components:
  *   - `CharacterView`: Player sprite rendering and animation
  *   - `CameraController`: Camera following, zoom, and rotation
- *   - `MarkerLayer`: HQ markers and other map markers
+ *   - `MarkerLayer`: Map markers
  *   - `FeatureQuery`: Building/transport feature detection
  * 
  * **Game Loop Integration:**
@@ -61,7 +61,7 @@ export default class MapView implements Updatable, Renderable {
   
   // Specialized sub-components (initialized after map loads)
   private featureQuery: FeatureQuery | null = null; // Queries map features (buildings, transport) at click points
-  private markerLayer: MarkerLayer | null = null; // Manages HQ markers and other map markers
+  private markerLayer: MarkerLayer | null = null; // Manages map markers
   private camera: CameraController | null = null; // Handles camera following, zoom, and rotation
   private characterView: CharacterView | null = null; // Renders and animates the player character sprite
   
@@ -205,7 +205,7 @@ export default class MapView implements Updatable, Renderable {
       }
       
       // Initialize all specialized sub-components (they need the map to be loaded)
-      this.markerLayer    = new MarkerLayer(this.map); // HQ markers and other map markers
+      this.markerLayer    = new MarkerLayer(this.map); // Map markers
       this.camera         = new CameraController(this.map, this.characterView); // Camera controls
       this.featureQuery   = new FeatureQuery(this.map); // Building/transport feature queries
       
@@ -297,28 +297,6 @@ export default class MapView implements Updatable, Renderable {
     });
   }
 
-  /**
-   * Creates an HQ marker on the map at the specified coordinates.
-   * Delegates to MarkerLayer for actual marker creation.
-   * 
-   * @param coords - Map coordinates where the HQ should be placed
-   * @param type - Type of HQ (from GameState.HQType enum)
-   * @returns The created marker object (or undefined if MarkerLayer not initialized)
-   */
-  createHQMarker(coords: { lng: number; lat: number }, type: HQType): any {
-    return this.markerLayer?.createHQMarker(coords, type);
-  }
-
-  /**
-   * Updates the territory influence area visualization.
-   * Delegates to InfluenceLayer for actual rendering.
-   * Called by controller when territory data changes.
-   * 
-   * @param territoryData - Territory data to visualize (format defined by InfluenceLayer)
-   */
-  updateInfluenceArea(territoryData: any) {
-    this.influenceLayer?.update(territoryData);
-  }
 
   /**
    * Creates the player character sprite on the map.
@@ -533,7 +511,6 @@ export default class MapView implements Updatable, Renderable {
     
     // Clean up sub-components
     this.markerLayer?.destroy();
-    this.influenceLayer?.destroy();
     this.camera?.destroy();
   }
 
