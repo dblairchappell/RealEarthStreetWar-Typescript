@@ -1,61 +1,44 @@
 // controller/GameController.ts
 import GameState from "../model/GameState";
 import MapView from "../view/MapView";
-import { Position, Rotation } from "../ecs/world";
 import { FixedUpdatable } from "../loop/GameLoop";
+import { NetworkStateManager } from "../network/NetworkStateManager";
+import { Position, Rotation } from "../ecs/world";
 
 export default class GameController implements FixedUpdatable {
-  /**
-   * Counts how many fixed-update ticks have elapsed. Once we reach the
-   * equivalent of `GameState.GAME_TICK_MS` (≈1 s) we advance the in-game
-   * clock and reset the counter. This removes the old millisecond
-   * accumulator and keeps logic tied directly to the fixed-step loop.
-   */
-  private tickCounter = 0;
+  private networkStateManager: NetworkStateManager;
 
-  // Number of fixed-step ticks that make up one game tick (1 s).
-  private static readonly TICKS_PER_GAME_TICK = Math.round(
-    GameState.GAME_TICK_MS / (1000 / 60)
-  ); // 60 when FIXED_DT = 16.666 ms
-  
-  // Update the input handling method
-  private currentInput = {
-    forward: false,
-    backward: false,
-    left: false,
-    right: false,
-    rotateLeft: false,
-    rotateRight: false,
-    running: false
-  };
-
-  constructor(private state: GameState, private view: MapView) {}
-
-  private playerEid: number | null = null;
-
-  public setPlayerEntity(id: number) {
-    this.playerEid = id;
+  constructor(private state: GameState, private view: MapView) {
+    this.networkStateManager = new NetworkStateManager(state);
+    
+    // Set up callback for when player entity is created by network state manager
+    this.networkStateManager.setOnPlayerEntityCreated((eid: number) => {
+      // Update view with player entity
+      this.view.setPlayerEntity(eid);
+      
+      // Create visual representation of player character
+      this.view.createPlayerCharacter(
+        { lng: Position.x[eid], lat: Position.y[eid] },
+        Rotation.angle[eid]
+      );
+    });
   }
 
   // legacy update kept empty (required by Updatable interface users)
   public update(_deltaMs: number): void {}
 
   // Fixed-step update (60 Hz)
+  // Note: With server-side simulation, this is mainly for UI updates
+  // Game state is updated via applyServerState() when snapshots arrive
   public fixedUpdate(): void {
-    const deltaSec = 1 / 60;
-
-    // Advance in-game clock every simulated second
-    this.tickCounter++;
-    if (this.tickCounter >= GameController.TICKS_PER_GAME_TICK) {
-      this.tickCounter = 0;
-      this.state.gameDate.setMinutes(
-        this.state.gameDate.getMinutes() + GameState.MINUTES_PER_TICK
-      );
-    }
-
-    this.updatePlayerMovement(deltaSec);
+    // Game time and state are now managed by server
+    // This method is kept for compatibility but doesn't do much
   }
 
+  /**
+   * Handle player input - sends to server instead of processing locally
+   * The server will process movement and send back state snapshots
+   */
   public handlePlayerInput(input: { 
     forward: boolean, 
     backward: boolean, 
@@ -65,90 +48,24 @@ export default class GameController implements FixedUpdatable {
     rotateRight: boolean,
     running: boolean
   }) {
-    this.currentInput = { ...input };
+    // Update local state for UI feedback (isMoving flag)
     this.state.player.isMoving = input.forward || input.backward || input.left || input.right;
+    
+    // Input is sent to server via GameClient (handled in main.ts)
+    // Server processes movement and sends back state snapshots
   }
 
-  // Update the movement logic — deltaSec is seconds since last frame
-  private updatePlayerMovement(deltaSec: number) {
-    if (this.playerEid === null) return;
+  /**
+   * Apply server state snapshot to local game state and ECS
+   */
+  public applyServerState(snapshot: any): void {
+    this.networkStateManager.applySnapshot(snapshot);
+  }
 
-    let positionChanged = false;
-    let rotationChanged = false;
-
-    const eid = this.playerEid;
-
-    // We'll integrate position directly in this controller to avoid relying
-    // on the main-thread ECS movementSystem (which may be disabled when the
-    // simulation runs on the main thread).
-
-    // Handle rotation
-    if (this.currentInput.rotateLeft) {
-      Rotation.angle[eid] -= GameState.PLAYER_ROTATION_SPEED * deltaSec;
-      Rotation.angle[eid] = ((Rotation.angle[eid] % 360) + 360) % 360;
-      rotationChanged = true;
-    }
-    
-    if (this.currentInput.rotateRight) {
-      Rotation.angle[eid] += GameState.PLAYER_ROTATION_SPEED * deltaSec;
-      Rotation.angle[eid] = ((Rotation.angle[eid] % 360) + 360) % 360;
-      rotationChanged = true;
-    }
-
-    // Handle movement (forward/backward and strafing)
-    if (this.currentInput.forward || this.currentInput.backward || this.currentInput.left || this.currentInput.right) {
-      const radians = (Rotation.angle[eid] * Math.PI) / 180;
-      
-      // Choose speed based on whether player is running
-      const moveSpeedDegPerSec = this.currentInput.running ? GameState.PLAYER_RUN_SPEED : GameState.PLAYER_MOVE_SPEED;
-
-      const step = moveSpeedDegPerSec * deltaSec;
-      
-      let deltaLat = 0;
-      let deltaLng = 0;
-      
-      // Forward/backward movement
-      if (this.currentInput.forward) {
-        deltaLat += Math.cos(radians) * step;
-        deltaLng += Math.sin(radians) * step;
-      }
-      
-      if (this.currentInput.backward) {
-        deltaLat -= Math.cos(radians) * step;
-        deltaLng -= Math.sin(radians) * step;
-      }
-      
-      // Strafing movement (perpendicular to facing direction)
-      if (this.currentInput.left) {
-        // Strafe left is 90 degrees counter-clockwise from facing direction
-        const strafeRadians = radians - Math.PI / 2;
-        deltaLat += Math.cos(strafeRadians) * step;
-        deltaLng += Math.sin(strafeRadians) * step;
-      }
-      
-      if (this.currentInput.right) {
-        // Strafe right is 90 degrees clockwise from facing direction
-        const strafeRadians = radians + Math.PI / 2;
-        deltaLat += Math.cos(strafeRadians) * step;
-        deltaLng += Math.sin(strafeRadians) * step;
-      }
-      
-      // Apply latitude correction for longitude movement so we move equal
-      // distances in metres regardless of latitude.
-      const latRadians = (Position.y[eid] * Math.PI) / 180;
-      const correctedLng = deltaLng / Math.cos(latRadians);
-
-      Position.x[eid] += correctedLng;
-      Position.y[eid] += deltaLat;
-
-      positionChanged = true;
-    }
-
-    // Sync GameState with latest player position
-    if (positionChanged || rotationChanged) {
-      this.state.player.lng = Position.x[eid];
-      this.state.player.lat = Position.y[eid];
-      this.state.player.rotation = Rotation.angle[eid];
-    }
+  /**
+   * Get the network state manager (for setting player entity ID)
+   */
+  public getNetworkStateManager(): NetworkStateManager {
+    return this.networkStateManager;
   }
 }

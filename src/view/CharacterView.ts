@@ -207,6 +207,10 @@ export default class CharacterView implements Updatable {
     // Create root container element
     const container = document.createElement('div');
     container.id = 'character-container'; // CSS hook for styling
+    container.style.position = 'absolute'; // Required for transform positioning
+    container.style.top = '0';
+    container.style.left = '0';
+    container.style.zIndex = '1000'; // Ensure character is above map layers
     container.style.pointerEvents = 'none'; // Allow clicks to pass through to map
     container.style.willChange = 'transform'; // Performance hint for browser optimization
     
@@ -311,17 +315,21 @@ export default class CharacterView implements Updatable {
     // Set CSS variable for stylesheet to use in opacity calculations
     this.playerElement.style.setProperty('--pitch-fade-factor', fadeFactor.toString());
 
-    // Round screen coordinates to nearest pixel (prevents sub-pixel blurring)
-    const x = Math.round(point.x);
-    const y = Math.round(point.y);
+    // Use sub-pixel positioning for smooth movement (allows fractional pixels)
+    // This is important for small movements that would be lost with rounding
+    const x = point.x;
+    const y = point.y;
     
     // Combined CSS transform:
     // 1. translate(-50%, -50%): Centers sprite on its anchor point
-    // 2. translate(x, y): Positions at screen coordinates
+    // 2. translate(x, y): Positions at screen coordinates (sub-pixel precision)
     // 3. rotateX(pitch): Applies camera pitch rotation (3D tilt effect)
     // 4. rotateZ(rotation - bearing): Applies character rotation relative to camera
     //    (subtracts camera bearing so sprite faces correct direction relative to view)
-    this.playerElement.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px) rotateX(${this.cameraPitch}deg) rotateZ(${this.playerRotation - this.cameraBearing}deg)`;
+    // Convert playerRotation from radians to degrees, then subtract camera bearing (also in degrees)
+    const playerRotationDeg = (this.playerRotation * 180) / Math.PI;
+    const relativeRotation = playerRotationDeg - this.cameraBearing;
+    this.playerElement.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px) rotateX(${this.cameraPitch}deg) rotateZ(${relativeRotation}deg)`;
   }
 
   /**
@@ -341,8 +349,30 @@ export default class CharacterView implements Updatable {
    * @param rotation - New rotation in radians
    */
   public updatePlayerPosition(coords: { lng: number; lat: number }, rotation: number): void {
+    const oldPos = this.playerPosition ? { ...this.playerPosition } : null;
+    const oldScreen = oldPos ? this.map.project(oldPos) : null;
+    
     this.playerPosition = coords;
     this.playerRotation = rotation;
+    
+    // Project new position
+    const newScreen = this.map.project(coords);
+    
+    // Log if position changed significantly
+    if (oldPos && (
+      Math.abs(coords.lng - oldPos.lng) > 0.000001 ||
+      Math.abs(coords.lat - oldPos.lat) > 0.000001
+    )) {
+      console.log('[CharacterView] Position updated:', {
+        coords: { lng: coords.lng.toFixed(8), lat: coords.lat.toFixed(8) },
+        screen: { x: newScreen.x.toFixed(2), y: newScreen.y.toFixed(2) },
+        screenDelta: oldScreen ? { 
+          x: (newScreen.x - oldScreen.x).toFixed(2), 
+          y: (newScreen.y - oldScreen.y).toFixed(2) 
+        } : null
+      });
+    }
+    
     this.updatePlayerScreenPosition();
   }
 

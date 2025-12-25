@@ -206,6 +206,7 @@ body {
     height: 64px;
     transform-style: preserve-3d;
     perspective: 1000px; /* This can be tuned for more or less depth */
+    z-index: 1000; /* Ensure character is above map layers */
 }
 
 /* Base style for every slice of the character sprite */

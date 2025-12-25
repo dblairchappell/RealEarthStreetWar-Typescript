@@ -14,3 +14,8 @@ export const SHOW_COLLISION_BOUNDS = false; // Set to true to enable
 // - 'globe': 3D sphere view, accurate sizes, but falls back to Canvas for NPCs
 // - 'vertical-perspective': 3D perspective view (experimental)
 export const MAP_PROJECTION: 'mercator' | 'globe' | 'vertical-perspective' = 'mercator';
+
+// Network configuration
+// Vite uses import.meta.env instead of process.env in the browser
+export const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'ws://localhost:8081';
+export const ENABLE_NETWORK = true; // Set to false to run in offline mode

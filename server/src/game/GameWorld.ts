@@ -1,0 +1,295 @@
+/**
+ * GameWorld - Authoritative game state on server
+ * 
+ * Maintains the single source of truth for all game state.
+ * This is what clients sync to.
+ */
+
+import { addComponent, addEntity, createWorld, defineQuery, IWorld } from 'bitecs';
+import { Position, Rotation, Velocity, PlayerTag } from '../shared/world';
+import { NpcTag, SpriteRef } from '../shared/components';
+import { randomWalkSystem } from './systems/randomWalkSystem';
+import { movementSystem } from './systems/movementSystem';
+import { entityCollisionSystem } from '../shared/systems';
+import { SpatialGrid } from '../shared/utils';
+import GameState, { GameStateConstants } from '../shared/models';
+import { GameStateSnapshot, PlayerSnapshot, NpcSnapshot } from '../network/types';
+import { PlayerManager } from '../players/PlayerManager';
+
+/**
+ * Authoritative game world running on server
+ */
+export class GameWorld {
+  /** ECS world instance */
+  public readonly world = createWorld();
+  
+  /** Game state */
+  public readonly state = new GameState();
+  
+  /** Spatial grid for collision detection */
+  private spatialGrid = new SpatialGrid();
+  
+  /** Player entity IDs mapped by player ID */
+  private playerEntities: Map<string, number> = new Map();
+  
+  /** NPC entity IDs */
+  private npcEntities: Set<number> = new Set();
+  
+  /** Queries */
+  private playerQuery = defineQuery([PlayerTag, Position, Rotation]);
+  private npcQuery = defineQuery([NpcTag, Position, Velocity, Rotation]);
+
+  /** Reference to PlayerManager for accessing input state */
+  private playerManager: PlayerManager | null = null;
+
+  constructor() {
+    console.log('[GameWorld] Initialized');
+  }
+
+  /**
+   * Set PlayerManager reference (needed to process player input every frame)
+   */
+  setPlayerManager(playerManager: PlayerManager): void {
+    this.playerManager = playerManager;
+  }
+
+  /**
+   * Create a player entity
+   */
+  createPlayer(playerId: string, lng: number, lat: number, rotationDeg: number): number {
+    const eid = addEntity(this.world);
+    addComponent(this.world, Position, eid);
+    addComponent(this.world, Rotation, eid);
+    addComponent(this.world, Velocity, eid);
+    addComponent(this.world, PlayerTag, eid);
+    addComponent(this.world, SpriteRef, eid);
+
+    Position.x[eid] = lng;
+    Position.y[eid] = lat;
+    Rotation.angle[eid] = rotationDeg;
+    Velocity.x[eid] = 0;
+    Velocity.y[eid] = 0;
+    SpriteRef.id[eid] = 0;
+
+    this.playerEntities.set(playerId, eid);
+    console.log(`[GameWorld] Created player entity ${eid} for player ${playerId}`);
+    return eid;
+  }
+
+  /**
+   * Remove a player entity
+   */
+  removePlayer(playerId: string): void {
+    const eid = this.playerEntities.get(playerId);
+    if (eid !== undefined) {
+      // Note: bitecs doesn't have removeEntity, so we'll mark as inactive
+      // In a production system, you'd want proper entity removal
+      this.playerEntities.delete(playerId);
+      console.log(`[GameWorld] Removed player entity ${eid} for player ${playerId}`);
+    }
+  }
+
+  /**
+   * Spawn NPCs
+   */
+  spawnNpcs(count: number, centerLng: number, centerLat: number, radius: number = 0.001): void {
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = Math.random() * radius;
+      const lng = centerLng + Math.cos(angle) * dist;
+      const lat = centerLat + Math.sin(angle) * dist;
+      
+      const eid = addEntity(this.world);
+      addComponent(this.world, Position, eid);
+      addComponent(this.world, Rotation, eid);
+      addComponent(this.world, Velocity, eid);
+      addComponent(this.world, NpcTag, eid);
+      addComponent(this.world, SpriteRef, eid);
+      
+      Position.x[eid] = lng;
+      Position.y[eid] = lat;
+      Rotation.angle[eid] = 0;
+      Velocity.x[eid] = 0;
+      Velocity.y[eid] = 0;
+      SpriteRef.id[eid] = 0;
+      
+      this.npcEntities.add(eid);
+    }
+    console.log(`[GameWorld] Spawned ${count} NPCs`);
+  }
+
+  /**
+   * Update player movement based on input (legacy method, kept for compatibility)
+   * Input is now stored in PlayerManager and processed every frame in fixedUpdate()
+   */
+  updatePlayerMovement(playerId: string, input: {
+    forward: boolean;
+    backward: boolean;
+    left: boolean;
+    right: boolean;
+    rotateLeft: boolean;
+    rotateRight: boolean;
+    running: boolean;
+  }): void {
+    // This method is kept for compatibility but input is now processed in fixedUpdate()
+  }
+
+  /**
+   * Process player movement based on stored input state (called every frame)
+   */
+  private processPlayerMovement(playerId: string, input: {
+    forward: boolean;
+    backward: boolean;
+    left: boolean;
+    right: boolean;
+    rotateLeft: boolean;
+    rotateRight: boolean;
+    running: boolean;
+  }): void {
+    const eid = this.playerEntities.get(playerId);
+    if (eid === undefined) return;
+
+    const deltaSec = 1 / 60; // Fixed timestep
+
+    // Handle rotation
+    if (input.rotateLeft) {
+      Rotation.angle[eid] -= GameStateConstants.PLAYER_ROTATION_SPEED * deltaSec;
+      Rotation.angle[eid] = ((Rotation.angle[eid] % 360) + 360) % 360;
+    }
+    
+    if (input.rotateRight) {
+      Rotation.angle[eid] += GameStateConstants.PLAYER_ROTATION_SPEED * deltaSec;
+      Rotation.angle[eid] = ((Rotation.angle[eid] % 360) + 360) % 360;
+    }
+
+    // Handle movement
+    if (input.forward || input.backward || input.left || input.right) {
+      const radians = (Rotation.angle[eid] * Math.PI) / 180;
+      const moveSpeedDegPerSec = input.running 
+        ? GameStateConstants.PLAYER_RUN_SPEED 
+        : GameStateConstants.PLAYER_MOVE_SPEED;
+      const step = moveSpeedDegPerSec * deltaSec;
+      
+      let deltaLat = 0;
+      let deltaLng = 0;
+      
+      // Geographic coordinate system: 0° = north
+      // Forward should move in the direction the player is facing
+      // If player faces north (0°), forward should move north (positive lat)
+      // cos(0°) = 1, sin(0°) = 0, so deltaLat = step, deltaLng = 0 ✓
+      if (input.forward) {
+        // Forward moves in the direction the player is facing
+        deltaLat += Math.cos(radians) * step;
+        deltaLng += Math.sin(radians) * step;
+      }
+      
+      if (input.backward) {
+        // Backward moves opposite to facing direction
+        deltaLat -= Math.cos(radians) * step;
+        deltaLng -= Math.sin(radians) * step;
+      }
+      
+      if (input.left) {
+        const strafeRadians = radians - Math.PI / 2;
+        deltaLat += Math.cos(strafeRadians) * step;
+        deltaLng += Math.sin(strafeRadians) * step;
+      }
+      
+      if (input.right) {
+        const strafeRadians = radians + Math.PI / 2;
+        deltaLat += Math.cos(strafeRadians) * step;
+        deltaLng += Math.sin(strafeRadians) * step;
+      }
+      
+      const latRadians = (Position.y[eid] * Math.PI) / 180;
+      const correctedLng = deltaLng / Math.cos(latRadians);
+
+      Position.x[eid] += correctedLng;
+      Position.y[eid] += deltaLat;
+    }
+  }
+
+  /**
+   * Run one fixed-timestep update
+   */
+  fixedUpdate(): void {
+    // Update game time
+    this.state.gameDate.setMinutes(
+      this.state.gameDate.getMinutes() + GameStateConstants.MINUTES_PER_TICK / 60
+    );
+
+    // Process player movement based on stored input state
+    if (this.playerManager) {
+      const players = this.playerManager.getAllPlayers();
+      for (const player of players) {
+        this.processPlayerMovement(player.id, player.input);
+      }
+    }
+
+    // Run NPC systems
+    randomWalkSystem(this.world);
+    movementSystem(this.world);
+    
+    // Rebuild spatial grid
+    const npcEnts = this.npcQuery(this.world);
+    this.spatialGrid.rebuild(npcEnts, Position);
+    
+    // Run collision detection
+    entityCollisionSystem(npcEnts, this.spatialGrid, Position, Velocity);
+  }
+
+  /**
+   * Create a snapshot of current game state
+   */
+  createSnapshot(): GameStateSnapshot {
+    const players: PlayerSnapshot[] = [];
+    const npcs: NpcSnapshot[] = [];
+
+    // Collect player data
+    const playerEnts = this.playerQuery(this.world);
+    for (const eid of playerEnts) {
+      // Find player ID for this entity
+      let playerId = '';
+      for (const [pid, peid] of this.playerEntities.entries()) {
+        if (peid === eid) {
+          playerId = pid;
+          break;
+        }
+      }
+      
+      if (playerId) {
+        players.push({
+          id: playerId,
+          lng: Position.x[eid],
+          lat: Position.y[eid],
+          rotation: Rotation.angle[eid],
+          isMoving: Math.abs(Velocity.x[eid]) > 0.0000001 || Math.abs(Velocity.y[eid]) > 0.0000001,
+        });
+      }
+    }
+
+    // Collect NPC data
+    const npcEnts = this.npcQuery(this.world);
+    for (const eid of npcEnts) {
+      npcs.push({
+        eid,
+        lng: Position.x[eid],
+        lat: Position.y[eid],
+        rotation: Rotation.angle[eid],
+        velocityX: Velocity.x[eid],
+        velocityY: Velocity.y[eid],
+        spriteId: SpriteRef.id[eid],
+      });
+    }
+
+    return {
+      gameDate: this.state.gameDate.toISOString(),
+      players,
+      npcs,
+      hqs: this.state.hqs,
+      money: this.state.money,
+      commodities: this.state.commodities,
+    };
+  }
+}
+

@@ -61,6 +61,7 @@ export class CameraController implements Updatable {
         ? Math.min(22, currentZoom + delta)
         : currentZoom + delta;
 
+      // Always use the latest player position (updated by follow() even when busy)
       if (this.playerPosition) {
         this.map.jumpTo({ center: [this.playerPosition.lng, this.playerPosition.lat], zoom: newZoom });
       } else {
@@ -84,6 +85,7 @@ export class CameraController implements Updatable {
         this.cameraBearing = (this.cameraBearing + this.currentRotationSpeed) % 360;
       }
 
+      // Always use the latest player position (updated by follow() even when busy)
       if (this.playerPosition) {
         this.map.jumpTo({ center: [this.playerPosition.lng, this.playerPosition.lat], bearing: this.cameraBearing });
       } else {
@@ -109,10 +111,11 @@ export class CameraController implements Updatable {
     this.playerPosition = coords;
     // Avoid interrupting cinematic easeTo or other map animations
     if (!this.isBusy() && !this.map.isMoving()) {
-      if (!this.lastCenter || coords.lng !== this.lastCenter.lng || coords.lat !== this.lastCenter.lat) {
-        this.map.jumpTo({ center: [coords.lng, coords.lat] });
-        this.lastCenter = { ...coords };
-      }
+      // Use jumpTo for instant, smooth camera following
+      // This matches the original non-server behavior and avoids jitter
+      // from calling easeTo() every frame
+      this.map.jumpTo({ center: [coords.lng, coords.lat] });
+      this.lastCenter = { ...coords };
     }
   }
 

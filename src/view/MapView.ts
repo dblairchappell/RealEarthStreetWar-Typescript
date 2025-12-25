@@ -406,12 +406,15 @@ export default class MapView implements Updatable, Renderable {
    * Process:
    * 1. Updates sprite position/rotation via CharacterView
    * 2. Stores updated state for camera tracking
-   * 3. Tells camera to follow player (unless user is manually dragging)
+   * 
+   * Note: Camera follow is handled separately in update() to avoid calling it
+   * every frame from render() which causes jitter.
    * 
    * @param coords - New player coordinates
    * @param rotation - New player rotation (radians)
+   * @param updateCamera - If true, also update camera to follow player (default: false)
    */
-  updatePlayerPosition(coords: { lng: number; lat: number }, rotation: number): void {
+  updatePlayerPosition(coords: { lng: number; lat: number }, rotation: number, updateCamera: boolean = false): void {
     if (!this.characterView) return;
 
     // Delegate position update to CharacterView (handles sprite positioning)
@@ -421,9 +424,9 @@ export default class MapView implements Updatable, Renderable {
     this.playerPosition = this.characterView.getPlayerPosition();
     this.playerRotation = this.characterView.getPlayerRotation();
     
-    // Tell camera controller to follow the player unless user is manually dragging
-    // Camera override is enabled when user drags, disabled when player moves
-    if (!this.userCameraOverride) {
+    // Only update camera from fixed timestep (update()), not from render() interpolation
+    // This prevents jitter from calling easeTo() every frame
+    if (updateCamera && !this.userCameraOverride) {
       this.camera?.follow(coords);
     }
   }
@@ -458,23 +461,41 @@ export default class MapView implements Updatable, Renderable {
       this.characterView.update(deltaMs);
     }
 
-    // Update camera controller (handles continuous zoom/rotation if active)
-    if (this.camera) {
-      this.camera.update(deltaMs);
-    }
-
     // If player entity ID is set, read position from ECS
     if (this.playerEid !== null) {
       // Read directly from ECS components
       const lng = Position.x[this.playerEid];
       const lat = Position.y[this.playerEid];
-      const rot = Rotation.angle[this.playerEid];
+      // Rotation.angle is stored in degrees, convert to radians for CharacterView
+      const rotDeg = Rotation.angle[this.playerEid];
+      const rot = (rotDeg * Math.PI) / 180;
 
-      // Update player position with authoritative (non-interpolated) values
-      this.updatePlayerPosition({ lng, lat }, rot);
+      // Log position changes (only when significant change detected)
+      if (this.playerPosition && (
+        Math.abs(lng - this.playerPosition.lng) > 0.000001 ||
+        Math.abs(lat - this.playerPosition.lat) > 0.000001
+      )) {
+        console.log('[MapView] Position updated from ECS:', { lng: lng.toFixed(8), lat: lat.toFixed(8), rotDeg });
+      }
+
+      // Update camera bearing for sprite rotation
+      if (this.characterView) {
+        const bearing = this.map.getBearing(); // Returns degrees
+        this.characterView.setCameraBearing(bearing);
+      }
+
+      // Update player position FIRST so camera.update() uses latest position for zoom/rotation
+      // Pass updateCamera=true so camera follows authoritative position (not interpolated)
+      this.updatePlayerPosition({ lng, lat }, rot, true);
       
       // Note: prevPosition is NOT updated here - it's updated in render() after interpolation
       // This ensures render() always has the previous fixed-timestep position for interpolation
+    }
+
+    // Update camera controller AFTER player position is updated
+    // This ensures zoom/rotation use the latest player position, preventing jitter
+    if (this.camera) {
+      this.camera.update(deltaMs);
     }
   }
 
@@ -500,7 +521,15 @@ export default class MapView implements Updatable, Renderable {
     // Read current authoritative position from ECS
     const currLng = Position.x[this.playerEid];
     const currLat = Position.y[this.playerEid];
-    const currRot = Rotation.angle[this.playerEid];
+    // Rotation.angle is stored in degrees, convert to radians
+    const currRotDeg = Rotation.angle[this.playerEid];
+    const currRot = (currRotDeg * Math.PI) / 180;
+
+    // Update camera bearing for sprite rotation (needs to be updated every frame)
+    if (this.characterView) {
+      const bearing = this.map.getBearing(); // Returns degrees
+      this.characterView.setCameraBearing(bearing);
+    }
 
     // Interpolate between previous and current position
     // This provides smooth rendering even if frame rate doesn't match fixed timestep
@@ -509,7 +538,8 @@ export default class MapView implements Updatable, Renderable {
     const rot = this.prevRotation + (currRot - this.prevRotation) * alpha;
 
     // Update sprite with interpolated position (smooth visual update)
-    this.updatePlayerPosition({ lng, lat }, rot);
+    // Don't update camera here - camera follows authoritative position from update()
+    this.updatePlayerPosition({ lng, lat }, rot, false);
 
     // Store current authoritative position as previous for next frame interpolation
     // This ensures we always interpolate between two consecutive fixed-timestep positions
