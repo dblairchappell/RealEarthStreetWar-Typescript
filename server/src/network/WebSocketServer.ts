@@ -9,12 +9,10 @@ import { PlayerManager } from '../players/PlayerManager';
 import { GameWorld } from '../game/GameWorld';
 import { ClientMessage, ServerMessage } from './types';
 import type { InputState } from '../shared/input';
-import type { HQ } from '../shared/models';
 
 export interface MessageHandlers {
   onInput?: (playerId: string, input: InputState) => void;
   onSpawnNpc?: (playerId: string, count: number) => void;
-  onPlaceHq?: (playerId: string, hq: HQ) => void;
 }
 
 /**
@@ -158,12 +156,6 @@ export class WebSocketServer {
         case 'spawn_npc':
           if (this.handlers.onSpawnNpc) {
             this.handlers.onSpawnNpc(playerId, message.count);
-          }
-          break;
-          
-        case 'place_hq':
-          if (this.handlers.onPlaceHq) {
-            this.handlers.onPlaceHq(playerId, message.hq);
           }
           break;
           

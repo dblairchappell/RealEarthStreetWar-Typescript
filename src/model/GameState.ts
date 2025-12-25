@@ -4,59 +4,15 @@
  * This file defines the core data structures and state management for the game.
  * GameState acts as the single source of truth for all game data, including:
  * - Player position and state
- * - Headquarters (HQs) and territory
- * - Resources (money, commodities)
  * - Game time and progression
- * - Gameplay constants (speeds, radii, timing)
+ * - Gameplay constants (speeds, timing)
  * 
  * Architecture:
  * 
  * The GameState class follows a simple data-holder pattern. It doesn't contain
  * business logic (that's in GameController), but serves as the central repository
  * that all systems read from and write to.
- * 
- * Usage Pattern:
- * 
- * ```typescript
- * const state = new GameState();
- * 
- * // Read state
- * const playerPos = state.player;
- * const hqCount = state.hqs.length;
- * 
- * // Modify state (usually done through GameController)
- * state.hqs.push(newHQ);
- * state.money += 100;
- * ```
- * 
- * Note: In a more complex system, you might want to make state mutations more
- * controlled (e.g., through methods or a state management library), but for this
- * prototype, direct property access is acceptable.
  */
-
-import * as turf from '@turf/turf';
-import { Polygon, MultiPolygon } from 'geojson';
-
-/**
- * Type of headquarters that can be placed in the game.
- * Each type has different placement rules and gameplay effects.
- */
-export type HQType = 'producer' | 'trafficker' | 'retailer';
-
-/**
- * Headquarters (HQ) structure representing a placed building.
- * HQs generate influence areas and are the core strategic element of the game.
- */
-export interface HQ { 
-  /** Unique identifier for this HQ */
-  id: string;
-  /** Longitude coordinate (degrees) */
-  lng: number; 
-  /** Latitude coordinate (degrees) */
-  lat: number;
-  /** Type of HQ (determines placement rules and function) */
-  type: HQType;
-}
 
 /**
  * Player character state structure.
@@ -81,28 +37,6 @@ export interface PlayerCharacter {
  * controllers and views that need access to game data.
  */
 export default class GameState {
-  /* ----- Persistent Game Data ----- */
-  
-  /**
-   * Array of all placed headquarters.
-   * Each HQ generates an influence area that contributes to the player's territory.
-   */
-  hqs: HQ[] = [];
-  
-  /**
-   * Combined territory polygon representing all HQ influence areas merged together.
-   * Uses Turf.js Polygon/MultiPolygon format for geospatial operations.
-   * Updated whenever a new HQ is placed.
-   */
-  playerUnion: Polygon | MultiPolygon | null = null;
-  
-  /**
-   * Current HQ placement mode.
-   * Set to a HQType when player clicks a placement button, null when not placing.
-   * Used by MapView to determine placement rules and cursor behavior.
-   */
-  plantingType: HQType | null = null;
-  
   /* ----- Player State ----- */
   
   /**
@@ -130,27 +64,7 @@ export default class GameState {
    */
   gameDate = new Date('2100-01-01T00:00:00');
   
-  /**
-   * Current commodity count.
-   * Represents produced/traded goods. Currently not used in gameplay but
-   * displayed in HUD for future expansion.
-   */
-  commodities = 0;
-  
-  /**
-   * Current money/currency amount.
-   * Starting amount for the player. Used for purchasing HQs and other items.
-   */
-  money = 1000;
-
   /* ----- Gameplay Constants ----- */
-  
-  /**
-   * Influence radius in kilometers for each HQ.
-   * When an HQ is placed, it creates a circular influence area with this radius.
-   * All influence areas are merged to form the player's total territory.
-   */
-  static readonly INFLUENCE_RADIUS_KM = 0.08;
   
   /**
    * Duration of one game tick in milliseconds.

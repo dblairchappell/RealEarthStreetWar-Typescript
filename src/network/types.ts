@@ -6,7 +6,6 @@
  */
 
 import { InputState } from '../input/InputTypes';
-import { HQ } from '../model/GameState';
 
 /**
  * Messages sent from client to server
@@ -14,7 +13,6 @@ import { HQ } from '../model/GameState';
 export type ClientMessage =
   | { type: 'input'; input: InputState }
   | { type: 'spawn_npc'; count: number }
-  | { type: 'place_hq'; hq: HQ }
   | { type: 'ping'; timestamp: number };
 
 /**
@@ -40,13 +38,6 @@ export interface GameStateSnapshot {
   
   /** NPC data */
   npcs: NpcSnapshot[];
-  
-  /** Headquarters */
-  hqs: HQ[];
-  
-  /** Resources */
-  money: number;
-  commodities: number;
 }
 
 /**

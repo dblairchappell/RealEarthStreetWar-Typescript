@@ -8,8 +8,9 @@ import { PlayerManager } from './players/PlayerManager';
 import { GameWorld } from './game/GameWorld';
 import { ServerGameLoop } from './game/GameLoop';
 import { WebSocketServer } from './network/WebSocketServer';
+import { ServerConfig } from './config';
 
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 8080;
+const PORT = ServerConfig.PORT;
 
 console.log('========================================');
 console.log('RealEarthStreetWar Server');
@@ -22,6 +23,17 @@ gameWorld.setPlayerManager(playerManager); // Give GameWorld access to PlayerMan
 const gameLoop = new ServerGameLoop();
 const wsServer = new WebSocketServer(PORT, playerManager, gameWorld);
 
+// Spawn NPCs automatically at server startup
+if (ServerConfig.NPC_COUNT > 0) {
+  console.log(`[Server] Spawning ${ServerConfig.NPC_COUNT} NPCs at startup...`);
+  gameWorld.spawnNpcs(
+    ServerConfig.NPC_COUNT,
+    ServerConfig.DEFAULT_SPAWN_CENTER.lng,
+    ServerConfig.DEFAULT_SPAWN_CENTER.lat,
+    ServerConfig.NPC_SPAWN_RADIUS
+  );
+}
+
 // Set up message handlers
 wsServer.setHandlers({
   onInput: (playerId: string, input) => {
@@ -30,18 +42,19 @@ wsServer.setHandlers({
   },
   
   onSpawnNpc: (playerId: string, count: number) => {
+    // Admin/debug command: Spawn additional NPCs
     // Get player position for spawning NPCs nearby
     const player = playerManager.getPlayer(playerId);
     if (player) {
-      // For now, spawn at default location
-      // TODO: Get actual player position from game world
-      gameWorld.spawnNpcs(count, -74.05682, 40.69337, 0.001);
+      // TODO: Get actual player position from game world for spawning near player
+      console.log(`[Server] Admin spawn request: ${count} NPCs for player ${playerId}`);
+      gameWorld.spawnNpcs(
+        count,
+        ServerConfig.DEFAULT_SPAWN_CENTER.lng,
+        ServerConfig.DEFAULT_SPAWN_CENTER.lat,
+        ServerConfig.NPC_SPAWN_RADIUS
+      );
     }
-  },
-  
-  onPlaceHq: (playerId: string, hq) => {
-    // TODO: Implement HQ placement logic
-    console.log(`[Server] Player ${playerId} wants to place HQ:`, hq);
   },
 });
 

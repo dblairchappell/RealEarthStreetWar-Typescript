@@ -214,9 +214,10 @@ export class GameWorld {
    */
   fixedUpdate(): void {
     // Update game time
-    this.state.gameDate.setMinutes(
-      this.state.gameDate.getMinutes() + GameStateConstants.MINUTES_PER_TICK / 60
-    );
+    // Game time advances MINUTES_PER_TICK minutes per second of real time
+    // Server runs at 60Hz, so per frame: (MINUTES_PER_TICK * 60 * 1000) / 60 ms
+    const msPerFrame = GameStateConstants.MINUTES_PER_TICK * 1000; // ms of game time per frame
+    this.state.gameDate.setTime(this.state.gameDate.getTime() + msPerFrame);
 
     // Process player movement based on stored input state
     if (this.playerManager) {
@@ -286,9 +287,6 @@ export class GameWorld {
       gameDate: this.state.gameDate.toISOString(),
       players,
       npcs,
-      hqs: this.state.hqs,
-      money: this.state.money,
-      commodities: this.state.commodities,
     };
   }
 }

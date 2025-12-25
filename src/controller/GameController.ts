@@ -31,8 +31,7 @@ export default class GameController implements FixedUpdatable {
   // Note: With server-side simulation, this is mainly for UI updates
   // Game state is updated via applyServerState() when snapshots arrive
   public fixedUpdate(): void {
-    // Game time and state are now managed by server
-    // This method is kept for compatibility but doesn't do much
+    // Game time is updated directly from server snapshots - no local calculation needed
   }
 
   /**
@@ -48,9 +47,7 @@ export default class GameController implements FixedUpdatable {
     rotateRight: boolean,
     running: boolean
   }) {
-    // Update local state for UI feedback (isMoving flag)
-    this.state.player.isMoving = input.forward || input.backward || input.left || input.right;
-    
+    // Don't modify state locally - server is authoritative
     // Input is sent to server via GameClient (handled in main.ts)
     // Server processes movement and sends back state snapshots
   }

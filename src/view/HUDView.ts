@@ -1,20 +1,10 @@
 // src/view/HUDView.ts
 
 import { formatInTimeZone } from "../utils/time";
+import { Updatable } from "../loop/GameLoop";
+import tzLookup from "tz-lookup";
 
-export interface HUDViewCallbacks {
-  onPlantProducer?: () => void;
-  onPlantTrafficker?: () => void;
-  onPlantRetailer?: () => void;
-}
-
-export default class HUDView {
-  private plantProducerBtn: HTMLElement | null;
-  private plantTraffickerBtn: HTMLElement | null;
-  private plantRetailerBtn: HTMLElement | null;
-  private hqCountEl: HTMLElement | null;
-  private commoditiesCountEl: HTMLElement | null;
-  private moneyCountEl: HTMLElement | null;
+export default class HUDView implements Updatable {
   private gameDateEl: HTMLElement | null;
 
   // World clock elements
@@ -22,46 +12,57 @@ export default class HUDView {
   private timeNyEl: HTMLElement | null;
   private timeTokyoEl: HTMLElement | null;
 
-  private callbacks: HUDViewCallbacks = {};
+  private mapInstance: any = null; // Will be set by setMapInstance
+  private gameState: any = null; // Will be set by setGameState
 
   constructor() {
-    this.plantProducerBtn = document.getElementById('plant-producer-btn');
-    this.plantTraffickerBtn = document.getElementById('plant-trafficker-btn');
-    this.plantRetailerBtn = document.getElementById('plant-retailer-btn');
-    this.hqCountEl = document.getElementById('hq-count');
-    this.commoditiesCountEl = document.getElementById('commodities-count');
-    this.moneyCountEl = document.getElementById('money-count');
     this.gameDateEl = document.getElementById('game-date');
 
     // Query world clock elements
     this.timeLondonEl = document.getElementById('time-london');
     this.timeNyEl = document.getElementById('time-ny');
     this.timeTokyoEl = document.getElementById('time-tokyo');
-
-    this.setupEventListeners();
   }
 
-  public setCallbacks(callbacks: Partial<HUDViewCallbacks>) {
-    this.callbacks = callbacks;
+  /**
+   * Set map instance for timezone lookup
+   */
+  setMapInstance(map: any): void {
+    this.mapInstance = map;
   }
 
-  private setupEventListeners() {
-    this.plantProducerBtn?.addEventListener('click', () => this.callbacks.onPlantProducer?.());
-    this.plantTraffickerBtn?.addEventListener('click', () => this.callbacks.onPlantTrafficker?.());
-    this.plantRetailerBtn?.addEventListener('click', () => this.callbacks.onPlantRetailer?.());
+  /**
+   * Set game state reference for time updates
+   */
+  setGameState(state: any): void {
+    this.gameState = state;
   }
 
-  updateStats(hqCount: number, commodities: number, money: number) {
-    if (this.hqCountEl) this.hqCountEl.textContent = hqCount.toString();
-    if (this.commoditiesCountEl) this.commoditiesCountEl.textContent = commodities.toString();
-    if (this.moneyCountEl) this.moneyCountEl.textContent = money.toFixed(2);
+  /**
+   * Updatable implementation - updates time display every frame for smooth progression
+   */
+  public update(_deltaMs: number): void {
+    if (!this.gameState || !this.mapInstance) return;
+
+    // Get timezone for current map center
+    const centre = this.mapInstance.getCenter();
+    let zone: string;
+    try {
+      zone = tzLookup(centre.lat, centre.lng);
+    } catch (_) {
+      zone = 'UTC';
+    }
+
+    // Update time displays with current game time
+    this.updateTimeDisplays(this.gameState.gameDate, zone);
   }
 
   /* ----------------------------------------------------------------
-     Game clock display (called from main.ts every second)
+     Game clock display (now called every frame for smooth updates)
      ---------------------------------------------------------------- */
   public updateTimeDisplays(gameDate: Date, localTimeZone: string) {
-    const format = 'dd MMM yyyy HH:mm';
+    // Include seconds in format for smooth progression
+    const format = 'dd MMM yyyy HH:mm:ss';
 
     // Update local time
     if (this.gameDateEl) {
@@ -94,18 +95,5 @@ export default class HUDView {
         format
       );
     }
-  }
-
-  exitPlantingMode() {
-    this.plantProducerBtn?.classList.remove('active');
-    this.plantTraffickerBtn?.classList.remove('active');
-    this.plantRetailerBtn?.classList.remove('active');
-  }
-
-  setPlantingButtonActive(type: 'producer' | 'trafficker' | 'retailer' | null) {
-    this.exitPlantingMode();
-    if (type === 'producer') this.plantProducerBtn?.classList.add('active');
-    if (type === 'trafficker') this.plantTraffickerBtn?.classList.add('active');
-    if (type === 'retailer') this.plantRetailerBtn?.classList.add('active');
   }
 }

@@ -9,7 +9,7 @@
  * **Key Responsibilities:**
  * - **Map Management**: Initializes and manages the MapLibre GL map instance
  * - **Component Coordination**: Delegates to specialized components (CharacterView, CameraController,
- *   MarkerLayer, InfluenceLayer, FeatureQuery)
+ *   MarkerLayer, FeatureQuery)
  * - **Input Handling**: Receives input events and routes them to appropriate components
  * - **Player Tracking**: Updates player position and rotation, manages camera following
  * - **Map Events**: Handles clicks, drags, zoom, and other map interactions
@@ -21,7 +21,6 @@
  *   - `CharacterView`: Player sprite rendering and animation
  *   - `CameraController`: Camera following, zoom, and rotation
  *   - `MarkerLayer`: HQ markers and other map markers
- *   - `InfluenceLayer`: Territory influence visualization
  *   - `FeatureQuery`: Building/transport feature detection
  * 
  * **Game Loop Integration:**
@@ -40,29 +39,17 @@
  */
 
 // view/MapView.ts
-import { HQType } from "../model/GameState";
 import CharacterView from "./CharacterView";
 import InputManager from "../input/InputManager";
 import { IInputService } from "../input/IInputService";
 import { InputState } from "../input/InputTypes";
 import { GTA1_STYLE_TOP_DOWN, ENABLE_GLOBE, MAP_PROJECTION } from "../config";
-import { InfluenceLayer, MarkerLayer, CameraController, FeatureQuery } from './map';
+import { MarkerLayer, CameraController, FeatureQuery } from './map';
 import { Position, Rotation } from "../ecs/world";
 import { Renderable, Updatable } from "../loop/GameLoop";
 import maplibregl from 'maplibre-gl';
 import { Protocol } from 'pmtiles';
 
-/**
- * Callback interface for MapView to communicate with the game controller.
- * This allows MapView to notify the controller of user interactions without
- * creating a direct dependency on the controller implementation.
- */
-export interface MapViewCallbacks {
-  /** Called when user clicks on the map (e.g., to place an HQ) */
-  onMapClick: (coords: { lng: number; lat: number }, features: { building?: any, transport?: any }) => void;
-  /** Returns true if the game is currently in "planting" mode (placing HQs) */
-  isPlanting: () => boolean;
-}
 
 /**
  * Main view component that manages the map and all visual elements.
@@ -77,7 +64,6 @@ export default class MapView implements Updatable, Renderable {
   private markerLayer: MarkerLayer | null = null; // Manages HQ markers and other map markers
   private camera: CameraController | null = null; // Handles camera following, zoom, and rotation
   private characterView: CharacterView | null = null; // Renders and animates the player character sprite
-  private influenceLayer: InfluenceLayer | null = null; // Visualizes territory influence areas
   
   // Player state tracking
   private playerPosition: { lng: number; lat: number } | null = null; // Current player position (lat/lng)
@@ -91,8 +77,6 @@ export default class MapView implements Updatable, Renderable {
   private userCameraOverride = false; // When true, camera doesn't auto-follow player (user is manually dragging)
   // Note: Per-frame camera state is handled by CameraController, not MapView
 
-  // Communication with game controller (set via setCallbacks())
-  private callbacks: MapViewCallbacks | null = null;
   
   // Input management
   private inputManager: IInputService; // Handles keyboard input and dispatches to registered callbacks
@@ -221,7 +205,6 @@ export default class MapView implements Updatable, Renderable {
       }
       
       // Initialize all specialized sub-components (they need the map to be loaded)
-      this.influenceLayer = new InfluenceLayer(this.map); // Territory influence visualization
       this.markerLayer    = new MarkerLayer(this.map); // HQ markers and other map markers
       this.camera         = new CameraController(this.map, this.characterView); // Camera controls
       this.featureQuery   = new FeatureQuery(this.map); // Building/transport feature queries
@@ -290,37 +273,12 @@ export default class MapView implements Updatable, Renderable {
    * 
    * @param callbacks - Callback functions for map interactions
    */
-  setCallbacks(callbacks: MapViewCallbacks) {
-    this.callbacks = callbacks;
-  }
 
   /**
    * Sets up map event handlers for user interactions.
-   * Handles clicks, mouse movement, camera movement, and drag detection.
+   * Handles camera movement and drag detection.
    */
   private setupMapEventHandlers() {
-    // Click handler for placing HQs (only active when in "planting" mode)
-    this.map.on('click', (e: any) => {
-      // Only handle clicks when in planting mode
-      if (!this.callbacks?.isPlanting()) return;
-
-      // Extract coordinates from click event
-      const coords = { lng: e.lngLat.lng, lat: e.lngLat.lat };
-      
-      // Query map features at click point (buildings, transport, etc.)
-      const features = this.featureQuery?.query(e.point) ?? {};
-      
-      // Notify controller of click with coordinates and features
-      this.callbacks?.onMapClick(coords, features);
-
-      // Reset cursor to default after click
-      this.map.getCanvas().style.cursor = '';
-    });
-
-    // Change cursor to crosshair when in planting mode (visual feedback)
-    this.map.on('mousemove', (e: any) => {
-      this.map.getCanvas().style.cursor = this.callbacks?.isPlanting() ? 'crosshair' : '';
-    });
 
     // Keep character sprite pitch/bearing synced with camera
     // This ensures the character sprite appears correctly oriented relative to camera angle

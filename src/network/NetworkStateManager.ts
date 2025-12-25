@@ -45,15 +45,8 @@ export class NetworkStateManager {
    * Apply server state snapshot to client
    */
   applySnapshot(snapshot: GameStateSnapshot): void {
-    // Update game time
+    // Update game time directly from server - server is authoritative
     this.gameState.gameDate = new Date(snapshot.gameDate);
-
-    // Update resources
-    this.gameState.money = snapshot.money;
-    this.gameState.commodities = snapshot.commodities;
-
-    // Update HQs (for now, just replace - in future could diff)
-    this.gameState.hqs = snapshot.hqs;
 
     // Update players
     this.updatePlayers(snapshot.players);
