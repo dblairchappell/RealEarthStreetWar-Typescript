@@ -36,6 +36,12 @@ export default class InputManager implements IInputService {
   private sKeyHeld = false;
   private aKeyHeld = false;
   private dKeyHeld = false;
+  
+  // Track if Shift is currently held (for panning behavior)
+  private shiftKeyHeld = false;
+  
+  // Track if any WASD key is held with Shift (for panning)
+  private isPanningWithShift = false;
 
   constructor() {
     this.setupInputHandlers();
@@ -84,53 +90,57 @@ export default class InputManager implements IInputService {
       case 'KeyD':
         this.dKeyHeld = true;
         if (e.shiftKey) {
-          // Shift+D = rotate left (clockwise)
+          // Shift+D = pan right (east)
+          this.isPanningWithShift = true;
+          this.callbacks.forEach(cb => cb.onCameraPanHold?.('right'));
+        } else {
+          // D = rotate left (clockwise)
           if (!this.dKeyDownTime) {
             this.dKeyDownTime = Date.now();
             this.callbacks.forEach(cb => cb.onCameraRotateHold('left'));
           }
-        } else {
-          // D = pan right (east)
-          this.callbacks.forEach(cb => cb.onCameraPanHold?.('right'));
         }
         break;
       case 'KeyA':
         this.aKeyHeld = true;
         if (e.shiftKey) {
-          // Shift+A = rotate right (counter-clockwise)
+          // Shift+A = pan left (west)
+          this.isPanningWithShift = true;
+          this.callbacks.forEach(cb => cb.onCameraPanHold?.('left'));
+        } else {
+          // A = rotate right (counter-clockwise)
           if (!this.aKeyDownTime) {
             this.aKeyDownTime = Date.now();
             this.callbacks.forEach(cb => cb.onCameraRotateHold('right'));
           }
-        } else {
-          // A = pan left (west)
-          this.callbacks.forEach(cb => cb.onCameraPanHold?.('left'));
         }
         break;
       case 'KeyW':
         this.wKeyHeld = true;
         if (e.shiftKey) {
-          // Shift+W = zoom in
+          // Shift+W = pan up (north)
+          this.isPanningWithShift = true;
+          this.callbacks.forEach(cb => cb.onCameraPanHold?.('up'));
+        } else {
+          // W = zoom in
           if (!this.wKeyDownTime) {
             this.wKeyDownTime = Date.now();
             this.callbacks.forEach(cb => cb.onCameraZoomHold('in'));
           }
-        } else {
-          // W = pan up (north)
-          this.callbacks.forEach(cb => cb.onCameraPanHold?.('up'));
         }
         break;
       case 'KeyS':
         this.sKeyHeld = true;
         if (e.shiftKey) {
-          // Shift+S = zoom out
+          // Shift+S = pan down (south)
+          this.isPanningWithShift = true;
+          this.callbacks.forEach(cb => cb.onCameraPanHold?.('down'));
+        } else {
+          // S = zoom out
           if (!this.sKeyDownTime) {
             this.sKeyDownTime = Date.now();
             this.callbacks.forEach(cb => cb.onCameraZoomHold('out'));
           }
-        } else {
-          // S = pan down (south)
-          this.callbacks.forEach(cb => cb.onCameraPanHold?.('down'));
         }
         break;
       case 'ArrowUp':
@@ -204,47 +214,58 @@ export default class InputManager implements IInputService {
       case 'KeyD':
         this.dKeyHeld = false;
         if (e.shiftKey) {
-          // Shift+D released = stop rotating
+          // Shift+D released, but Shift still held - pause panning movement
+          // Camera stays at current panned position until Shift is released
+          // Check if any other WASD keys are still held
+          if (!this.wKeyHeld && !this.sKeyHeld && !this.aKeyHeld) {
+            // No WASD keys held anymore - pause panning (stops movement but keeps position)
+            this.callbacks.forEach(cb => cb.onCameraPanPause?.());
+          }
+        } else {
+          // D released = stop rotating
           this.dKeyDownTime = 0;
           this.callbacks.forEach(cb => cb.onCameraRotateRelease());
-        } else {
-          // D released = stop panning right
-          this.callbacks.forEach(cb => cb.onCameraPanRelease?.());
         }
         break;
       case 'KeyA':
         this.aKeyHeld = false;
         if (e.shiftKey) {
-          // Shift+A released = stop rotating
+          // Shift+A released, but Shift still held - pause panning if no other keys held
+          if (!this.wKeyHeld && !this.sKeyHeld && !this.dKeyHeld) {
+            this.callbacks.forEach(cb => cb.onCameraPanPause?.());
+          }
+        } else {
+          // A released = stop rotating
           this.aKeyDownTime = 0;
           this.callbacks.forEach(cb => cb.onCameraRotateRelease());
-        } else {
-          // A released = stop panning left
-          this.callbacks.forEach(cb => cb.onCameraPanRelease?.());
         }
         break;
       case 'KeyW':
         this.wKeyHeld = false;
         if (e.shiftKey) {
-          // Shift+W released = stop zooming
+          // Shift+W released, but Shift still held - pause panning if no other keys held
+          if (!this.sKeyHeld && !this.aKeyHeld && !this.dKeyHeld) {
+            this.callbacks.forEach(cb => cb.onCameraPanPause?.());
+          }
+        } else {
+          // W released = stop zooming
           this.wKeyDownTime = 0;
           this.holdZoomActive = false;
           this.callbacks.forEach(cb => cb.onCameraZoomRelease());
-        } else {
-          // W released = stop panning up
-          this.callbacks.forEach(cb => cb.onCameraPanRelease?.());
         }
         break;
       case 'KeyS':
         this.sKeyHeld = false;
         if (e.shiftKey) {
-          // Shift+S released = stop zooming
+          // Shift+S released, but Shift still held - pause panning if no other keys held
+          if (!this.wKeyHeld && !this.aKeyHeld && !this.dKeyHeld) {
+            this.callbacks.forEach(cb => cb.onCameraPanPause?.());
+          }
+        } else {
+          // S released = stop zooming
           this.sKeyDownTime = 0;
           this.holdZoomActive = false;
           this.callbacks.forEach(cb => cb.onCameraZoomRelease());
-        } else {
-          // S released = stop panning down
-          this.callbacks.forEach(cb => cb.onCameraPanRelease?.());
         }
         break;
       case 'ArrowUp':
@@ -291,28 +312,38 @@ export default class InputManager implements IInputService {
         break;
       case 'ShiftLeft':
       case 'ShiftRight':
-        // When Shift is released while WASD keys are held, switch from zoom/rotate to panning
+        this.shiftKeyHeld = false;
+        
+        // When Shift is released, stop panning if it was active
+        if (this.isPanningWithShift) {
+          this.callbacks.forEach(cb => cb.onCameraPanRelease?.());
+          this.isPanningWithShift = false;
+        }
+        
+        // When Shift is released while WASD keys are held, switch from panning to zoom/rotate
         if (this.wKeyHeld) {
-          this.callbacks.forEach(cb => cb.onCameraZoomRelease());
-          this.wKeyDownTime = 0;
-          this.holdZoomActive = false;
-          this.callbacks.forEach(cb => cb.onCameraPanHold?.('up'));
+          if (!this.wKeyDownTime) {
+            this.wKeyDownTime = Date.now();
+            this.callbacks.forEach(cb => cb.onCameraZoomHold('in'));
+          }
         }
         if (this.sKeyHeld) {
-          this.callbacks.forEach(cb => cb.onCameraZoomRelease());
-          this.sKeyDownTime = 0;
-          this.holdZoomActive = false;
-          this.callbacks.forEach(cb => cb.onCameraPanHold?.('down'));
+          if (!this.sKeyDownTime) {
+            this.sKeyDownTime = Date.now();
+            this.callbacks.forEach(cb => cb.onCameraZoomHold('out'));
+          }
         }
         if (this.aKeyHeld) {
-          this.callbacks.forEach(cb => cb.onCameraRotateRelease());
-          this.aKeyDownTime = 0;
-          this.callbacks.forEach(cb => cb.onCameraPanHold?.('left'));
+          if (!this.aKeyDownTime) {
+            this.aKeyDownTime = Date.now();
+            this.callbacks.forEach(cb => cb.onCameraRotateHold('right'));
+          }
         }
         if (this.dKeyHeld) {
-          this.callbacks.forEach(cb => cb.onCameraRotateRelease());
-          this.dKeyDownTime = 0;
-          this.callbacks.forEach(cb => cb.onCameraPanHold?.('right'));
+          if (!this.dKeyDownTime) {
+            this.dKeyDownTime = Date.now();
+            this.callbacks.forEach(cb => cb.onCameraRotateHold('left'));
+          }
         }
         break;
     }

@@ -51,6 +51,7 @@ export class CameraController implements Updatable {
   private readonly panAcceleration = 0.005;
   private readonly panReferenceZoom = 10; // Zoom level where base speed applies
   private isCameraPanning = false;
+  private isHoldingPanPosition = false; // When true, camera stays at panned position (prevents follow) but doesn't move
 
   /* ------------------------------------------------------------------
    * Per-frame update – called by the main GameLoop
@@ -191,29 +192,79 @@ export class CameraController implements Updatable {
 
   /**
    * Called every time the player moves; keeps track of where we should
-   * centre the camera.  If the camera is not currently busy (zooming or
+   * centre the camera. If the camera is not currently busy (zooming or
    * rotating) the centre is updated immediately, or smoothly if transitioning from manual control.
    */
-  follow(coords: { lng: number; lat: number }, smoothTransition: boolean = false): void {
+  follow(coords: { lng: number; lat: number }): void {
     this.playerPosition = coords;
-    // Avoid interrupting cinematic easeTo or other map animations
-    if (!this.isBusy() && !this.map.isMoving()) {
-      if (smoothTransition) {
-        // Smooth transition when resuming auto-follow after manual camera control
-        this.map.easeTo({ 
-          center: [coords.lng, coords.lat],
-          duration: 300,
-          essential: true
-        } as any);
-      } else {
-        // Instant follow during normal gameplay
-        // Use jumpTo for instant, smooth camera following
-        // This matches the original non-server behavior and avoids jitter
-        // from calling easeTo() every frame
-        this.map.jumpTo({ center: [coords.lng, coords.lat] });
-      }
-      this.lastCenter = { ...coords };
+    
+    // If camera follow is disabled, don't follow
+    if (!this.cameraFollowEnabled) {
+      return;
     }
+    
+    // If camera is busy with user input (zoom/rotate/pan), don't interrupt
+    if (this.isBusy()) {
+      return;
+    }
+    
+    const currentCenter = this.map.getCenter();
+    const latDiff = coords.lat - currentCenter.lat;
+    const lngDiff = coords.lng - currentCenter.lng;
+    // Use simple Euclidean distance (degrees)
+    const distance = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff);
+    
+    // If map is already moving (e.g., from a previous easeTo), check if we should update target
+    if (this.map.isMoving()) {
+      // Only update if we're transitioning back to player and player has moved significantly
+      // This prevents jump at end of snap-back by allowing target updates during transition
+      const shouldUpdateTarget = distance > 0.0001; // ~11 meters
+      if (!shouldUpdateTarget) {
+        return; // Let current animation complete
+      }
+      // Update the ease target to current player position with short duration
+      this.map.easeTo({ 
+        center: [coords.lng, coords.lat],
+        duration: 200, // Short duration for target updates during transition
+        essential: true
+      } as any);
+      return;
+    }
+    
+    // Map is not moving - decide between instant or smooth transition
+    // Use smooth transition if camera is far from player (was panned)
+    const useSmoothTransition = distance > 0.0001; // ~11 meters
+    
+    if (useSmoothTransition) {
+      // Calculate duration based on distance (closer = slower for smoothness)
+      // Small distance = longer duration (slower), large distance = shorter duration (faster)
+      const minDuration = 100;
+      const maxDuration = 5000;
+      const minDistance = 0.0001;
+      const maxDistance = 0.001;
+      
+      let duration: number;
+      if (distance < minDistance) {
+        duration = maxDuration; // Very slow for tiny distances
+      } else if (distance > maxDistance) {
+        duration = minDuration; // Fast for large distances
+      } else {
+        // Linear interpolation between min and max duration
+        const t = (distance - minDistance) / (maxDistance - minDistance);
+        duration = maxDuration - (maxDuration - minDuration) * t;
+      }
+      
+      this.map.easeTo({ 
+        center: [coords.lng, coords.lat],
+        duration: duration,
+        essential: true
+      } as any);
+    } else {
+      // Instant follow for small movements
+      this.map.jumpTo({ center: [coords.lng, coords.lat] });
+    }
+    
+    this.lastCenter = { ...coords };
   }
 
   /* ---- Zoom controls ---- */
@@ -251,7 +302,17 @@ export class CameraController implements Updatable {
   /* ---- Pan controls ---- */
   startPan(direction: 'up' | 'down' | 'left' | 'right'): void {
     this.continuousPanDirection = direction;
-    if (!this.continuousPanActive) {
+    // Resume panning if it was paused (holding position)
+    if (this.isHoldingPanPosition) {
+      this.isHoldingPanPosition = false;
+      this.continuousPanActive = true;
+      // Reset speed to min for smooth resumption
+      const currentZoom = this.map.getZoom();
+      const zoomDifference = this.panReferenceZoom - currentZoom;
+      const zoomSpeedMultiplier = Math.pow(2, zoomDifference);
+      const zoomAdjustedMinSpeed = this.minPanSpeed * zoomSpeedMultiplier;
+      this.currentPanSpeed = zoomAdjustedMinSpeed;
+    } else if (!this.continuousPanActive) {
       this.isCameraPanning = true;
       
       // Calculate initial speed based on current zoom level
@@ -267,13 +328,25 @@ export class CameraController implements Updatable {
 
   stopPan(): void {
     this.isCameraPanning = false;
+    this.isHoldingPanPosition = false;
     this.continuousPanActive = false;
     this.continuousPanDirection = null;
   }
 
+  /**
+   * Pauses panning movement but keeps camera at current panned position.
+   * Prevents camera follow from resuming until stopPan() is called.
+   */
+  pausePan(): void {
+    this.continuousPanActive = false;
+    this.continuousPanDirection = null;
+    // Keep isCameraPanning = true to prevent camera follow from resuming
+    this.isHoldingPanPosition = true;
+  }
+
   /* ---------------- helpers ---------------- */
   isBusy(): boolean {
-    return this.isCameraRotating || this.isCameraZooming || this.isCameraPanning;
+    return this.isCameraRotating || this.isCameraZooming || this.isCameraPanning || this.isHoldingPanPosition;
   }
 
   /**

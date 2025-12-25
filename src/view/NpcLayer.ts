@@ -11,7 +11,7 @@
  * - Renders NPCs as sprites (reusing player sprite) with rotation support
  * - Uses map.project() to convert lat/lng to screen coordinates (works with any projection)
  * - Queries ECS world directly for NPC positions
- * - Falls back to red squares if sprite fails to load
+ * - Skips rendering if sprite fails to load
  * 
  * Comparison with NpcInstancedLayer:
  * 
@@ -45,7 +45,7 @@ import { SHOW_COLLISION_BOUNDS } from "../config";
  * Renders NPCs as sprites on a canvas overlay positioned above the map.
  * Works with any map projection by using map.project() for coordinate conversion.
  * Supports sprite animations (idle, walking, running) similar to player character.
- * Falls back to red squares if sprite fails to load.
+ * Skips rendering if sprite fails to load.
  */
 export default class NpcLayer implements Renderable, Updatable {
   /** HTML5 Canvas element for drawing NPCs */
@@ -377,7 +377,7 @@ export default class NpcLayer implements Renderable, Updatable {
    * all NPCs as sprites at their current positions with rotation.
    * 
    * Queries ECS world directly for NPC positions and renders them.
-   * Falls back to red squares if sprite is not loaded.
+   * Skips rendering if sprite is not loaded.
    * 
    * Note: The alpha parameter is currently unused but could be used
    * for interpolation between fixed timesteps in the future.
@@ -471,12 +471,10 @@ export default class NpcLayer implements Renderable, Updatable {
         // Project lat/lng to screen coordinates
         const p = this.map.project({ lng, lat });
         
-        // Draw sprite or fallback square
+        // Draw sprite (skip rendering if sprite not loaded)
         if (this.spritesLoaded[animType] && this.spriteImages[animType]) {
           const frame = this.currentFrames[animType];
           this.drawSprite(ctx, p.x, p.y, rotation, spriteSize, animType, frame);
-        } else {
-          this.drawFallbackSquare(ctx, p.x, p.y, spriteSize);
         }
 
         // Draw collision bounds if enabled
@@ -548,22 +546,4 @@ export default class NpcLayer implements Renderable, Updatable {
     ctx.restore();
   }
   
-  /**
-   * Draws a fallback red square if sprite fails to load.
-   * 
-   * @param ctx - Canvas 2D context
-   * @param x - Screen X coordinate
-   * @param y - Screen Y coordinate
-   * @param size - Square size in pixels
-   */
-  private drawFallbackSquare(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    size: number
-  ): void {
-    ctx.fillStyle = 'rgba(200,0,0,0.6)';
-    const fallbackSize = Math.max(3, Math.min(size, 10)); // Clamp fallback size
-    ctx.fillRect(x - fallbackSize / 2, y - fallbackSize / 2, fallbackSize, fallbackSize);
-  }
 } 

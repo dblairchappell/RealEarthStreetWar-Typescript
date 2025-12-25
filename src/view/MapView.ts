@@ -76,7 +76,6 @@ export default class MapView implements Updatable, Renderable {
   // Camera control state
   private cameraFollowEnabled = true; // Whether camera should auto-follow player
   private cameraFollowLocked = false; // When true, cameraFollowEnabled cannot be auto-changed (locked via Shift+C toggle)
-  private wasCameraFollowing = false; // Track if we just transitioned from override mode (for smooth transition)
   // Note: Per-frame camera state is handled by CameraController, not MapView
 
   
@@ -170,6 +169,7 @@ export default class MapView implements Updatable, Renderable {
       onCameraRotateRelease: () => this.camera?.stopRotate(), // Stop continuous rotation
       onCameraPanHold: (direction: 'up' | 'down' | 'left' | 'right') => this.camera?.startPan(direction), // Start camera panning (Shift+WASD)
       onCameraPanRelease: () => this.camera?.stopPan(), // Stop camera panning
+      onCameraPanPause: () => this.camera?.pausePan(), // Pause panning movement but keep position
       onCameraFollowToggle: () => this.toggleCameraFollow() // Toggle camera follow (Shift+C)
     });
 
@@ -409,10 +409,7 @@ export default class MapView implements Updatable, Renderable {
     // This prevents jitter from calling easeTo() every frame
     // CameraController.follow() already checks map.isMoving() to avoid interfering with animations
     if (updateCamera && this.cameraFollowEnabled) {
-      // Pass whether we just transitioned from override mode for smooth transition
-      this.camera?.follow(coords, this.wasCameraFollowing);
-      // Reset the flag after using it
-      this.wasCameraFollowing = false;
+      this.camera?.follow(coords);
     }
   }
 
@@ -570,16 +567,10 @@ export default class MapView implements Updatable, Renderable {
    * @param enabled - Whether camera should follow player
    */
   private setCameraFollowEnabled(enabled: boolean): void {
-    const wasFollowing = this.cameraFollowEnabled;
     this.cameraFollowEnabled = enabled;
     
     // Sync state with CameraController
     this.camera?.setFollowEnabled(enabled);
-    
-    // Track transition for smooth camera movement
-    if (wasFollowing && !enabled) {
-      this.wasCameraFollowing = true;
-    }
   }
 
   /**
