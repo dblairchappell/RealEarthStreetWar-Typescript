@@ -20,6 +20,8 @@ export interface InputCallbacks {
   onCameraZoomRelease: () => void;
   onCameraRotateHold: (direction: 'left' | 'right') => void;
   onCameraRotateRelease: () => void;
+  onCameraPanHold?: (direction: 'up' | 'down' | 'left' | 'right') => void; // Camera panning (Shift+WASD)
+  onCameraPanRelease?: () => void; // Stop camera panning
   onCameraFollowToggle?: () => void; // Optional callback for toggling camera follow
 }
 

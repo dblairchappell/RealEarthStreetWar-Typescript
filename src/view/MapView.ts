@@ -168,6 +168,8 @@ export default class MapView implements Updatable, Renderable {
       onCameraZoomRelease: () => this.camera?.stopZoom(), // Stop continuous zoom
       onCameraRotateHold: (direction: 'left' | 'right') => this.camera?.startRotate(direction), // Start continuous rotation
       onCameraRotateRelease: () => this.camera?.stopRotate(), // Stop continuous rotation
+      onCameraPanHold: (direction: 'up' | 'down' | 'left' | 'right') => this.camera?.startPan(direction), // Start camera panning (Shift+WASD)
+      onCameraPanRelease: () => this.camera?.stopPan(), // Stop camera panning
       onCameraFollowToggle: () => this.toggleCameraFollow() // Toggle camera follow (Shift+C)
     });
 
@@ -570,6 +572,9 @@ export default class MapView implements Updatable, Renderable {
   private setCameraFollowEnabled(enabled: boolean): void {
     const wasFollowing = this.cameraFollowEnabled;
     this.cameraFollowEnabled = enabled;
+    
+    // Sync state with CameraController
+    this.camera?.setFollowEnabled(enabled);
     
     // Track transition for smooth camera movement
     if (wasFollowing && !enabled) {
