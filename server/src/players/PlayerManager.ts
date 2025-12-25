@@ -6,7 +6,7 @@
  */
 
 import { WebSocket } from 'ws';
-import type { InputState } from '../shared/input';
+import type { InputState } from '@shared/realearthstreetwar';
 
 export interface Player {
   /** Unique player identifier */

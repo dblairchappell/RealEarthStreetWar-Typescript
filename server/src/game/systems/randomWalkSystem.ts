@@ -5,8 +5,7 @@
  */
 
 import { defineQuery, IWorld } from 'bitecs';
-import { Position, Rotation, Velocity } from '../../shared/world';
-import { NpcTag } from '../../shared/components';
+import { Position, Rotation, Velocity, NpcTag } from '@shared/realearthstreetwar';
 
 const SPEED = 0.000000225;    
 const CHANGE_TIMER = 180;  

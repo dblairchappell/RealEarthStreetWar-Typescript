@@ -8,7 +8,7 @@ import { WebSocket, WebSocketServer as WSServer } from 'ws';
 import { PlayerManager } from '../players/PlayerManager';
 import { GameWorld } from '../game/GameWorld';
 import { ClientMessage, ServerMessage } from './types';
-import type { InputState } from '../shared/input';
+import type { InputState } from '@shared/realearthstreetwar';
 
 export interface MessageHandlers {
   onInput?: (playerId: string, input: InputState) => void;

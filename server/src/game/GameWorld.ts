@@ -6,13 +6,9 @@
  */
 
 import { addComponent, addEntity, createWorld, defineQuery, IWorld } from 'bitecs';
-import { Position, Rotation, Velocity, PlayerTag } from '../shared/world';
-import { NpcTag, SpriteRef } from '../shared/components';
+import { Position, Rotation, Velocity, PlayerTag, NpcTag, SpriteRef, entityCollisionSystem, SpatialGrid, GameState, GameStateConstants } from '@shared/realearthstreetwar';
 import { randomWalkSystem } from './systems/randomWalkSystem';
 import { movementSystem } from './systems/movementSystem';
-import { entityCollisionSystem } from '../shared/systems';
-import { SpatialGrid } from '../shared/utils';
-import GameState, { GameStateConstants } from '../shared/models';
 import { GameStateSnapshot, PlayerSnapshot, NpcSnapshot } from '../network/types';
 import { PlayerManager } from '../players/PlayerManager';
 

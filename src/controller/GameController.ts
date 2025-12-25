@@ -1,5 +1,5 @@
 // controller/GameController.ts
-import GameState from "../model/GameState";
+import { GameState } from "@shared/realearthstreetwar";
 import MapView from "../view/MapView";
 import { FixedUpdatable } from "../loop/GameLoop";
 import { NetworkStateManager } from "../network/NetworkStateManager";

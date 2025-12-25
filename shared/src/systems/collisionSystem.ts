@@ -20,7 +20,7 @@
  * ```
  */
 
-import { SpatialGrid } from '../../utils/spatialGrid';
+import { SpatialGrid } from '../utils/spatialGrid';
 
 /**
  * Character collision radius in degrees.

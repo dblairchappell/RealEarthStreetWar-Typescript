@@ -1,26 +1,20 @@
-import { addComponent, addEntity, createWorld, defineComponent, Types } from 'bitecs';
-import { SpriteRef } from './components/SpriteRef';
+/**
+ * Client World Instance
+ * 
+ * This file creates the client-side ECS world instance. Each side (client/server)
+ * maintains its own World instance with separate storage arrays.
+ * 
+ * Component definitions (Position, Rotation, Velocity, etc.) are imported from
+ * the shared package, but the World instance itself is created here.
+ */
 
-export const Position = defineComponent({ x: Types.f64, y: Types.f64 }); // x = lng, y = lat
-export const Rotation = defineComponent({ angle: Types.f32 });           // degrees
-export const Velocity = defineComponent({ x: Types.f64, y: Types.f64 }); // units/second in degrees
-export const PlayerTag = defineComponent();
+import { createWorld } from 'bitecs';
+import { Position, Rotation, Velocity, PlayerTag } from '@shared/realearthstreetwar';
+import { NpcTag, SpriteRef } from '@shared/realearthstreetwar';
 
+// Create the client's world instance
 export const world = createWorld();
 
-export function createPlayerEntity(lng: number, lat: number, rotationDeg: number): number {
-  const eid = addEntity(world);
-  addComponent(world, Position, eid);
-  addComponent(world, Rotation, eid);
-  addComponent(world, Velocity, eid);
-  addComponent(world, PlayerTag, eid);
-  addComponent(world, SpriteRef, eid);
-
-  Position.x[eid] = lng;
-  Position.y[eid] = lat;
-  Rotation.angle[eid] = rotationDeg;
-  Velocity.x[eid] = 0;
-  Velocity.y[eid] = 0;
-  SpriteRef.id[eid] = 0; // default sprite (player handled separately later)
-  return eid;
-} 
+// Re-export components for convenience (they're imported from shared package)
+export { Position, Rotation, Velocity, PlayerTag };
+export { NpcTag, SpriteRef };

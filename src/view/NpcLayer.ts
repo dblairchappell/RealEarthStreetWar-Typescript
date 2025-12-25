@@ -36,9 +36,8 @@ import { Renderable, Updatable } from "../loop/GameLoop";
 import { defineQuery } from "bitecs";
 import { world } from "../ecs/world";
 import { Position, Rotation, Velocity } from "../ecs/world";
-import { NpcTag } from "../ecs/components/NpcTag";
+import { NpcTag, CHARACTER_RADIUS_DEG } from "@shared/realearthstreetwar";
 import { SHOW_COLLISION_BOUNDS } from "../config";
-import { CHARACTER_RADIUS_DEG } from "../ecs/systems/collisionSystem";
 
 /**
  * Canvas-based NPC rendering layer.

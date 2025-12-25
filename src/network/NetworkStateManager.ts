@@ -6,10 +6,9 @@
  */
 
 import { GameStateSnapshot, PlayerSnapshot, NpcSnapshot } from './types';
-import GameState from '../model/GameState';
+import { GameState } from '@shared/realearthstreetwar';
 import { world, Position, Rotation, Velocity, PlayerTag } from '../ecs/world';
-import { NpcTag } from '../ecs/components/NpcTag';
-import { SpriteRef } from '../ecs/components/SpriteRef';
+import { NpcTag, SpriteRef } from '@shared/realearthstreetwar';
 import { addComponent, addEntity, defineQuery } from 'bitecs';
 
 /**

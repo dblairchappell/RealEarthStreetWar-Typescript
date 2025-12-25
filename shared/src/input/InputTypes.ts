@@ -1,3 +1,9 @@
+/**
+ * Input Types - Shared input state definitions
+ * 
+ * Defines the structure of player input that is sent from client to server.
+ */
+
 export interface InputState {
   forward: boolean;
   backward: boolean;

@@ -5,7 +5,7 @@
  */
 
 import { defineQuery, IWorld } from 'bitecs';
-import { Position, Velocity } from '../../shared/world';
+import { Position, Velocity } from '@shared/realearthstreetwar';
 
 const movableQuery = defineQuery([Position, Velocity]);
 

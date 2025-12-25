@@ -42,7 +42,7 @@
 import CharacterView from "./CharacterView";
 import InputManager from "../input/InputManager";
 import { IInputService } from "../input/IInputService";
-import { InputState } from "../input/InputTypes";
+import { InputState } from "@shared/realearthstreetwar";
 import { GTA1_STYLE_TOP_DOWN, ENABLE_GLOBE, MAP_PROJECTION } from "../config";
 import { MarkerLayer, CameraController, FeatureQuery } from './map';
 import { Position, Rotation } from "../ecs/world";

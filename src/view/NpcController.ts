@@ -39,7 +39,7 @@
 
 import { Renderable } from "../loop/GameLoop";
 import { world, Position } from '../ecs/world';
-import { NpcTag } from '../ecs/components/NpcTag';
+import { NpcTag } from '@shared/realearthstreetwar';
 import { defineQuery } from "bitecs";
 import NpcInstancedLayer from "./NpcInstancedLayer";
 import maplibregl from "maplibre-gl";

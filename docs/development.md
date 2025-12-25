@@ -1,267 +1,398 @@
 # Development Guide
 
-Guide for contributing to and extending Real-Earth Street War. This covers coding standards, debugging techniques, and development workflows.
+Guide for contributing to and extending Real-Earth Street War.
 
 ## 🚀 Getting Started
 
-### Development Environment Setup
+### Prerequisites
+
+- **Node.js**: 18+ with npm
+- **Modern Browser**: Chrome/Edge/Firefox with WebGL support
+- **Editor**: VS Code with TypeScript extension recommended
+
+### Initial Setup
+
 ```bash
-# Clone and install
+# Clone repository
 git clone <repository-url>
 cd RealEarthStreetWar
+
+# Install all dependencies (workspace packages)
 npm install
 
-# Start development server
-npm run dev
-
-# Type checking (recommended during development)
-npm run typecheck --watch
+# Verify workspace linking
+npm list --workspaces --depth=0
 ```
 
-### Required Tools
-- **Node.js**: 18+ with npm
-- **Browser**: Chrome/Edge/Firefox with DevTools
-- **Editor**: VS Code with TypeScript extension recommended
-- **Git**: For version control and collaboration
+### Running Development Servers
+
+**Terminal 1 - Start Game Server:**
+```bash
+cd server
+npm run dev
+```
+
+**Terminal 2 - Start Client:**
+```bash
+# From project root
+npm run dev
+```
+
+Visit `http://localhost:5173` to play!
+
+## 📁 Workspace Structure
+
+This project uses **npm workspaces** to manage multiple packages:
+
+```
+RealEarthStreetWar/          # Root workspace
+├── package.json             # Workspace config
+├── shared/                  # Shared package
+│   └── package.json
+├── server/                  # Server package
+│   └── package.json
+└── src/                     # Client (root package)
+```
+
+### Adding Dependencies
+
+```bash
+# Add to root (client)
+npm install <package>
+
+# Add to server
+npm install <package> --workspace=server
+
+# Add to shared
+npm install <package> --workspace=shared
+```
+
+## 🛠️ Development Workflow
+
+### Type Checking
+
+```bash
+# Check all packages
+npm run typecheck
+
+# Check specific package
+cd server && npm run typecheck
+cd shared && npm run typecheck
+```
+
+### Building
+
+```bash
+# Build client
+npm run build
+
+# Build server
+cd server && npm run build
+
+# Build shared (if needed)
+cd shared && npm run build
+```
+
+### Hot Reload
+
+- **Client**: Vite provides hot module replacement
+- **Server**: `tsx watch` automatically restarts on file changes
 
 ## 📋 Coding Standards
 
 ### TypeScript Guidelines
+
 - **Strict Mode**: All files use strict TypeScript checking
-- **Type Safety**: Avoid `any` types, prefer explicit interfaces
+- **Type Safety**: Avoid `any`, prefer explicit interfaces
 - **Naming**: PascalCase for classes, camelCase for variables/methods
-- **Imports**: Use explicit imports, avoid `import *`
+- **Imports**: Use explicit imports from `@shared/realearthstreetwar`
 
 **Example:**
 ```typescript
-// Good
-interface PlayerState {
-  position: [number, number];
-  rotation: number;
-  isMoving: boolean;
-}
+// Good - explicit import from shared
+import { Position, Rotation, GameState } from '@shared/realearthstreetwar';
 
-// Avoid
-const state: any = { ... };
+// Avoid - relative imports to old locations
+import { Position } from '../model/GameState';
 ```
 
 ### Architecture Principles
-- **Single Responsibility**: Each class/function has one clear purpose
-- **Loose Coupling**: Communicate via interfaces, not direct dependencies
-- **Immutability**: Prefer copying state objects over mutation
-- **Error Handling**: Explicit error checking, avoid silent failures
+
+1. **Server Authority**: All game logic runs on server
+2. **Shared Code**: Use `@shared/realearthstreetwar` for common code
+3. **Separation**: Client renders, server simulates
+4. **Type Safety**: Shared types ensure compatibility
 
 ### File Organization
+
+**Client (`src/`):**
 ```
 src/
-├── input/          # Input handling only
-├── view/           # Rendering, UI, and HUD logic (MapView, CharacterView, HUDView)
 ├── controller/     # Game logic coordination
-├── model/          # Pure data structures
-└── types/          # Shared type definitions
+├── view/           # Rendering and UI
+├── network/        # WebSocket client
+├── ecs/           # Client ECS world instance
+├── input/         # Input handling
+└── loop/          # Game loop
 ```
 
-## 🐛 Debugging Techniques
-
-### Browser DevTools
-**Character Animation Issues:**
-1. Open Elements panel → Find character sprite element
-2. Check `backgroundPosition` values during movement
-3. Verify `transform` properties for positioning
-4. Console: `window.character.getCurrentState()` for debug info
-
-**Map Rendering Problems:**
-1. Network panel → Verify PMTiles loading
-2. Console errors → Check MapLibre GL JS messages
-3. Performance panel → Monitor frame rate during zoom/pan
-4. Console: `window.map.getZoom()` and `window.map.getBearing()`
-
-**HUD/UI Issues:**
-- Check `HUDView.ts` for event wiring and state updates
-
-### Input System Debugging
-```typescript
-// Add to InputManager for debugging
-setCallbacks({
-  onPlayerInput: (input) => {
-    console.log('Input State:', input);
-    // Debug specific issues
-  }
-});
+**Server (`server/src/`):**
+```
+server/src/
+├── game/          # Game world and systems
+├── network/       # WebSocket server
+├── players/       # Player management
+└── server.ts      # Entry point
 ```
 
-### Common Issues and Solutions
-
-**Animation Not Working:**
-- Check sprite sheet path in `sprites/` directory
-- Verify frame counts match expected values (idle: 8, walking: 12, running: 6)
-- Confirm CSS `background-size` calculations
-
-**Camera Movement Problems:**
-- Check camera bearing is within 0-360° range
-- Verify no concurrent camera operations (rotation + zoom)
-- Test camera following is enabled/disabled correctly
-
-**Input Not Responding:**
-- Verify InputManager callbacks are set
-- Check browser focus (input requires window focus)
-- Test with browser console for key event firing
+**Shared (`shared/src/`):**
+```
+shared/src/
+├── components/    # ECS components (NpcTag, SpriteRef)
+├── ecs/          # ECS component definitions
+├── input/        # Input types
+├── model/        # Game state models
+├── systems/      # ECS systems
+└── utils/        # Utilities
+```
 
 ## 🔧 Adding Features
 
-### New Character Animations
-1. **Create Sprite Sheet**: 
-   - Export as PNG with consistent grid layout
-   - Place in `sprites/isometric_character_pack/`
-   - Follow naming: `isometric_character_[action].png`
+### Adding a New ECS Component
 
-2. **Update CharacterView**:
-   ```typescript
-   // Add to animation type union
-   type AnimationType = 'idle' | 'walking' | 'running' | 'newAction';
-   
-   // Update frame counts
-   const animationFrames = {
-     idle: 8, walking: 12, running: 6, newAction: 10
-   };
-   ```
+1. **Define in shared** (`shared/src/ecs/components.ts`):
+```typescript
+export const Health = defineComponent({ value: Types.f32 });
+```
 
-3. **Add Trigger Logic**:
-   ```typescript
-   updateMovementState(inputState: InputState) {
-     if (inputState.specialAction) {
-       this.switchToAnimation('newAction');
-     }
-     // ... existing logic
-   }
-   ```
+2. **Export from shared** (`shared/src/index.ts`):
+```typescript
+export * from './ecs/components';
+```
 
-### New Input Types  
-1. **Extend InputState** in `InputTypes.ts`
-2. **Add Key Handling** in `InputManager.handleKeyDown/Up`
-3. **Update Callbacks** interface and implementation
-4. **Add Game Logic** in appropriate controller/view methods
+3. **Use on server**:
+```typescript
+import { Health } from '@shared/realearthstreetwar';
+```
 
-### New HQ Types
-1. **Update GameState** enum and interfaces
-2. **Add Icon** to `/icons` directory as SVG
-3. **Update MapView** icon mapping and styling
-4. **Add Placement Logic** if special rules needed
+4. **Use on client**:
+```typescript
+import { Health } from '@shared/realearthstreetwar';
+```
 
-### New HUD/UI Features
-1. **Add Elements** to `index.html`
-2. **Add Logic** to `HUDView.ts` for all HUD event wiring and state
-3. **Register Callbacks** in `main.ts` for game logic
-4. **Remove HUD logic from MapView** (now handled by HUDView)
+### Adding a New System
 
-## 🧪 Testing Strategy
+**If shared (used by both):**
+1. Create `shared/src/systems/newSystem.ts`
+2. Export from `shared/src/systems/index.ts`
+3. Import and use on server/client
+
+**If server-only:**
+1. Create `server/src/game/systems/newSystem.ts`
+2. Add to `GameWorld.fixedUpdate()`
+
+### Adding a New Model
+
+1. **Create in shared** (`shared/src/model/NewModel.ts`):
+```typescript
+export default class NewModel {
+  // ...
+}
+```
+
+2. **Export from shared** (`shared/src/model/index.ts`):
+```typescript
+export { default as NewModel } from './NewModel';
+```
+
+3. **Export from main** (`shared/src/index.ts`):
+```typescript
+export { NewModel } from './model';
+```
+
+4. **Use anywhere**:
+```typescript
+import { NewModel } from '@shared/realearthstreetwar';
+```
+
+### Adding a New Network Message
+
+1. **Define types** (`server/src/network/types.ts` and `src/network/types.ts`):
+```typescript
+export type ClientMessage =
+  | { type: 'new_message'; data: SomeData }
+  | ...existing messages;
+```
+
+2. **Handle on server** (`server/src/network/WebSocketServer.ts`):
+```typescript
+case 'new_message':
+  handlers.onNewMessage?.(playerId, message.data);
+  break;
+```
+
+3. **Send from client** (`src/network/GameClient.ts`):
+```typescript
+sendNewMessage(data: SomeData): void {
+  this.sendMessage({ type: 'new_message', data });
+}
+```
+
+## 🐛 Debugging
+
+### Client-Side Debugging
+
+**Browser DevTools:**
+- Console: Check for WebSocket errors
+- Network: Monitor WebSocket messages
+- Performance: Check frame rate
+
+**Debug Helpers:**
+```typescript
+// In browser console
+window.spawnNpc(5);  // Spawn 5 NPCs (dev helper)
+```
+
+### Server-Side Debugging
+
+**Console Logging:**
+```typescript
+console.log('[GameWorld] NPC count:', this.npcEntities.size);
+```
+
+**Debugging Tools:**
+- Use `tsx watch` for automatic restarts
+- Check WebSocket connection status
+- Monitor snapshot frequency
+
+### Common Issues
+
+**"Cannot find module '@shared/realearthstreetwar'"**
+- Run `npm install` to link workspaces
+- Check `package.json` has `workspaces` field
+- Verify `tsconfig.json` path mappings
+
+**"Module has no default export"**
+- Check shared package exports (`shared/src/index.ts`)
+- Use named imports: `import { GameState } from '@shared/realearthstreetwar'`
+
+**Server won't start**
+- Check port 8080 is available
+- Verify all dependencies installed
+- Check server logs for errors
+
+**Client can't connect**
+- Ensure server is running first
+- Check `SERVER_URL` in `src/config.ts`
+- Verify WebSocket URL matches server port
+
+## 🧪 Testing
 
 ### Manual Testing Checklist
-- [ ] Character movement in all 8 directions
-- [ ] Camera rotation (8 positions) with character adjustment  
-- [ ] Zoom in/out with marker scaling
-- [ ] HQ placement on valid/invalid locations
-- [ ] Double-tap running activation
-- [ ] Hold-to-zoom functionality
-- [ ] Page refresh preserves functionality
+
+- [ ] Client connects to server
+- [ ] Player movement syncs to server
+- [ ] NPCs spawn and move
+- [ ] Time advances correctly
+- [ ] WebSocket reconnection works
+- [ ] Multiple clients can connect
 
 ### Performance Testing
-```javascript
-// Monitor frame rate during stress tests
-let frameCount = 0;
-let startTime = performance.now();
 
-function trackFPS() {
-  frameCount++;
-  const elapsed = performance.now() - startTime;
-  if (elapsed >= 1000) {
-    console.log(`FPS: ${frameCount}`);
-    frameCount = 0;
-    startTime = performance.now();
+**Monitor Frame Rate:**
+```javascript
+// In browser console
+let frames = 0;
+let lastTime = performance.now();
+function checkFPS() {
+  frames++;
+  const now = performance.now();
+  if (now - lastTime >= 1000) {
+    console.log('FPS:', frames);
+    frames = 0;
+    lastTime = now;
   }
-  requestAnimationFrame(trackFPS);
+  requestAnimationFrame(checkFPS);
 }
-trackFPS();
+checkFPS();
 ```
 
-### Browser Compatibility
-- **Chrome/Edge**: Primary target, full functionality
-- **Firefox**: Secondary target, test major features
-- **Safari**: Basic compatibility, may have minor issues
-- **Mobile**: Not currently optimized, future development
+**Monitor Network:**
+- Check WebSocket message frequency (should be ~20Hz)
+- Monitor snapshot size
+- Check for connection drops
 
-## 🗺 Future Development
+## 📝 Git Workflow
 
-### Planned Features (High Priority)
-1. **Multiplayer Backend**:
-   - WebSocket communication for real-time updates
-   - Player synchronization and conflict resolution
-   - Territory control persistence
+### Branch Naming
 
-2. **Mobile Support**:
-   - Touch input handling for movement
-   - Responsive UI scaling for smaller screens
-   - Virtual joystick or gesture controls
+- `feature/` - New features
+- `fix/` - Bug fixes
+- `refactor/` - Code refactoring
+- `docs/` - Documentation updates
 
-3. **Combat System**:
-   - Player vs player territory conflicts
-   - Resource-based combat mechanics
-   - Victory conditions and game progression
+### Commit Messages
 
-### Technical Improvements
-1. **Performance Optimization**:
-   - Web Workers for game logic processing
-   - Improved memory management
-   - Streaming for large map datasets
-
-2. **Plugin Architecture**:
-   - Modular expansion pack system
-   - Custom map region support
-   - Community content integration
-
-3. **Advanced Features**:
-   - Real-time economy simulation
-   - Alliance and diplomacy systems
-   - Historical data and analytics
-
-## 🤝 Contributing Guidelines
+```
+feat: Add health component to ECS
+fix: Resolve WebSocket reconnection issue
+docs: Update architecture documentation
+refactor: Move shared code to workspace package
+```
 
 ### Pull Request Process
-1. **Fork Repository** and create feature branch
-2. **Follow Coding Standards** outlined above
-3. **Test Thoroughly** with manual testing checklist
-4. **Update Documentation** for new features
-5. **Submit PR** with clear description and testing notes
 
-### Code Review Criteria
-- **Functionality**: Feature works as intended
-- **Performance**: No significant frame rate impact
-- **Architecture**: Follows MVC patterns and separation of concerns
-- **Type Safety**: Proper TypeScript usage throughout
-- **Documentation**: Code comments and user-facing docs updated
+1. Create feature branch
+2. Make changes following coding standards
+3. Test thoroughly
+4. Update documentation if needed
+5. Submit PR with clear description
 
-### Git Workflow
+## 🚀 Deployment
+
+### Building for Production
+
+**Client:**
 ```bash
-# Create feature branch
-git checkout -b feature/new-input-system
-
-# Make changes with descriptive commits
-git commit -m "Add touch input support for mobile devices"
-
-# Push and create pull request
-git push origin feature/new-input-system
+npm run build
+# Output: dist/
 ```
 
-## 📊 Project Metrics
+**Server:**
+```bash
+cd server
+npm run build
+# Output: server/dist/
+```
 
-### Current Codebase Size
-- **Total TypeScript**: ~40KB across 7 files
-- **Input System**: ~6KB (InputManager + InputTypes)
-- **View Layer**: ~31KB (MapView + CharacterView)
-- **Business Logic**: ~8KB (GameController + GameState)
+### Environment Variables
 
-### Performance Targets
-- **Frame Rate**: 60fps during movement and animation
-- **Load Time**: <5 seconds for initial map load
-- **Memory Usage**: <300MB peak during normal gameplay
-- **Input Latency**: <16ms from keypress to visual response 
+**Server:**
+- `PORT`: Server port (default: 8080)
+
+**Client:**
+- `VITE_SERVER_URL`: WebSocket server URL (default: `ws://localhost:8080`)
+
+## 📚 Additional Resources
+
+- [Architecture Overview](architecture.md) - System design details
+- [Server README](../server/README.md) - Server-specific documentation
+- [bitecs Documentation](https://github.com/NateTheGreatt/bitECS) - ECS library docs
+- [MapLibre GL JS](https://maplibre.org/maplibre-gl-js-docs/) - Map rendering library
+
+## 🤝 Contributing
+
+### Code Review Checklist
+
+- [ ] Follows TypeScript coding standards
+- [ ] Uses shared package for common code
+- [ ] Server-authoritative (no client-side game logic)
+- [ ] Proper error handling
+- [ ] Documentation updated
+- [ ] Tested manually
+
+### Questions?
+
+- Check existing documentation
+- Review code examples in similar files
+- Ask in PR comments

@@ -1,104 +1,308 @@
 # Architecture Overview
 
-Real-Earth Street War follows a clean **Model-View-Controller (MVC)** architecture with separated concerns for input handling, character rendering, map management, and HUD/UI logic.
+Real-Earth Street War uses a **server-authoritative multiplayer architecture** with a **monorepo structure** managed by npm workspaces.
 
-## 📁 Project Structure
+## 🏗️ High-Level Architecture
+
+```
+┌─────────────┐         WebSocket          ┌─────────────┐
+│   Client    │◄──────────────────────────►│   Server    │
+│  (Browser)  │      (20Hz snapshots)      │  (Node.js)  │
+└─────────────┘                             └─────────────┘
+      │                                             │
+      │ ECS World Instance                         │ ECS World Instance
+      │ (for rendering)                            │ (authoritative)
+      │                                             │
+      └─────────────────────────────────────────────┘
+                    Shared Package (@shared/realearthstreetwar)
+                    (Components, Models, Systems, Utils)
+```
+
+## 📦 Monorepo Structure
+
+The project uses **npm workspaces** to manage three packages:
+
+### 1. Root Package (Client)
+- **Location**: `./`
+- **Purpose**: Browser-based game client
+- **Tech**: Vite, TypeScript, MapLibre GL JS
+- **Entry**: `src/main.ts`
+
+### 2. Shared Package
+- **Location**: `./shared`
+- **Package Name**: `@shared/realearthstreetwar`
+- **Purpose**: Code shared between client and server
+- **Contents**:
+  - ECS component definitions (Position, Rotation, Velocity, PlayerTag, NpcTag, SpriteRef)
+  - Game state models (GameState, PlayerCharacter)
+  - Input types (InputState)
+  - ECS systems (collisionSystem)
+  - Utilities (SpatialGrid)
+
+### 3. Server Package
+- **Location**: `./server`
+- **Package Name**: `realearthstreetwar-server`
+- **Purpose**: Authoritative game server
+- **Tech**: Node.js, TypeScript, WebSocket (ws), bitecs
+- **Entry**: `src/server.ts`
+
+## 🎮 Client Architecture
+
+The client follows **MVC (Model-View-Controller)** pattern:
 
 ```
 src/
-├── input/                   # Input handling system
-│   ├── InputManager.ts      # Keyboard/mouse event processing
-│   └── InputTypes.ts        # Input-related type definitions
-│
-├── view/                    # Rendering and UI layer
-│   ├── MapView.ts           # Orchestration only
-│   ├── map/                 # View helpers (camera, markers, etc.)
-│   │   ├── CameraController.ts  # Continuous zoom/rotation, follow-player
-│   │   ├── MarkerLayer.ts       # HQ marker creation & scaling
-│   │   ├── InfluenceLayer.ts    # Territory fill layer
-│   │   └── FeatureQuery.ts      # Building / transport hit-testing
-│   ├── CharacterView.ts     # Character sprite & animation
-│   └── HUDView.ts           # HUD and UI logic, event wiring
-│
-├── controller/              # Business logic layer
-│   └── GameController.ts    # Game state management
-│
-├── model/                   # Data structures
-│   └── GameState.ts         # Pure game state
-│
-├── types/                   # Global type definitions
-│   └── global.d.ts          # TypeScript declarations
-│
-└── main.ts                  # Application bootstrap
+├── main.ts                 # Application bootstrap
+├── controller/
+│   └── GameController.ts  # Coordinates game logic
+├── view/
+│   ├── MapView.ts         # Map rendering and camera
+│   ├── CharacterView.ts   # Player character rendering
+│   ├── HUDView.ts         # UI and HUD
+│   └── NpcLayer.ts        # NPC rendering
+├── network/
+│   ├── GameClient.ts      # WebSocket client
+│   └── NetworkStateManager.ts  # Syncs server state to client ECS
+├── ecs/
+│   └── world.ts           # Client ECS world instance
+├── input/
+│   └── InputManager.ts   # Keyboard input handling
+└── loop/
+    └── GameLoop.ts        # Fixed-timestep game loop
 ```
 
-## 🏗️ Architecture Patterns
+### Client-Side ECS
 
-### MVC Separation
-- **Model** (`GameState`): Player data, HQ locations, territory ownership
-- **View** (`MapView`, `CharacterView`, `HUDView`): Map rendering, character animation, HUD/UI logic and event wiring
-- **Controller** (`GameController`): Game logic, input coordination, model/view updates
+The client maintains its **own ECS World instance** for rendering:
 
-### Input System Architecture (updated)
-- **InputManager**: Application-wide service that captures keyboard / mouse events and notifies **all** registered observers.
-- **InputTypes**: Type-safe input state definitions shared across the app.
-- **Dependency Injection**: A single `InputManager` instance is created in `main.ts` and injected into subsystems that need it (e.g. `MapView`, `GameController`).  No more hard-new inside `MapView`.
-- **Multi-observer callbacks**: Components subscribe via `addCallbacks()`/`removeCallbacks()`; each input event fan-outs to every observer.
+- **Purpose**: Display server state visually
+- **World Instance**: Created in `src/ecs/world.ts`
+- **Components**: Imported from `@shared/realearthstreetwar`
+- **No Simulation**: Client does NOT run game logic (no movement systems, no collision)
 
-### View Layer Separation
-- **MapView**: Map rendering, camera controls, HQ markers
-- **CharacterView**: Character sprite management, animation state, positioning
-- **HUDView**: HUD and UI logic, stats panel, button event wiring
+**Key Point**: The client's World is a **mirror** of server state, updated via snapshots.
+
+## 🖥️ Server Architecture
+
+The server is **authoritative** - it owns all game state:
+
+```
+server/src/
+├── server.ts              # Entry point
+├── game/
+│   ├── GameWorld.ts      # Authoritative game state + ECS world
+│   ├── GameLoop.ts       # Fixed-timestep loop (60Hz)
+│   └── systems/          # Server-side ECS systems
+│       ├── movementSystem.ts
+│       └── randomWalkSystem.ts
+├── network/
+│   ├── WebSocketServer.ts  # WebSocket handling
+│   └── types.ts            # Message type definitions
+└── players/
+    └── PlayerManager.ts    # Player connection management
+```
+
+### Server-Side ECS
+
+The server maintains the **authoritative ECS World**:
+
+- **Purpose**: Run all game simulation
+- **World Instance**: Created in `GameWorld.ts`
+- **Components**: Imported from `@shared/realearthstreetwar`
+- **Systems**: Movement, collision, NPC AI
+
+**Key Point**: The server's World is the **source of truth** for all game state.
 
 ## 🔄 Data Flow
 
-1. **Input** → `InputManager` processes keyboard events
-2. **Fan-out** → All observers (`GameController`, `MapView`, etc.) receive the same callback data  
-3. **State Update** → `GameController` updates `GameState`
-4. **View Sync** → Character, camera, and HUD positions updated
-5. **Rendering** → Map, character, and HUD views render changes
+### 1. Input Flow (Client → Server)
 
-## 🎯 Key Design Principles
+```
+User Input → InputManager → GameClient → WebSocket → Server
+```
 
-### Single Responsibility
-Each class has one clear purpose:
-- `InputManager`: Only handles input events
-- `CharacterView`: Only manages character rendering
-- `MapView`: Only handles map, camera, and HQ markers
-- `HUDView`: Only manages HUD and UI event wiring
-- `GameController`: Only coordinates game logic
+1. User presses keys
+2. `InputManager` captures input
+3. `GameClient` sends `{ type: 'input', input: InputState }` to server
+4. Server receives input and processes movement
 
-### Loose Coupling  
-Components communicate through well-defined interfaces:
-- Callback interfaces for view-to-controller communication
-- Public methods for cross-component coordination
-- Type-safe input state sharing
+### 2. State Sync Flow (Server → Client)
 
-### Testability
-- Pure functions for game logic calculations
-- Separated concerns allow unit testing individual components
-- Clear interfaces enable mocking for integration tests
+```
+Server ECS → GameWorld → Snapshot → WebSocket → NetworkStateManager → Client ECS
+```
 
-## 🛠️ Extension Points
+1. Server runs simulation (60Hz fixed timestep)
+2. `GameWorld` creates state snapshot (20Hz)
+3. Snapshot sent via WebSocket: `{ type: 'state_snapshot', state: GameStateSnapshot }`
+4. `NetworkStateManager` applies snapshot to client ECS world
+5. Client renders updated state
 
-### Adding New Input Types
-1. Extend `InputState` interface in `InputTypes.ts`
-2. Add handling in `InputManager.handleKeyDown/Up`
-3. Update callback interface in `MapView`
+### 3. Rendering Flow (Client)
 
-### Adding New View Components
-1. Create new view class (e.g., `UIView.ts`)
-2. Initialize in `MapView` or `main.ts`
-3. Delegate appropriate responsibilities from `MapView` or `HUDView`
+```
+Client ECS → NetworkStateManager → GameState → Views → Screen
+```
 
-### Adding New Game Mechanics
-1. Extend `GameState` with new data structures
-2. Add logic in `GameController`
-3. Update view layer to render new elements
+1. Client ECS world updated from snapshot
+2. `NetworkStateManager` syncs to `GameState` model
+3. Views (`MapView`, `CharacterView`, `HUDView`) read from `GameState`
+4. Rendering updates
 
-## 📖 Performance Considerations
+## 🧩 Entity Component System (ECS)
 
-- **60fps Movement**: Efficient character position updates
-- **Memory Management**: Proper cleanup of animation timers
-- **Event Throttling**: Camera rotation and zoom rate limiting
-- **Efficient Rendering**: Minimal DOM manipulation, CSS transforms for positioning 
+### Component Definitions (Shared)
+
+Components are **defined once** in `shared/src/ecs/components.ts`:
+
+```typescript
+export const Position = defineComponent({ x: Types.f64, y: Types.f64 });
+export const Rotation = defineComponent({ angle: Types.f32 });
+export const Velocity = defineComponent({ x: Types.f64, y: Types.f64 });
+export const PlayerTag = defineComponent();
+```
+
+### World Instances (Separate)
+
+Each side creates its **own World instance**:
+
+**Client** (`src/ecs/world.ts`):
+```typescript
+export const world = createWorld();  // Client's world
+```
+
+**Server** (`server/src/game/GameWorld.ts`):
+```typescript
+public readonly world = createWorld();  // Server's world
+```
+
+### Why Separate Worlds?
+
+- **Different Entity IDs**: Server assigns ID 5, client might assign ID 2
+- **Different Lifecycles**: Server creates NPCs, client receives them later
+- **Different Data**: Server calculates positions, client displays them
+- **Separation of Concerns**: Server simulates, client renders
+
+**Important**: Components are **shared** (same structure), but each World has **separate storage arrays**.
+
+## 🔌 Network Protocol
+
+### Client → Server Messages
+
+```typescript
+type ClientMessage =
+  | { type: 'input'; input: InputState }
+  | { type: 'spawn_npc'; count: number }
+  | { type: 'ping'; timestamp: number };
+```
+
+### Server → Client Messages
+
+```typescript
+type ServerMessage =
+  | { type: 'state_snapshot'; state: GameStateSnapshot; timestamp: number }
+  | { type: 'player_joined'; playerId: string }
+  | { type: 'player_left'; playerId: string }
+  | { type: 'pong'; timestamp: number }
+  | { type: 'error'; message: string };
+```
+
+### State Snapshot Format
+
+```typescript
+interface GameStateSnapshot {
+  gameDate: string;        // ISO string
+  players: PlayerSnapshot[];
+  npcs: NpcSnapshot[];
+}
+```
+
+## ⚙️ Game Loop
+
+### Server Loop (60Hz Fixed Timestep)
+
+```typescript
+// server/src/game/GameLoop.ts
+fixedUpdate() {
+  // 1. Process player input
+  // 2. Run NPC AI (randomWalkSystem)
+  // 3. Apply movement (movementSystem)
+  // 4. Handle collisions (entityCollisionSystem)
+  // 5. Advance game time
+  // 6. Create snapshot (every 3rd frame = 20Hz)
+}
+```
+
+### Client Loop (Variable Timestep)
+
+```typescript
+// src/loop/GameLoop.ts
+update(deltaMs: number) {
+  // 1. Render interpolation
+  // 2. Update views
+  // 3. Handle input
+}
+```
+
+## 🎯 Design Principles
+
+### 1. Server Authority
+- **All game logic** runs on the server
+- Client is **display-only** (no simulation)
+- Server sends **authoritative snapshots**
+
+### 2. Shared Code
+- **Single source of truth** for components, models, systems
+- No code duplication between client/server
+- Changes to shared code affect both sides
+
+### 3. Separation of Concerns
+- **Client**: Rendering, input capture, UI
+- **Server**: Simulation, game logic, state management
+- **Shared**: Data structures, component definitions
+
+### 4. Type Safety
+- TypeScript throughout
+- Shared types ensure client/server compatibility
+- Path mappings resolve workspace packages correctly
+
+## 🔧 Extension Points
+
+### Adding New Components
+
+1. **Define in shared**: `shared/src/ecs/components.ts`
+2. **Export**: Add to `shared/src/index.ts`
+3. **Use on server**: Import from `@shared/realearthstreetwar`
+4. **Use on client**: Import from `@shared/realearthstreetwar`
+
+### Adding New Systems
+
+1. **Create in shared**: `shared/src/systems/` (if used by both)
+2. **Or create server-only**: `server/src/game/systems/`
+3. **Add to GameWorld**: Call in `fixedUpdate()`
+
+### Adding New Models
+
+1. **Create in shared**: `shared/src/model/`
+2. **Export**: Add to `shared/src/index.ts`
+3. **Use**: Import from `@shared/realearthstreetwar`
+
+## 📊 Performance Considerations
+
+### Server
+- **Fixed timestep**: 60Hz ensures deterministic simulation
+- **Snapshot rate**: 20Hz balances bandwidth and responsiveness
+- **Spatial grid**: Efficient collision detection (O(n) instead of O(n²))
+
+### Client
+- **Render interpolation**: Smooth visuals between snapshots
+- **Efficient rendering**: WebGL instanced rendering for NPCs
+- **Minimal computation**: No game logic, just display
+
+## 🚀 Future Architecture Improvements
+
+- **Delta compression**: Send only changed entities
+- **Client-side prediction**: Predict movement for lower latency
+- **Interpolation**: Smooth position updates between snapshots
+- **Chunking**: Load map regions on-demand
+- **Caching**: Cache snapshots for reconnection

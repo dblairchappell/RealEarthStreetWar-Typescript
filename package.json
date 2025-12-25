@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "This project is a prototype for a massively multiplayer online strategy game inspired by the classic board game *Risk*. The game world is a 1:1 representation of the real Earth, where players, organized into gangs or factions, fight to capture and control real-world streets and territories.",
   "main": "script.js",
+  "workspaces": [
+    "shared",
+    "server"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",

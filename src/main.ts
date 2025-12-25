@@ -24,7 +24,7 @@
  * 1. Create systems → 2. Wire callbacks → 3. Wait for map → 4. Initialize game → 5. Start loop
  */
 
-import GameState from "./model/GameState";
+import { GameState, InputState } from "@shared/realearthstreetwar";
 import MapView from "./view/MapView";
 import GameController from "./controller/GameController";
 import { world, Position, Rotation } from "./ecs/world";
@@ -114,7 +114,7 @@ gameClient.connect();
  */
 input.addCallbacks({
     /** Forward player input (WASD, arrows) to controller and server */
-    onPlayerInput: (inp) => {
+    onPlayerInput: (inp: InputState) => {
         controller.handlePlayerInput(inp);
         
         // Send input to server

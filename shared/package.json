@@ -1,0 +1,22 @@
+{
+  "name": "@shared/realearthstreetwar",
+  "version": "1.0.0",
+  "description": "Shared code for RealEarthStreetWar game (ECS components, models, systems, utilities)",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bitecs": "^0.3.40"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}
+

@@ -5,7 +5,7 @@
  * Messages are JSON-serialized and sent over WebSocket.
  */
 
-import { InputState } from '../input/InputTypes';
+import { InputState } from '@shared/realearthstreetwar';
 
 /**
  * Messages sent from client to server

@@ -1,82 +1,217 @@
 # Real-Earth Street War
 
-A web-based strategy game prototype that uses real-world map data for territory control gameplay. Fight to capture and control real streets, buildings, and territories in an authentic 1:1 representation of Earth.
+A top-down GTA1-style game prototype set on a real-world map. Players explore and interact with NPCs in a server-authoritative multiplayer simulation.
 
-## 🎮 Game Features
+## 🎮 Current Features
 
-- **Real-World Maps**: Authentic building heights and street layouts using OpenStreetMap data
-- **Territory Control**: Expand your influence by placing headquarters strategically  
-- **Player Movement**: WASD-style character controls with 8-directional or 360° movement (toggle in HUD)
-- **Strategic Gameplay**: Three HQ types with location-based placement rules
-- **Complete Offline Play**: 116MB New Jersey dataset with all map layers included
+- **Real-World Maps**: Authentic street layouts using MapLibre GL JS
+- **Server-Authoritative Simulation**: NPCs and game state managed by the server
+- **Player Movement**: WASD-style character controls with smooth movement
+- **NPC Simulation**: Server-controlled NPCs that walk around the map
+- **Time Progression**: In-game time advances at 60x speed (1 game minute = 1 real second)
+- **Multiplayer-Ready**: WebSocket-based client-server architecture
+
+## 🏗️ Architecture
+
+This project uses **npm workspaces** with three packages:
+
+- **Root Package**: Client application (browser-based)
+- **`shared/`**: Shared code between client and server (ECS components, models, systems, utilities)
+- **`server/`**: Game server (Node.js with WebSocket)
+
+### Key Technologies
+
+- **Client**: TypeScript, Vite, MapLibre GL JS
+- **Server**: Node.js, TypeScript, WebSocket (ws)
+- **ECS**: bitecs (Entity Component System)
+- **Shared Code**: npm workspaces for code reuse
 
 ## 🚀 Quick Start
 
 ### Prerequisites
+
 - Node.js 18+ and npm
 - Modern web browser with WebGL support
-- ~200MB disk space
 
 ### Installation
+
 ```bash
+# Clone the repository
 git clone <repository-url>
 cd RealEarthStreetWar
+
+# Install all dependencies (workspace packages)
 npm install
+```
+
+### Running the Game
+
+**Terminal 1 - Start the server:**
+```bash
+cd server
+npm run dev
+```
+
+The server will start on `ws://localhost:8080` (or the port specified in `PORT` environment variable).
+
+**Terminal 2 - Start the client:**
+```bash
+# From project root
 npm run dev
 ```
 
 Visit `http://localhost:5173` to start playing!
 
 ### Controls
-- **Arrow Keys**: Move character (↑↓←→)
-- **Shift + ←/→**: Strafe left/right  
-- **Double-tap ↑**: Run
-- **A/D**: Rotate camera 45°
-- **W/S**: Zoom in/out
-- **Movement Mode Toggle**: Use the HUD button to switch between 8-directional and 360° movement
 
-### Gameplay
-1. **Place HQs**: Click the control panel buttons then click on the map
-   - **Producers**: Must be on buildings
-   - **Traffickers**: Must be on roads/rivers
-   - **Retailers**: Must be on buildings
-2. **Expand Territory**: Each HQ creates influence areas that merge
-3. **Manage Resources**: Watch your stats grow over time
+- **Arrow Keys**: Move character (↑↓←→)
+- **Shift + ←/→**: Rotate character left/right
+- **Double-tap ↑**: Run
+- **W/S**: Zoom in/out
+- **A/D**: Rotate camera 45°
+
+## 📁 Project Structure
+
+```
+RealEarthStreetWar/
+├── shared/                 # Shared package (npm workspace)
+│   ├── src/
+│   │   ├── components/    # ECS components (NpcTag, SpriteRef)
+│   │   ├── ecs/           # ECS component definitions (Position, Rotation, Velocity, PlayerTag)
+│   │   ├── input/         # Input types (InputState)
+│   │   ├── model/         # Game state models (GameState)
+│   │   ├── systems/       # ECS systems (collisionSystem)
+│   │   └── utils/         # Utilities (SpatialGrid)
+│   └── package.json
+│
+├── server/                 # Server package (npm workspace)
+│   ├── src/
+│   │   ├── game/          # Game world and systems
+│   │   ├── network/       # WebSocket server
+│   │   ├── players/       # Player management
+│   │   └── server.ts      # Entry point
+│   └── package.json
+│
+├── src/                    # Client application
+│   ├── controller/        # Game controller (MVC)
+│   ├── ecs/               # Client ECS world instance
+│   ├── input/             # Input handling
+│   ├── loop/              # Game loop
+│   ├── model/             # (deprecated - use shared)
+│   ├── network/           # WebSocket client
+│   ├── view/              # Rendering and UI
+│   └── main.ts            # Entry point
+│
+└── package.json            # Root workspace config
+```
 
 ## 🛠️ Development
 
-```bash
-# Development server
-npm run dev
+### Type Checking
 
-# Production build  
+```bash
+# Check all packages
+npm run typecheck
+
+# Check specific package
+cd server && npm run typecheck
+cd shared && npm run typecheck
+```
+
+### Building
+
+```bash
+# Build client
 npm run build
 
-# Type checking
-npm run typecheck
+# Build server
+cd server && npm run build
+```
+
+### Workspace Management
+
+Since this project uses npm workspaces, dependencies are managed at the root:
+
+```bash
+# Install a dependency for the client
+npm install <package> --workspace=.
+
+# Install a dependency for the server
+npm install <package> --workspace=server
+
+# Install a dependency for shared
+npm install <package> --workspace=shared
 ```
 
 ## 📚 Documentation
 
-Detailed technical documentation is available in the `/docs` folder:
-
-- [Architecture Overview](docs/architecture.md) - Code structure and design patterns
-- [Input System](docs/input-system.md) - Keyboard handling and controls
-- [View Layer](docs/view-layer.md) - Rendering, UI components, and HUD logic
-- [Map Data](docs/map-data.md) - PMTiles generation and format details
+- [Architecture Overview](docs/architecture.md) - System architecture and design patterns
 - [Development Guide](docs/development.md) - Contributing and extending the game
+- [Server Documentation](server/README.md) - Server setup and API
 
-## 🗺️ Current Coverage
+## 🎯 Current Status
 
-- **New Jersey**: Complete dataset with buildings, roads, water (116MB)
-- **Planned Expansions**: NYC, Philadelphia, Boston (see `expansion-packs.json`)
+**Implemented:**
+- ✅ Server-authoritative game state
+- ✅ Player movement synchronization
+- ✅ NPC spawning and simulation
+- ✅ Time progression system
+- ✅ WebSocket client-server communication
+- ✅ Shared code package (npm workspaces)
 
-## 🏁 Status
+**Planned:**
+- 🔲 Gameplay mechanics (HQ placement, territory control)
+- 🔲 Resource management
+- 🔲 Combat system
+- 🔲 Multiplayer features
 
-**Current**: Fully functional single-player prototype with movement, territory control, and resource management.
+## 🔧 Configuration
 
-**Planned**: Multiplayer backend, combat mechanics, economic systems, mobile support.
+### Server Configuration
+
+Edit `server/src/config.ts`:
+
+```typescript
+export const ServerConfig = {
+  NPC_COUNT: 10,              // Number of NPCs to spawn
+  DEFAULT_SPAWN_CENTER: {     // Default spawn location
+    lng: -74.05682,           // NYC coordinates
+    lat: 40.69337,
+  },
+  NPC_SPAWN_RADIUS: 0.0001,   // Spawn radius in degrees
+  PORT: 8080,                 // Server port
+};
+```
+
+### Client Configuration
+
+Edit `src/config.ts`:
+
+```typescript
+export const SERVER_URL = 'ws://localhost:8080';  // Server WebSocket URL
+export const MAP_PROJECTION = 'mercator';          // Map projection type
+```
+
+## 🐛 Troubleshooting
+
+**Server won't start:**
+- Check if port 8080 is available
+- Verify `npm install` completed successfully
+- Check server logs for errors
+
+**Client can't connect:**
+- Ensure server is running first
+- Check `SERVER_URL` in `src/config.ts` matches server port
+- Check browser console for WebSocket errors
+
+**Type errors:**
+- Run `npm install` to ensure workspace linking is correct
+- Verify TypeScript path mappings in `tsconfig.json` and `server/tsconfig.json`
+
+## 📄 License
+
+ISC
 
 ---
 
-Built with TypeScript, Vite, MapLibre GL JS, and PMTiles.
+Built with TypeScript, Vite, MapLibre GL JS, bitecs, and npm workspaces.

@@ -6,7 +6,7 @@
  */
 
 import { ClientMessage, ServerMessage, GameStateSnapshot } from './types';
-import { InputState } from '../input/InputTypes';
+import { InputState } from '@shared/realearthstreetwar';
 
 export interface GameClientCallbacks {
   onConnected?: () => void;

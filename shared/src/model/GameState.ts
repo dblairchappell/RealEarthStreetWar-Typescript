@@ -10,7 +10,7 @@
  * Architecture:
  * 
  * The GameState class follows a simple data-holder pattern. It doesn't contain
- * business logic (that's in GameController), but serves as the central repository
+ * business logic (that's in GameController/GameWorld), but serves as the central repository
  * that all systems read from and write to.
  */
 
@@ -33,8 +33,8 @@ export interface PlayerCharacter {
  * Central game state class containing all persistent game data.
  * 
  * This is the single source of truth for game state. All systems read from
- * and write to this class. It's instantiated once in main.ts and passed to
- * controllers and views that need access to game data.
+ * and write to this class. It's instantiated once on both client and server
+ * and passed to controllers/views that need access to game data.
  */
 export default class GameState {
   /* ----- Player State ----- */
@@ -42,7 +42,7 @@ export default class GameState {
   /**
    * Player character state.
    * Tracks position, rotation, and movement status.
-   * Position is synchronized with ECS player entity in GameController.
+   * Position is synchronized with ECS player entity.
    */
   player: PlayerCharacter = {
     /** Starting longitude: New York City area */
@@ -104,3 +104,4 @@ export default class GameState {
    */
   static readonly PLAYER_ROTATION_SPEED = 180;
 }
+
