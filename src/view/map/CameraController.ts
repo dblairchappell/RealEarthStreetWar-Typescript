@@ -107,16 +107,26 @@ export class CameraController implements Updatable {
   /**
    * Called every time the player moves; keeps track of where we should
    * centre the camera.  If the camera is not currently busy (zooming or
-   * rotating) the centre is updated immediately.
+   * rotating) the centre is updated immediately, or smoothly if transitioning from manual control.
    */
-  follow(coords: { lng: number; lat: number }): void {
+  follow(coords: { lng: number; lat: number }, smoothTransition: boolean = false): void {
     this.playerPosition = coords;
     // Avoid interrupting cinematic easeTo or other map animations
     if (!this.isBusy() && !this.map.isMoving()) {
-      // Use jumpTo for instant, smooth camera following
-      // This matches the original non-server behavior and avoids jitter
-      // from calling easeTo() every frame
-      this.map.jumpTo({ center: [coords.lng, coords.lat] });
+      if (smoothTransition) {
+        // Smooth transition when resuming auto-follow after manual camera control
+        this.map.easeTo({ 
+          center: [coords.lng, coords.lat],
+          duration: 300,
+          essential: true
+        } as any);
+      } else {
+        // Instant follow during normal gameplay
+        // Use jumpTo for instant, smooth camera following
+        // This matches the original non-server behavior and avoids jitter
+        // from calling easeTo() every frame
+        this.map.jumpTo({ center: [coords.lng, coords.lat] });
+      }
       this.lastCenter = { ...coords };
     }
   }

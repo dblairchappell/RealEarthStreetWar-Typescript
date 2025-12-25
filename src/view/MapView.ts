@@ -75,6 +75,7 @@ export default class MapView implements Updatable, Renderable {
   
   // Camera control state
   private userCameraOverride = false; // When true, camera doesn't auto-follow player (user is manually dragging/zooming)
+  private wasUserCameraOverride = false; // Track if we just transitioned from override mode (for smooth transition)
   // Note: Per-frame camera state is handled by CameraController, not MapView
 
   
@@ -396,7 +397,10 @@ export default class MapView implements Updatable, Renderable {
     // This prevents jitter from calling easeTo() every frame
     // CameraController.follow() already checks map.isMoving() to avoid interfering with animations
     if (updateCamera && !this.userCameraOverride) {
-      this.camera?.follow(coords);
+      // Pass whether we just transitioned from override mode for smooth transition
+      this.camera?.follow(coords, this.wasUserCameraOverride);
+      // Reset the flag after using it
+      this.wasUserCameraOverride = false;
     }
   }
 
@@ -562,6 +566,11 @@ export default class MapView implements Updatable, Renderable {
    * When disabled, camera will resume auto-following the player.
    */
   private disableUserCameraOverride(): void {
+    // Check if we're transitioning FROM override mode TO following mode
+    const wasOverridden = this.userCameraOverride;
     this.userCameraOverride = false;
+    
+    // Store this so follow() knows to use smooth transition
+    this.wasUserCameraOverride = wasOverridden;
   }
 }
