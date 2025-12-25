@@ -5,7 +5,7 @@
  * This is what clients sync to.
  */
 
-import { addComponent, addEntity, createWorld, defineQuery, IWorld } from 'bitecs';
+import { addComponent, addEntity, createWorld, defineQuery, IWorld, removeComponent } from 'bitecs';
 import { Position, Rotation, Velocity, PlayerTag, NpcTag, SpriteRef, entityCollisionSystem, SpatialGrid, GameState, GameStateConstants } from '@shared/realearthstreetwar';
 import { randomWalkSystem } from './systems/randomWalkSystem';
 import { movementSystem } from './systems/movementSystem';
@@ -86,6 +86,60 @@ export class GameWorld {
   }
 
   /**
+   * Get current NPC count
+   */
+  getNpcCount(): number {
+    return this.npcEntities.size;
+  }
+
+  /**
+   * Remove NPCs (removes excess NPCs to match target count)
+   */
+  removeNpcs(count: number): void {
+    if (count <= 0) {
+      // Remove all NPCs
+      const npcArray = Array.from(this.npcEntities);
+      for (const eid of npcArray) {
+        this.removeNpcEntity(eid);
+      }
+      console.log(`[GameWorld] Removed all NPCs`);
+      return;
+    }
+
+    const currentCount = this.npcEntities.size;
+    if (count >= currentCount) {
+      console.log(`[GameWorld] No NPCs to remove (current: ${currentCount}, target: ${count})`);
+      return;
+    }
+
+    const toRemove = currentCount - count;
+    const npcArray = Array.from(this.npcEntities);
+    
+    // Remove NPCs (remove from end of array)
+    for (let i = 0; i < toRemove; i++) {
+      const eid = npcArray[npcArray.length - 1 - i];
+      this.removeNpcEntity(eid);
+    }
+    
+    console.log(`[GameWorld] Removed ${toRemove} NPCs (${currentCount} -> ${count})`);
+  }
+
+  /**
+   * Remove a single NPC entity by removing all its components
+   */
+  private removeNpcEntity(eid: number): void {
+    // Remove all components - this effectively removes the entity from queries
+    removeComponent(this.world, Position, eid);
+    removeComponent(this.world, Rotation, eid);
+    removeComponent(this.world, Velocity, eid);
+    removeComponent(this.world, NpcTag, eid);
+    removeComponent(this.world, SpriteRef, eid);
+    
+    // Remove from tracking set
+    this.npcEntities.delete(eid);
+  }
+
+  /**
    * Spawn NPCs
    */
   spawnNpcs(count: number, centerLng: number, centerLat: number, radius: number = 0.001): void {
@@ -112,6 +166,23 @@ export class GameWorld {
       this.npcEntities.add(eid);
     }
     console.log(`[GameWorld] Spawned ${count} NPCs`);
+  }
+
+  /**
+   * Adjust NPC count to match target (spawns or removes as needed)
+   */
+  adjustNpcCount(targetCount: number, centerLng: number, centerLat: number, radius: number = 0.001): void {
+    const currentCount = this.npcEntities.size;
+    
+    if (targetCount > currentCount) {
+      // Need to spawn more
+      const toSpawn = targetCount - currentCount;
+      this.spawnNpcs(toSpawn, centerLng, centerLat, radius);
+    } else if (targetCount < currentCount) {
+      // Need to remove some
+      this.removeNpcs(targetCount);
+    }
+    // If equal, do nothing
   }
 
   /**

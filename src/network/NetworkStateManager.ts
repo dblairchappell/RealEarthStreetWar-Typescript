@@ -12,7 +12,7 @@ import { GameStateSnapshot, PlayerSnapshot, NpcSnapshot } from './types';
 import { GameState } from '@shared/realearthstreetwar';
 import { world, Position, Rotation, Velocity, PlayerTag } from '../ecs/world';
 import { NpcTag, SpriteRef } from '@shared/realearthstreetwar';
-import { addComponent, addEntity, defineQuery } from 'bitecs';
+import { addComponent, addEntity, defineQuery, removeComponent } from 'bitecs';
 
 /**
  * Manages synchronization of server state to client ECS world
@@ -114,15 +114,15 @@ export class NetworkStateManager {
    */
   private updateNpcs(npcs: NpcSnapshot[]): void {
     const serverEids = new Set(npcs.map(npc => npc.eid));
-    const clientEids = new Set(this.npcEntityMap.values());
 
     // Remove NPCs that no longer exist on server
     for (const [serverEid, clientEid] of this.npcEntityMap.entries()) {
       if (!serverEids.has(serverEid)) {
-        // Entity removed on server - mark for removal
-        // Note: bitecs doesn't have removeEntity, so we'll just stop updating it
-        // In production, you'd want proper entity removal
+        // Entity removed on server - properly remove all components
+        // This removes the entity from ECS queries, so it won't be rendered
+        this.removeNpcEntity(clientEid);
         this.npcEntityMap.delete(serverEid);
+        console.log(`[NetworkStateManager] Removed NPC entity ${clientEid} (server eid: ${serverEid})`);
       }
     }
 
@@ -140,6 +140,7 @@ export class NetworkStateManager {
         addComponent(world, SpriteRef, clientEid);
         
         this.npcEntityMap.set(npc.eid, clientEid);
+        console.log(`[NetworkStateManager] Created NPC entity ${clientEid} (server eid: ${npc.eid})`);
       }
 
       // Update NPC state from server
@@ -150,6 +151,19 @@ export class NetworkStateManager {
       Velocity.y[clientEid] = npc.velocityY;
       SpriteRef.id[clientEid] = npc.spriteId;
     }
+  }
+
+  /**
+   * Remove a single NPC entity by removing all its components
+   * This effectively removes it from ECS queries, so it won't be rendered
+   */
+  private removeNpcEntity(clientEid: number): void {
+    // Remove all components - this removes the entity from queries
+    removeComponent(world, Position, clientEid);
+    removeComponent(world, Rotation, clientEid);
+    removeComponent(world, Velocity, clientEid);
+    removeComponent(world, NpcTag, clientEid);
+    removeComponent(world, SpriteRef, clientEid);
   }
 
   /**

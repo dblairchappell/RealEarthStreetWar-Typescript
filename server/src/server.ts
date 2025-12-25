@@ -9,6 +9,9 @@ import { GameWorld } from './game/GameWorld';
 import { ServerGameLoop } from './game/GameLoop';
 import { WebSocketServer } from './network/WebSocketServer';
 import { ServerConfig } from './config';
+import { watch, readFileSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
 const PORT = ServerConfig.PORT;
 
@@ -33,6 +36,63 @@ if (ServerConfig.NPC_COUNT > 0) {
     ServerConfig.NPC_SPAWN_RADIUS
   );
 }
+
+// Watch config file for changes (hot-reload NPC count)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+// config.ts is in the same directory as server.ts (src/)
+const configPath = join(__dirname, 'config.ts');
+
+/**
+ * Parse NPC_COUNT from config file
+ */
+function parseNpcCountFromConfig(filePath: string): number | null {
+  try {
+    const content = readFileSync(filePath, 'utf-8');
+    // Match NPC_COUNT: <number> pattern
+    const match = content.match(/NPC_COUNT:\s*(\d+)/);
+    if (match) {
+      return parseInt(match[1], 10);
+    }
+  } catch (err) {
+    // File might not exist yet or be unreadable
+    return null;
+  }
+  return null;
+}
+
+let configWatchTimeout: NodeJS.Timeout | null = null;
+watch(configPath, { persistent: false }, (eventType) => {
+  if (eventType === 'change') {
+    // Debounce rapid file changes
+    if (configWatchTimeout) {
+      clearTimeout(configWatchTimeout);
+    }
+    
+    configWatchTimeout = setTimeout(() => {
+      try {
+        const newNpcCount = parseNpcCountFromConfig(configPath);
+        if (newNpcCount !== null && newNpcCount >= 0) {
+          const currentNpcCount = gameWorld.getNpcCount();
+          
+          if (newNpcCount !== currentNpcCount) {
+            console.log(`[Server] Config changed: NPC_COUNT ${currentNpcCount} -> ${newNpcCount}`);
+            gameWorld.adjustNpcCount(
+              newNpcCount,
+              ServerConfig.DEFAULT_SPAWN_CENTER.lng,
+              ServerConfig.DEFAULT_SPAWN_CENTER.lat,
+              ServerConfig.NPC_SPAWN_RADIUS
+            );
+          }
+        }
+      } catch (err) {
+        console.error('[Server] Error reloading config:', err);
+      }
+    }, 500); // Wait 500ms after last change before reloading
+  }
+});
+
+console.log(`[Server] Watching config file for changes: ${configPath}`);
 
 // Set up message handlers
 wsServer.setHandlers({
