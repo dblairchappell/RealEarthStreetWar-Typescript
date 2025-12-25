@@ -1,15 +1,17 @@
 // controller/GameController.ts
-import { GameState } from "@shared/realearthstreetwar";
+import { GameState, GameStateConstants } from "@shared/realearthstreetwar";
 import MapView from "../view/MapView";
 import { FixedUpdatable } from "../loop/GameLoop";
 import { NetworkStateManager } from "../network/NetworkStateManager";
 import { ClientPrediction } from "../network/ClientPrediction";
 import { Position, Rotation } from "../ecs/world";
 import { EntityInfo } from "../view/EntityClickHandler";
+import HUDView from "../view/HUDView";
 
 export default class GameController implements FixedUpdatable {
   private networkStateManager: NetworkStateManager;
   private clientPrediction: ClientPrediction;
+  private hud: HUDView | null = null;
 
   constructor(private state: GameState, private view: MapView) {
     this.networkStateManager = new NetworkStateManager(state);
@@ -103,13 +105,31 @@ export default class GameController implements FixedUpdatable {
   }
 
   /**
+   * Set HUD view reference
+   */
+  public setHUDView(hud: HUDView): void {
+    this.hud = hud;
+    
+    // Set up HUD callbacks
+    hud.setCallbacks({
+      onVacateBody: () => this.handleVacateBody(),
+      onPossessBody: (entityId: number) => this.handlePossessBody(entityId),
+      onCommandMenu: () => this.handleCommandMenu(),
+    });
+  }
+
+  /**
    * Handle occupant clicked - show occupant info panel
    * Called by EntityClickHandler when current occupant is clicked
    */
   public handleOccupantClicked(eid: number, info: EntityInfo): void {
     console.log('[GameController] Occupant clicked:', eid, info);
-    // TODO: Show occupant info panel in HUD
-    // This will be implemented in Phase 2
+    
+    if (this.hud) {
+      // TODO: Get current command from entity (will be implemented when command system is added)
+      const currentCommand = 'None'; // Placeholder
+      this.hud.showOccupantPanel(eid, info, currentCommand);
+    }
   }
 
   /**
@@ -118,8 +138,17 @@ export default class GameController implements FixedUpdatable {
    */
   public handleNpcClicked(eid: number, info: EntityInfo, distanceMeters: number): void {
     console.log('[GameController] NPC clicked:', eid, info, `Distance: ${distanceMeters.toFixed(2)}m`);
-    // TODO: Show NPC info panel in HUD
-    // This will be implemented in Phase 2
+    
+    // Set selected NPC for visual feedback (red outline)
+    console.log('[GameController] Setting selected NPC to:', eid);
+    this.view.setSelectedNpc(eid);
+    
+    if (this.hud) {
+      // Check if NPC is within possession range
+      const inRange = distanceMeters <= GameStateConstants.POSSESSION_RANGE_METERS;
+      
+      this.hud.showNpcPanel(eid, info, distanceMeters, inRange);
+    }
   }
 
   /**
@@ -128,7 +157,39 @@ export default class GameController implements FixedUpdatable {
    */
   public handleEmptyClick(): void {
     console.log('[GameController] Empty space clicked');
-    // TODO: Hide entity info panels
-    // This will be implemented in Phase 2
+    
+    // Clear selected NPC visual feedback
+    this.view.setSelectedNpc(null);
+    
+    if (this.hud) {
+      this.hud.hideEntityPanel();
+    }
+  }
+
+  /**
+   * Handle vacate body button clicked
+   */
+  private handleVacateBody(): void {
+    console.log('[GameController] Vacate body requested');
+    // TODO: Implement vacate body logic
+    // This will send a message to server to vacate current body
+  }
+
+  /**
+   * Handle possess body button clicked
+   */
+  private handlePossessBody(entityId: number): void {
+    console.log('[GameController] Possess body requested:', entityId);
+    // TODO: Implement possess body logic
+    // This will send a message to server to possess the target entity
+  }
+
+  /**
+   * Handle command menu button clicked
+   */
+  private handleCommandMenu(): void {
+    console.log('[GameController] Command menu requested');
+    // TODO: Show command menu/UI
+    // This will be implemented when command system is added
   }
 }

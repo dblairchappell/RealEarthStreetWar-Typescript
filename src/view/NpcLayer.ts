@@ -55,6 +55,9 @@ export default class NpcLayer implements Renderable, Updatable {
   /** ECS query to find all NPC entities */
   private query = defineQuery([NpcTag, Position, Rotation, Velocity]);
   
+  /** Currently selected NPC entity ID (for red outline) */
+  private selectedNpcEid: number | null = null;
+  
   // Animation definitions: sprite sheet URLs, frame counts, and playback rates
   // Same as CharacterView for consistency
   private animations = {
@@ -477,6 +480,11 @@ export default class NpcLayer implements Renderable, Updatable {
           this.drawSprite(ctx, p.x, p.y, rotation, spriteSize, animType, frame);
         }
 
+        // Draw selection outline if this NPC is selected (red outline)
+        if (this.selectedNpcEid === eid) {
+          this.drawSelectionOutline(ctx, p.x, p.y, spriteSize);
+        }
+
         // Draw collision bounds if enabled
         if (SHOW_COLLISION_BOUNDS) {
           const radiusPx = this.calculateCollisionRadiusPx(lng, lat);
@@ -544,6 +552,63 @@ export default class NpcLayer implements Renderable, Updatable {
     
     // Restore context state
     ctx.restore();
+  }
+  
+  /**
+   * Draws a selection outline around an NPC (red outline for selected NPCs).
+   * 
+   * @param ctx - Canvas 2D context
+   * @param x - Screen X coordinate (center of sprite)
+   * @param y - Screen Y coordinate (center of sprite)
+   * @param spriteSize - Sprite size in pixels
+   */
+  private drawSelectionOutline(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    spriteSize: number
+  ): void {
+    ctx.save();
+    
+    // Draw red outline/glow around sprite
+    const outlineWidth = 3;
+    const glowRadius = spriteSize / 2 + outlineWidth;
+    
+    // Outer glow
+    ctx.shadowColor = 'rgba(220, 53, 69, 0.8)';
+    ctx.shadowBlur = 8;
+    ctx.strokeStyle = 'rgba(220, 53, 69, 0.9)';
+    ctx.lineWidth = outlineWidth;
+    ctx.beginPath();
+    ctx.arc(x, y, glowRadius, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // Inner outline for crisp edge
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(220, 53, 69, 1.0)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, glowRadius - 1, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    ctx.restore();
+  }
+  
+  /**
+   * Set the selected NPC entity ID (for red outline)
+   */
+  public setSelectedNpc(eid: number | null): void {
+    const changed = this.selectedNpcEid !== eid;
+    this.selectedNpcEid = eid;
+    
+    if (changed) {
+      console.log('[NpcLayer] Selection changed:', eid);
+      // Trigger a repaint to show the selection outline immediately
+      // The render() method will be called by the game loop, but triggering repaint ensures immediate update
+      if (this.map) {
+        this.map.triggerRepaint();
+      }
+    }
   }
   
 } 

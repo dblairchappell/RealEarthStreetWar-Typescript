@@ -64,6 +64,9 @@ export default class NpcController implements Renderable {
   private prevPositions: Float32Array | null = null; // Previous fixed-timestep snapshot
   private currentPositions: Float32Array | null = null; // Current fixed-timestep snapshot
   
+  /** Currently selected NPC entity ID (for red outline) */
+  private selectedNpcEid: number | null = null;
+  
   /**
    * Constructs a new NpcController.
    * 

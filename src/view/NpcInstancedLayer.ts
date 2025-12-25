@@ -87,6 +87,12 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
   // Format: Float32Array with [x0, y0, x1, y1, ...] screen coordinates
   private positionsToRender: Float32Array | null = null;
   private npcCount = 0; // Number of NPCs to render (positionsToRender.length / 2)
+  
+  /** Currently selected NPC entity ID (for red outline) */
+  private selectedNpcEid: number | null = null;
+  
+  /** Map from entity ID to index in positionsToRender array */
+  private entityIdToIndex: Map<number, number> = new Map();
 
   // Base sprite size at reference zoom level (used for zoom-based scaling)
   private static readonly BASE_SIZE_PX = 72;

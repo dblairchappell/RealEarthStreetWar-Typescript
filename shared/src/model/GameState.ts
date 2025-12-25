@@ -73,5 +73,18 @@ export default class GameState {
    * Used when player presses left/right arrow keys to rotate.
    */
   static readonly PLAYER_ROTATION_SPEED = 360;
+  
+  /**
+   * Possession range in degrees.
+   * The controlling entity must be within this distance to possess an NPC.
+   * Approximately 50 meters at equator.
+   */
+  static readonly POSSESSION_RANGE_DEG = 0.0005;
+  
+  /**
+   * Possession range in meters (approximate at equator).
+   * Used for display purposes.
+   */
+  static readonly POSSESSION_RANGE_METERS = 50;
 }
 

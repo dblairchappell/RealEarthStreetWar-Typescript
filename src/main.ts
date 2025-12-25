@@ -213,6 +213,7 @@ map.on('load', () => {
      */
     hud.setMapInstance(map);
     hud.setGameState(state);
+    controller.setHUDView(hud); // Wire up HUD callbacks
     loop.add(hud);
 
     /**
@@ -244,6 +245,9 @@ map.on('load', () => {
          */
         const npcController = new NpcController(map, npcGlLayer);
         loop.addRenderable(npcController);
+        
+        // Store references for selection feedback
+        view.setNpcRenderingLayers(npcGlLayer, npcController);
 
     } else {
         /**
@@ -254,6 +258,9 @@ map.on('load', () => {
         const npcCanvasLayer = new NpcLayer(map);
         loop.add(npcCanvasLayer); // Register as Updatable for animation frame advancement
         loop.addRenderable(npcCanvasLayer); // Register as Renderable for rendering
+        
+        // Store reference for selection feedback
+        view.setNpcRenderingLayers(npcCanvasLayer, null);
     }
 
     /**

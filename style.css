@@ -66,6 +66,102 @@ body {
     font-size: 14px;
 }
 
+/* Entity Info Panel */
+.entity-panel {
+    margin-top: 10px;
+    padding: 10px;
+    background: rgba(255,255,255,0.9);
+    border-radius: 4px;
+    font-size: 14px;
+    min-width: 250px;
+}
+
+.entity-panel.hidden {
+    display: none;
+}
+
+.entity-panel h4 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    color: #333;
+    font-size: 16px;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 5px;
+}
+
+.panel-content.hidden {
+    display: none;
+}
+
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    margin: 8px 0;
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(0,0,0,0.1);
+}
+
+.info-label {
+    font-weight: bold;
+    color: #555;
+}
+
+.info-value {
+    color: #333;
+    font-family: 'Courier New', monospace;
+}
+
+.button-section {
+    margin-top: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.action-btn {
+    padding: 8px 16px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+.action-btn:hover:not(:disabled) {
+    background-color: #0056b3;
+}
+
+.action-btn:disabled {
+    background-color: #6c757d;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.possess-btn {
+    background-color: #28a745;
+}
+
+.possess-btn:hover:not(:disabled) {
+    background-color: #1e7e34;
+}
+
+/* Visual feedback for possessed and selected entities */
+.possessed-body {
+    /* Green outline/glow for possessed body */
+    box-shadow: 0 0 8px 3px rgba(40, 167, 69, 0.8),
+                0 0 16px 6px rgba(40, 167, 69, 0.4);
+    border-radius: 50%;
+    transition: box-shadow 0.2s ease;
+}
+
+.possessed-body .character-sprite-slice {
+    /* Ensure sprite slices inherit the glow effect */
+    filter: drop-shadow(0 0 2px rgba(40, 167, 69, 0.6));
+}
+
 .gang-marker {
     /* total height = head (32px) + pointer (10px) */
     width: 32px;

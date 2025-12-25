@@ -66,6 +66,8 @@ export default class MapView implements Updatable, Renderable {
   private camera: CameraController | null = null; // Handles camera following, zoom, and rotation
   private characterView: CharacterView | null = null; // Renders and animates the player character sprite
   private entityClickHandler: EntityClickHandler | null = null; // Handles clicking on entities
+  private npcLayer: any = null; // NPC rendering layer (NpcLayer or NpcInstancedLayer)
+  private npcController: any = null; // NPC controller (for WebGL path)
   
   // Player state tracking
   private playerPosition: { lng: number; lat: number } | null = null; // Current player position (lat/lng)
@@ -577,6 +579,31 @@ export default class MapView implements Updatable, Renderable {
   }
 
   /**
+   * Set NPC rendering layer references (called from main.ts after layers are created)
+   */
+  public setNpcRenderingLayers(layer: any, controller: any): void {
+    this.npcLayer = layer;
+    this.npcController = controller;
+  }
+
+  /**
+   * Set selected NPC entity ID (for red outline)
+   */
+  public setSelectedNpc(eid: number | null): void {
+    console.log('[MapView] setSelectedNpc called with eid:', eid, 'npcLayer:', this.npcLayer);
+    // Set selection in NPC rendering layer
+    if (this.npcLayer && typeof this.npcLayer.setSelectedNpc === 'function') {
+      console.log('[MapView] Calling npcLayer.setSelectedNpc');
+      this.npcLayer.setSelectedNpc(eid);
+    } else {
+      console.warn('[MapView] npcLayer not available or setSelectedNpc not a function', {
+        npcLayer: this.npcLayer,
+        hasMethod: this.npcLayer && typeof this.npcLayer.setSelectedNpc === 'function'
+      });
+    }
+  }
+
+  /**
    * Set up entity click handler with callbacks
    */
   public setupEntityClickHandler(
@@ -597,6 +624,18 @@ export default class MapView implements Updatable, Renderable {
       onNpcClicked,
       onEmptyClick
     );
+    
+    // Set up hover detection for showing possession range
+    this.setupHoverDetection();
+  }
+  
+  /**
+   * Set up hover detection to show possession range indicator
+   */
+  private setupHoverDetection(): void {
+    // TODO: Add hover detection for NPCs to show possession range
+    // This could highlight NPCs within range or show a range circle
+    // For now, this is a placeholder for future implementation
   }
 
   /**

@@ -214,6 +214,9 @@ export default class CharacterView implements Updatable {
     container.style.pointerEvents = 'none'; // Allow clicks to pass through to map
     container.style.willChange = 'transform'; // Performance hint for browser optimization
     
+    // Add possessed indicator class (green outline)
+    container.classList.add('possessed-body');
+    
     // Set CSS variable for slice count (used by stylesheet for calculations)
     container.style.setProperty('--num-slices', String(SLICE_COUNT));
 

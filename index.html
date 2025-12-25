@@ -18,6 +18,54 @@
             <p><strong>New York:</strong> <span id="time-ny"></span></p>
             <p><strong>Tokyo:</strong> <span id="time-tokyo"></span></p>
         </div>
+        
+        <!-- Entity Info Panel (shown when clicking on occupant or NPC) -->
+        <div id="entity-info-panel" class="entity-panel hidden">
+            <!-- Occupant Panel Content -->
+            <div id="occupant-panel" class="panel-content hidden">
+                <h4>Occupant Info</h4>
+                <div class="info-row">
+                    <span class="info-label">Entity ID:</span>
+                    <span id="occupant-id" class="info-value">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Position:</span>
+                    <span id="occupant-position" class="info-value">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Current Command:</span>
+                    <span id="occupant-command" class="info-value">None</span>
+                </div>
+                
+                <div class="button-section">
+                    <button id="vacate-body-btn" class="action-btn">Vacate Body</button>
+                    <button id="command-menu-btn" class="action-btn">Set Command...</button>
+                </div>
+            </div>
+            
+            <!-- NPC Panel Content -->
+            <div id="npc-panel" class="panel-content hidden">
+                <h4>NPC Info</h4>
+                <div class="info-row">
+                    <span class="info-label">Entity ID:</span>
+                    <span id="npc-id" class="info-value">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Position:</span>
+                    <span id="npc-position" class="info-value">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Distance:</span>
+                    <span id="npc-distance" class="info-value">-</span>
+                </div>
+                
+                <div class="button-section">
+                    <button id="possess-btn" class="action-btn possess-btn" disabled>
+                        Possess Body
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- <script src='node_modules/maplibre-gl/dist/maplibre-gl.js'></script>
