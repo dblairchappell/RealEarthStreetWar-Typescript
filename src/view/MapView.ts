@@ -74,8 +74,9 @@ export default class MapView implements Updatable, Renderable {
   private prevRotation: number = 0;
   
   // Camera control state
-  private userCameraOverride = false; // When true, camera doesn't auto-follow player (user is manually dragging/zooming)
-  private wasUserCameraOverride = false; // Track if we just transitioned from override mode (for smooth transition)
+  private cameraFollowEnabled = true; // Whether camera should auto-follow player
+  private cameraFollowLocked = false; // When true, cameraFollowEnabled cannot be auto-changed (locked via Shift+C toggle)
+  private wasCameraFollowing = false; // Track if we just transitioned from override mode (for smooth transition)
   // Note: Per-frame camera state is handled by CameraController, not MapView
 
   
@@ -166,7 +167,8 @@ export default class MapView implements Updatable, Renderable {
       onCameraZoomHold: (direction: 'in' | 'out') => this.camera?.startZoom(direction), // Start continuous zoom
       onCameraZoomRelease: () => this.camera?.stopZoom(), // Stop continuous zoom
       onCameraRotateHold: (direction: 'left' | 'right') => this.camera?.startRotate(direction), // Start continuous rotation
-      onCameraRotateRelease: () => this.camera?.stopRotate() // Stop continuous rotation
+      onCameraRotateRelease: () => this.camera?.stopRotate(), // Stop continuous rotation
+      onCameraFollowToggle: () => this.toggleCameraFollow() // Toggle camera follow (Shift+C)
     });
 
     // Handle missing images gracefully (prevents errors when map style references missing icons)
@@ -217,7 +219,9 @@ export default class MapView implements Updatable, Renderable {
       // Listen directly to wheel events to detect user-initiated zoom
       const mapContainer = this.map.getContainer();
       mapContainer.addEventListener('wheel', () => {
-        this.enableUserCameraOverride();
+        if (!this.cameraFollowLocked) {
+          this.setCameraFollowEnabled(false);
+        }
       }, { passive: true });
       
       // Handle zoom events: resize markers and character sprite
@@ -260,8 +264,11 @@ export default class MapView implements Updatable, Renderable {
 
     // If player starts moving or rotating, re-enable auto-follow camera
     // This allows user to manually drag camera, but resumes following when player moves
+    // However, if camera follow is locked (via Shift+C toggle), don't auto-re-enable it
     if (input.forward || input.backward || input.left || input.right || input.rotateLeft || input.rotateRight) {
-      this.disableUserCameraOverride();
+      if (!this.cameraFollowLocked) {
+        this.setCameraFollowEnabled(true);
+      }
     }
   }
 
@@ -300,9 +307,12 @@ export default class MapView implements Updatable, Renderable {
 
     // Detect manual camera interactions to disable auto-follow
     // When user drags camera manually, stop following player until player moves again
+    // (unless camera follow is locked via Shift+C toggle)
     this.map.on('dragstart', () => {
       console.log('[MapView] Drag started');
-      this.enableUserCameraOverride();
+      if (!this.cameraFollowLocked) {
+        this.setCameraFollowEnabled(false);
+      }
     });
     
   }
@@ -396,11 +406,11 @@ export default class MapView implements Updatable, Renderable {
     // Only update camera from fixed timestep (update()), not from render() interpolation
     // This prevents jitter from calling easeTo() every frame
     // CameraController.follow() already checks map.isMoving() to avoid interfering with animations
-    if (updateCamera && !this.userCameraOverride) {
+    if (updateCamera && this.cameraFollowEnabled) {
       // Pass whether we just transitioned from override mode for smooth transition
-      this.camera?.follow(coords, this.wasUserCameraOverride);
+      this.camera?.follow(coords, this.wasCameraFollowing);
       // Reset the flag after using it
-      this.wasUserCameraOverride = false;
+      this.wasCameraFollowing = false;
     }
   }
 
@@ -551,26 +561,30 @@ export default class MapView implements Updatable, Renderable {
     this.camera?.destroy();
   }
 
-  /* ---------------- Camera override handlers ---------------- */
+  /* ---------------- Camera follow control ---------------- */
   
   /**
-   * Enables user camera override mode.
-   * When enabled, camera will not auto-follow the player (user is manually controlling camera).
+   * Sets whether camera should follow the player.
+   * @param enabled - Whether camera should follow player
    */
-  private enableUserCameraOverride(): void {
-    this.userCameraOverride = true;
+  private setCameraFollowEnabled(enabled: boolean): void {
+    const wasFollowing = this.cameraFollowEnabled;
+    this.cameraFollowEnabled = enabled;
+    
+    // Track transition for smooth camera movement
+    if (wasFollowing && !enabled) {
+      this.wasCameraFollowing = true;
+    }
   }
 
   /**
-   * Disables user camera override mode.
-   * When disabled, camera will resume auto-following the player.
+   * Toggles camera follow mode and locks it.
+   * When locked, camera follow state cannot be auto-changed by dragging or movement.
+   * Called by Shift+C keyboard shortcut.
    */
-  private disableUserCameraOverride(): void {
-    // Check if we're transitioning FROM override mode TO following mode
-    const wasOverridden = this.userCameraOverride;
-    this.userCameraOverride = false;
-    
-    // Store this so follow() knows to use smooth transition
-    this.wasUserCameraOverride = wasOverridden;
+  public toggleCameraFollow(): void {
+    this.cameraFollowLocked = !this.cameraFollowLocked;
+    this.setCameraFollowEnabled(!this.cameraFollowEnabled);
+    console.log('[MapView] Camera follow:', this.cameraFollowEnabled ? 'ENABLED' : 'DISABLED', this.cameraFollowLocked ? '(locked)' : '');
   }
 }

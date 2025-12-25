@@ -20,5 +20,6 @@ export interface InputCallbacks {
   onCameraZoomRelease: () => void;
   onCameraRotateHold: (direction: 'left' | 'right') => void;
   onCameraRotateRelease: () => void;
+  onCameraFollowToggle?: () => void; // Optional callback for toggling camera follow
 }
 

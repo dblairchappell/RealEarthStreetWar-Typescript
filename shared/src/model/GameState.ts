@@ -72,6 +72,6 @@ export default class GameState {
    * Approximately 3 degrees per frame at 60 fps.
    * Used when player presses left/right arrow keys to rotate.
    */
-  static readonly PLAYER_ROTATION_SPEED = 180;
+  static readonly PLAYER_ROTATION_SPEED = 360;
 }
 

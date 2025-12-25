@@ -1,4 +1,4 @@
-import { InputState, InputCallbacks } from './InputTypes';
+import { InputState, InputCallbacks } from '@shared/realearthstreetwar';
 
 export interface IInputService {
   /**

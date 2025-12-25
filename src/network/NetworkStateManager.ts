@@ -60,6 +60,8 @@ export class NetworkStateManager {
 
   /**
    * Update player entities from server snapshot
+   * Note: For local player, position is managed by ClientPrediction for client-side prediction.
+   * This method only creates the entity if needed; reconciliation happens in GameController.
    */
   private updatePlayers(players: PlayerSnapshot[]): void {
     // For now, handle single player (local player)
@@ -77,32 +79,23 @@ export class NetworkStateManager {
       addComponent(world, PlayerTag, this.playerEid);
       addComponent(world, SpriteRef, this.playerEid);
       SpriteRef.id[this.playerEid] = 0;
+      
+      // Set initial position from server (only on creation)
+      Position.x[this.playerEid] = player.lng;
+      Position.y[this.playerEid] = player.lat;
+      Rotation.angle[this.playerEid] = player.rotation;
+      Velocity.x[this.playerEid] = 0;
+      Velocity.y[this.playerEid] = 0;
     }
-
-    // Update player position and rotation from server
-    // Store old position before updating (for logging)
-    const oldLng = Position.x[this.playerEid];
-    const oldLat = Position.y[this.playerEid];
-    
-    Position.x[this.playerEid] = player.lng;
-    Position.y[this.playerEid] = player.lat;
-    Rotation.angle[this.playerEid] = player.rotation;
-    Velocity.x[this.playerEid] = 0; // Server doesn't send velocity for players
-    Velocity.y[this.playerEid] = 0;
+    // Note: We don't update position here for existing player entity
+    // ClientPrediction handles position updates via client-side prediction
+    // Reconciliation happens in GameController.applyServerState()
 
     // Notify that player entity was created (after position is set)
     // Only call once on first snapshot when entity is newly created
     if (!this.playerEntityCreated && this.onPlayerEntityCreated) {
       this.playerEntityCreated = true;
       this.onPlayerEntityCreated(this.playerEid, player);
-    }
-
-    // Log if position changed significantly
-    if (Math.abs(player.lng - oldLng) > 0.000001 || Math.abs(player.lat - oldLat) > 0.000001) {
-      console.log('[NetworkStateManager] Updated player position:', {
-        from: { lng: oldLng.toFixed(8), lat: oldLat.toFixed(8) },
-        to: { lng: player.lng.toFixed(8), lat: player.lat.toFixed(8) }
-      });
     }
 
     // Player state is now stored only in ECS components (Position, Rotation, Velocity)

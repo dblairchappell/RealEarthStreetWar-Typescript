@@ -298,12 +298,19 @@ export class GameWorld {
     randomWalkSystem(this.world);
     movementSystem(this.world);
     
-    // Rebuild spatial grid
+    // Get all entities for collision detection (players + NPCs)
     const npcEnts = this.npcQuery(this.world);
-    this.spatialGrid.rebuild(npcEnts, Position);
+    const playerEnts = this.playerQuery(this.world);
     
-    // Run collision detection
-    entityCollisionSystem(npcEnts, this.spatialGrid, Position, Velocity);
+    // Combine player and NPC entities for collision detection
+    // Both players and NPCs have Position, Velocity components (required for collision)
+    const allCollidableEntities: number[] = [...playerEnts, ...npcEnts];
+    
+    // Rebuild spatial grid with all collidable entities
+    this.spatialGrid.rebuild(allCollidableEntities, Position);
+    
+    // Run collision detection on all entities (players + NPCs)
+    entityCollisionSystem(allCollidableEntities, this.spatialGrid, Position, Velocity);
   }
 
   /**

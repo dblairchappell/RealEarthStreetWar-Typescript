@@ -1,5 +1,5 @@
 // src/input/InputManager.ts
-import { InputState, InputCallbacks } from './InputTypes';
+import { InputState, InputCallbacks } from '@shared/realearthstreetwar';
 import { IInputService } from './IInputService';
 import { GTA1_STYLE_TOP_DOWN } from "../config";
 
@@ -144,6 +144,16 @@ export default class InputManager implements IInputService {
             this.inputState.rotateRight = true;
             inputChanged = true;
           }
+        }
+        break;
+      case 'KeyC':
+        // Shift+C toggles camera follow
+        if (e.shiftKey) {
+          this.callbacks.forEach(cb => {
+            if (cb.onCameraFollowToggle) {
+              cb.onCameraFollowToggle();
+            }
+          });
         }
         break;
     }
