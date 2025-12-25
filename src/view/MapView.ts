@@ -74,7 +74,7 @@ export default class MapView implements Updatable, Renderable {
   private prevRotation: number = 0;
   
   // Camera control state
-  private userCameraOverride = false; // When true, camera doesn't auto-follow player (user is manually dragging)
+  private userCameraOverride = false; // When true, camera doesn't auto-follow player (user is manually dragging/zooming)
   // Note: Per-frame camera state is handled by CameraController, not MapView
 
   
@@ -161,10 +161,10 @@ export default class MapView implements Updatable, Renderable {
     // Register input callbacks – MapView handles player input and camera controls
     // Note: Camera controller is created after map loads, so callbacks use optional chaining (?)
     this.inputManager.addCallbacks({
-      onPlayerInput: (input) => this.handlePlayerInput(input), // Player movement/rotation input
-      onCameraZoomHold: (direction) => this.camera?.startZoom(direction), // Start continuous zoom
+      onPlayerInput: (input: InputState) => this.handlePlayerInput(input), // Player movement/rotation input
+      onCameraZoomHold: (direction: 'in' | 'out') => this.camera?.startZoom(direction), // Start continuous zoom
       onCameraZoomRelease: () => this.camera?.stopZoom(), // Stop continuous zoom
-      onCameraRotateHold: (direction) => this.camera?.startRotate(direction), // Start continuous rotation
+      onCameraRotateHold: (direction: 'left' | 'right') => this.camera?.startRotate(direction), // Start continuous rotation
       onCameraRotateRelease: () => this.camera?.stopRotate() // Stop continuous rotation
     });
 
@@ -211,6 +211,13 @@ export default class MapView implements Updatable, Renderable {
       
       // Set up map interaction event handlers (clicks, drags, etc.)
       this.setupMapEventHandlers();
+      
+      // Detect manual zoom via mouse wheel to disable auto-follow
+      // Listen directly to wheel events to detect user-initiated zoom
+      const mapContainer = this.map.getContainer();
+      mapContainer.addEventListener('wheel', () => {
+        this.enableUserCameraOverride();
+      }, { passive: true });
       
       // Handle zoom events: resize markers and character sprite
       // 'zoom' fires continuously during zoom (for real-time updates)
@@ -290,11 +297,13 @@ export default class MapView implements Updatable, Renderable {
       }
     });
 
-    // Detect manual camera drag to disable auto-follow
+    // Detect manual camera interactions to disable auto-follow
     // When user drags camera manually, stop following player until player moves again
     this.map.on('dragstart', () => {
+      console.log('[MapView] Drag started');
       this.enableUserCameraOverride();
     });
+    
   }
 
 
@@ -321,18 +330,41 @@ export default class MapView implements Updatable, Renderable {
     this.playerPosition = this.characterView.getPlayerPosition();
     this.playerRotation = this.characterView.getPlayerRotation();
 
-    // Cinematic zoom-in effect: smoothly animate camera to player location
-    // Starts from initial zoom (14) and zooms in to close-up view (21.5)
-    this.map.easeTo({
-      center: coords, // Center camera on player
-      zoom: 21.5, // Target zoom level (very close, street-level view)
-      duration: 3000, // Animation duration (3 seconds)
-      essential: true // Allow user interaction during animation (user can interrupt)
-    } as any);
-
-    // Ensure sprite is visible with correct size immediately (before zoom completes)
+    // Ensure sprite is visible with correct size immediately
     this.characterView.updateCharacterSize(false);
     this.characterView.redraw();
+
+    // Perform camera swoop-in effect
+    // Check if map is loaded - if not, wait for load event
+    const performSwoop = () => {
+      const currentZoom = this.map.getZoom();
+      const currentCenter = this.map.getCenter();
+      
+      console.log('[MapView] Starting camera swoop:', {
+        from: { center: [currentCenter.lng, currentCenter.lat], zoom: currentZoom },
+        to: { center: coords, zoom: 21.5 }
+      });
+
+      // Cinematic zoom-in effect: smoothly animate camera to player location
+      // Starts from initial zoom (14) and zooms in to close-up view (21.5)
+      // essential: true allows user to interrupt and drag during animation
+      this.map.easeTo({
+        center: coords, // Center camera on player
+        zoom: 21.5, // Target zoom level (very close, street-level view)
+        duration: 3000, // Animation duration (3 seconds)
+        essential: true // Allow user interaction during animation (user can interrupt)
+      } as any);
+    };
+
+    // Check if map is already loaded
+    if (this.map.loaded()) {
+      performSwoop();
+    } else {
+      // Wait for map to load before performing swoop
+      this.map.once('load', () => {
+        performSwoop();
+      });
+    }
   }
 
   /**
@@ -362,6 +394,7 @@ export default class MapView implements Updatable, Renderable {
     
     // Only update camera from fixed timestep (update()), not from render() interpolation
     // This prevents jitter from calling easeTo() every frame
+    // CameraController.follow() already checks map.isMoving() to avoid interfering with animations
     if (updateCamera && !this.userCameraOverride) {
       this.camera?.follow(coords);
     }

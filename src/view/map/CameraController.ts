@@ -67,6 +67,8 @@ export class CameraController implements Updatable {
       } else {
         this.map.setZoom(newZoom);
       }
+      // Note: We don't track this as programmatic zoom here because CameraController
+      // zoom is user-initiated (via keyboard input), not automatic camera following
     }
 
     /* ---- Continuous Rotation ---- */

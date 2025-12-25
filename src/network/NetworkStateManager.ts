@@ -17,10 +17,11 @@ import { addComponent, addEntity, defineQuery } from 'bitecs';
 export class NetworkStateManager {
   private gameState: GameState;
   private playerEid: number | null = null;
+  private playerEntityCreated = false; // Track if player entity creation callback has been called
   private npcEntityMap: Map<number, number> = new Map(); // Maps server eid -> client eid
   private playerQuery = defineQuery([PlayerTag, Position, Rotation]);
   private npcQuery = defineQuery([NpcTag, Position, Rotation, Velocity]);
-  private onPlayerEntityCreated?: (eid: number) => void;
+  private onPlayerEntityCreated?: (eid: number, playerData: PlayerSnapshot) => void;
 
   constructor(gameState: GameState) {
     this.gameState = gameState;
@@ -29,7 +30,7 @@ export class NetworkStateManager {
   /**
    * Set callback for when player entity is created
    */
-  setOnPlayerEntityCreated(callback: (eid: number) => void): void {
+  setOnPlayerEntityCreated(callback: (eid: number, playerData: PlayerSnapshot) => void): void {
     this.onPlayerEntityCreated = callback;
   }
 
@@ -73,14 +74,10 @@ export class NetworkStateManager {
       addComponent(world, PlayerTag, this.playerEid);
       addComponent(world, SpriteRef, this.playerEid);
       SpriteRef.id[this.playerEid] = 0;
-      
-      // Notify that player entity was created
-      if (this.onPlayerEntityCreated) {
-        this.onPlayerEntityCreated(this.playerEid);
-      }
     }
 
     // Update player position and rotation from server
+    // Store old position before updating (for logging)
     const oldLng = Position.x[this.playerEid];
     const oldLat = Position.y[this.playerEid];
     
@@ -89,6 +86,13 @@ export class NetworkStateManager {
     Rotation.angle[this.playerEid] = player.rotation;
     Velocity.x[this.playerEid] = 0; // Server doesn't send velocity for players
     Velocity.y[this.playerEid] = 0;
+
+    // Notify that player entity was created (after position is set)
+    // Only call once on first snapshot when entity is newly created
+    if (!this.playerEntityCreated && this.onPlayerEntityCreated) {
+      this.playerEntityCreated = true;
+      this.onPlayerEntityCreated(this.playerEid, player);
+    }
 
     // Log if position changed significantly
     if (Math.abs(player.lng - oldLng) > 0.000001 || Math.abs(player.lat - oldLat) > 0.000001) {

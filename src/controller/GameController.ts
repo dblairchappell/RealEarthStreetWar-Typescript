@@ -12,14 +12,24 @@ export default class GameController implements FixedUpdatable {
     this.networkStateManager = new NetworkStateManager(state);
     
     // Set up callback for when player entity is created by network state manager
-    this.networkStateManager.setOnPlayerEntityCreated((eid: number) => {
+    this.networkStateManager.setOnPlayerEntityCreated((eid: number, playerData) => {
       // Update view with player entity
       this.view.setPlayerEntity(eid);
       
+      // Use player data from snapshot (has correct position)
+      // Don't read from ECS components as they may not be updated yet
+      const lng = playerData.lng;
+      const lat = playerData.lat;
+      const rotDeg = playerData.rotation;
+      
+      // Convert rotation from degrees to radians (Rotation.angle stores degrees)
+      const rotRad = (rotDeg * Math.PI) / 180;
+      
       // Create visual representation of player character
+      // This triggers the cinematic camera swoop-in effect
       this.view.createPlayerCharacter(
-        { lng: Position.x[eid], lat: Position.y[eid] },
-        Rotation.angle[eid]
+        { lng, lat },
+        rotRad
       );
     });
   }

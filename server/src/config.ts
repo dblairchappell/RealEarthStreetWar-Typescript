@@ -6,7 +6,7 @@
 
 export const ServerConfig = {
   /** Number of NPCs to spawn automatically at server startup */
-  NPC_COUNT: 10,
+  NPC_COUNT: 300,
   
   /** Default spawn location (NYC area) */
   DEFAULT_SPAWN_CENTER: {
