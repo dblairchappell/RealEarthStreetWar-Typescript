@@ -5,6 +5,7 @@ import { FixedUpdatable } from "../loop/GameLoop";
 import { NetworkStateManager } from "../network/NetworkStateManager";
 import { ClientPrediction } from "../network/ClientPrediction";
 import { Position, Rotation } from "../ecs/world";
+import { EntityInfo } from "../view/EntityClickHandler";
 
 export default class GameController implements FixedUpdatable {
   private networkStateManager: NetworkStateManager;
@@ -38,6 +39,10 @@ export default class GameController implements FixedUpdatable {
         rotRad
       );
     });
+
+    // Set up entity click handler callbacks
+    // Note: EntityClickHandler will be created in MapView after map loads
+    // These callbacks will be registered when the handler is set up
   }
 
   // legacy update kept empty (required by Updatable interface users)
@@ -95,5 +100,35 @@ export default class GameController implements FixedUpdatable {
    */
   public getNetworkStateManager(): NetworkStateManager {
     return this.networkStateManager;
+  }
+
+  /**
+   * Handle occupant clicked - show occupant info panel
+   * Called by EntityClickHandler when current occupant is clicked
+   */
+  public handleOccupantClicked(eid: number, info: EntityInfo): void {
+    console.log('[GameController] Occupant clicked:', eid, info);
+    // TODO: Show occupant info panel in HUD
+    // This will be implemented in Phase 2
+  }
+
+  /**
+   * Handle NPC clicked - show NPC info panel
+   * Called by EntityClickHandler when NPC is clicked
+   */
+  public handleNpcClicked(eid: number, info: EntityInfo, distanceMeters: number): void {
+    console.log('[GameController] NPC clicked:', eid, info, `Distance: ${distanceMeters.toFixed(2)}m`);
+    // TODO: Show NPC info panel in HUD
+    // This will be implemented in Phase 2
+  }
+
+  /**
+   * Handle empty click - dismiss any open panels
+   * Called by EntityClickHandler when clicking on empty map
+   */
+  public handleEmptyClick(): void {
+    console.log('[GameController] Empty space clicked');
+    // TODO: Hide entity info panels
+    // This will be implemented in Phase 2
   }
 }

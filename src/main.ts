@@ -41,6 +41,7 @@ import { ENABLE_GLOBE, SHOW_PERF_OVERLAY } from "./config";
 import NpcController from "./view/NpcController";
 import { GameClient } from "./network/GameClient";
 import { SERVER_URL } from "./config";
+import { EntityInfo } from "./view/EntityClickHandler";
 
 /* ───────── Core System Initialization ───────── */
 
@@ -161,6 +162,18 @@ map.on('load', () => {
     // Player entity will be created when server sends first snapshot
     // View will be updated in the state snapshot callback
     
+
+    /* ---------------- Entity Click Handler Setup ---------------- */
+    
+    /**
+     * Set up entity click handler with callbacks from controller.
+     * This enables clicking on occupant or NPCs to show info panels.
+     */
+    view.setupEntityClickHandler(
+      (eid: number, info: EntityInfo) => controller.handleOccupantClicked(eid, info),
+      (eid: number, info: EntityInfo, distanceMeters: number) => controller.handleNpcClicked(eid, info, distanceMeters),
+      () => controller.handleEmptyClick()
+    );
 
     /* ---------------- Game Loop Setup ---------------- */
     

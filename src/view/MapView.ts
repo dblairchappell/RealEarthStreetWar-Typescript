@@ -49,6 +49,7 @@ import { Position, Rotation } from "../ecs/world";
 import { Renderable, Updatable } from "../loop/GameLoop";
 import maplibregl from 'maplibre-gl';
 import { Protocol } from 'pmtiles';
+import { EntityClickHandler, EntityInfo } from "./EntityClickHandler";
 
 
 /**
@@ -64,6 +65,7 @@ export default class MapView implements Updatable, Renderable {
   private markerLayer: MarkerLayer | null = null; // Manages map markers
   private camera: CameraController | null = null; // Handles camera following, zoom, and rotation
   private characterView: CharacterView | null = null; // Renders and animates the player character sprite
+  private entityClickHandler: EntityClickHandler | null = null; // Handles clicking on entities
   
   // Player state tracking
   private playerPosition: { lng: number; lat: number } | null = null; // Current player position (lat/lng)
@@ -565,6 +567,36 @@ export default class MapView implements Updatable, Renderable {
    */
   public setPlayerEntity(id: number) {
     this.playerEid = id;
+  }
+
+  /**
+   * Get the current occupant entity ID
+   */
+  public getCurrentOccupantEid(): number | null {
+    return this.playerEid;
+  }
+
+  /**
+   * Set up entity click handler with callbacks
+   */
+  public setupEntityClickHandler(
+    onOccupantClicked: (eid: number, info: EntityInfo) => void,
+    onNpcClicked: (eid: number, info: EntityInfo, distanceMeters: number) => void,
+    onEmptyClick: () => void
+  ): void {
+    if (this.entityClickHandler) {
+      // Handler already exists, don't create duplicate
+      console.warn('[MapView] EntityClickHandler already exists, skipping setup');
+      return;
+    }
+    
+    this.entityClickHandler = new EntityClickHandler(
+      this.map,
+      () => this.getCurrentOccupantEid(),
+      onOccupantClicked,
+      onNpcClicked,
+      onEmptyClick
+    );
   }
 
   /**
