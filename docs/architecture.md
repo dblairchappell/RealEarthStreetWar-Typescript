@@ -7,7 +7,7 @@ Real-Earth Street War uses a **server-authoritative multiplayer architecture** w
 ```
 ┌─────────────┐         WebSocket          ┌─────────────┐
 │   Client    │◄──────────────────────────►│   Server    │
-│  (Browser)  │      (20Hz snapshots)      │  (Node.js)  │
+│  (Browser)  │      (60Hz snapshots)      │  (Node.js)  │
 └─────────────┘                             └─────────────┘
       │                                             │
       │ ECS World Instance                         │ ECS World Instance
@@ -55,20 +55,30 @@ src/
 ├── main.ts                 # Application bootstrap
 ├── controller/
 │   └── GameController.ts  # Coordinates game logic
+├── debug/
+│   └── PerfOverlay.ts     # Performance monitoring overlay
 ├── view/
-│   ├── MapView.ts         # Map rendering and camera
-│   ├── CharacterView.ts   # Player character rendering
+│   ├── MapView.ts         # Main map view and coordination
+│   ├── CharacterView.ts   # Player sprite rendering and animation
 │   ├── HUDView.ts         # UI and HUD
-│   └── NpcLayer.ts        # NPC rendering
+│   ├── NpcLayer.ts        # Canvas NPC rendering (globe fallback)
+│   ├── NpcInstancedLayer.ts  # WebGL NPC rendering (Mercator)
+│   ├── NpcController.ts   # NPC interpolation and data management
+│   └── map/               # Map-specific components
+│       ├── CameraController.ts  # Camera following, zoom, rotation
+│       ├── FeatureQuery.ts      # Map feature queries (buildings, transport)
+│       └── MarkerLayer.ts       # Map markers
 ├── network/
 │   ├── GameClient.ts      # WebSocket client
-│   └── NetworkStateManager.ts  # Syncs server state to client ECS
+│   ├── NetworkStateManager.ts  # Syncs server state to client ECS
+│   └── ClientPrediction.ts     # Client-side prediction (currently disabled)
 ├── ecs/
 │   └── world.ts           # Client ECS world instance
 ├── input/
-│   └── InputManager.ts   # Keyboard input handling
+│   ├── InputManager.ts    # Keyboard input handling
+│   └── IInputService.ts   # Input service interface
 └── loop/
-    └── GameLoop.ts        # Fixed-timestep game loop
+    └── GameLoop.ts        # Variable-timestep game loop
 ```
 
 ### Client-Side ECS
@@ -133,10 +143,10 @@ Server ECS → GameWorld → Snapshot → WebSocket → NetworkStateManager → 
 ```
 
 1. Server runs simulation (60Hz fixed timestep)
-2. `GameWorld` creates state snapshot (20Hz)
-3. Snapshot sent via WebSocket: `{ type: 'state_snapshot', state: GameStateSnapshot }`
+2. `GameWorld` creates state snapshot
+3. `WebSocketServer` broadcasts snapshot at 60Hz: `{ type: 'state_snapshot', state: GameStateSnapshot }`
 4. `NetworkStateManager` applies snapshot to client ECS world
-5. Client renders updated state
+5. Client renders updated state with interpolation
 
 ### 3. Rendering Flow (Client)
 
@@ -145,9 +155,13 @@ Client ECS → NetworkStateManager → GameState → Views → Screen
 ```
 
 1. Client ECS world updated from snapshot
-2. `NetworkStateManager` syncs to `GameState` model
-3. Views (`MapView`, `CharacterView`, `HUDView`) read from `GameState`
-4. Rendering updates
+2. `NetworkStateManager` syncs game time to `GameState` model
+3. Views read directly from ECS components:
+   - `MapView` queries ECS for player/NPC positions
+   - `CharacterView` reads player Position/Rotation from ECS
+   - `NpcController` reads NPC positions from ECS and interpolates
+   - `HUDView` reads game time from `GameState`
+4. Rendering updates with interpolation for smooth visuals
 
 ## 🧩 Entity Component System (ECS)
 
@@ -156,11 +170,20 @@ Client ECS → NetworkStateManager → GameState → Views → Screen
 Components are **defined once** in `shared/src/ecs/components.ts`:
 
 ```typescript
-export const Position = defineComponent({ x: Types.f64, y: Types.f64 });
-export const Rotation = defineComponent({ angle: Types.f32 });
-export const Velocity = defineComponent({ x: Types.f64, y: Types.f64 });
-export const PlayerTag = defineComponent();
+export const Position = defineComponent({ x: Types.f64, y: Types.f64 }); // x = lng, y = lat
+export const Rotation = defineComponent({ angle: Types.f32 }); // degrees (0 = north)
+export const Velocity = defineComponent({ x: Types.f64, y: Types.f64 }); // degrees/second
+export const PlayerTag = defineComponent(); // Marker component
+export const NpcTag = defineComponent(); // Marker component
+export const SpriteRef = defineComponent({ id: Types.ui16 }); // Sprite ID for rendering
 ```
+
+**Component Usage**:
+- `Position`: Stores longitude (x) and latitude (y) in degrees
+- `Rotation`: Stores rotation angle in degrees (0° = north, 90° = east)
+- `Velocity`: Stores velocity in degrees per second
+- `SpriteRef`: Stores sprite ID (ui16) for selecting which sprite to render
+- `PlayerTag` / `NpcTag`: Marker components for entity identification
 
 ### World Instances (Separate)
 
@@ -222,14 +245,23 @@ interface GameStateSnapshot {
 ### Server Loop (60Hz Fixed Timestep)
 
 ```typescript
-// server/src/game/GameLoop.ts
+// server/src/game/GameWorld.ts
 fixedUpdate() {
-  // 1. Process player input
-  // 2. Run NPC AI (randomWalkSystem)
-  // 3. Apply movement (movementSystem)
-  // 4. Handle collisions (entityCollisionSystem)
-  // 5. Advance game time
-  // 6. Create snapshot (every 3rd frame = 20Hz)
+  // 1. Advance game time
+  // 2. Process player movement based on stored input
+  // 3. Run NPC AI (randomWalkSystem)
+  // 4. Apply movement (movementSystem)
+  // 5. Rebuild spatial grid
+  // 6. Handle collisions (entityCollisionSystem)
+}
+
+// server/src/network/WebSocketServer.ts
+// Broadcasts state snapshots at 60Hz (separate from game loop)
+startBroadcasting() {
+  setInterval(() => {
+    const snapshot = gameWorld.createSnapshot();
+    broadcastState(snapshot);
+  }, 1000 / 60); // 60Hz
 }
 ```
 
@@ -243,6 +275,81 @@ update(deltaMs: number) {
   // 3. Handle input
 }
 ```
+
+## 🎨 Rendering System
+
+### View Components
+
+The client uses a modular view system with specialized components:
+
+**MapView** (`src/view/MapView.ts`):
+- Main orchestrator for all visual elements
+- Manages MapLibre GL map instance
+- Coordinates sub-components (CharacterView, CameraController, etc.)
+- Handles map events (clicks, drags, zoom)
+
+**CharacterView** (`src/view/CharacterView.ts`):
+- Player sprite rendering and animation
+- Sprite sheet animation system (idle/walking/running)
+- Pseudo-3D effect with slice stacking (when not top-down)
+- Zoom-based sprite scaling
+- Camera-relative rotation
+
+**CameraController** (`src/view/map/CameraController.ts`):
+- Camera following player
+- Continuous zoom/rotation/pan with acceleration
+- Camera lock/unlock functionality
+- Smooth camera transitions
+
+**NPC Rendering** (dual-path system):
+- **NpcInstancedLayer**: WebGL-based instanced rendering for Mercator projection
+  - Uses WebGL point sprites
+  - Single draw call for all NPCs
+  - High performance (1000+ NPCs at 60fps)
+- **NpcLayer**: Canvas-based rendering for Globe projection
+  - Fallback when `ENABLE_GLOBE = true`
+  - Uses `map.project()` for coordinate conversion
+  - Slower but works with any projection
+
+**NpcController** (`src/view/NpcController.ts`):
+- Handles NPC interpolation between snapshots
+- Maintains position history for smooth rendering
+- Converts lat/lng to screen coordinates
+- Passes data to rendering layer
+
+**Other Components**:
+- **FeatureQuery**: Queries map features (buildings, transport) at click points
+- **MarkerLayer**: Manages map markers
+- **HUDView**: Displays game time and stats
+- **PerfOverlay**: Performance monitoring (FPS, frame time, CPU)
+
+### Sprite Animation System
+
+The game uses a sprite sheet animation system:
+
+- **Animation States**: idle, walking, running
+- **Frame Timing**: Uses accumulator pattern for consistent frame rates
+- **Sprite Sheets**: Located in `sprites/brian/` directory
+- **Animation Switching**: Automatically based on movement state
+- **Pseudo-3D**: Multiple sprite slices stacked for depth (when not top-down)
+
+### Map Projections
+
+The game supports multiple map projections:
+
+- **Mercator** (default): Flat map, best performance, WebGL NPC rendering
+- **Globe**: 3D sphere view, accurate sizes, Canvas NPC rendering fallback
+- **Vertical-Perspective**: 3D perspective view (experimental)
+
+Projection is configured via `MAP_PROJECTION` in `src/config.ts`.
+
+### Offline Map Support
+
+The game uses **PMTiles** protocol for offline map tiles:
+- Single-file format for efficient tile storage
+- Map style: `offline-map-style.json`
+- Tile data: `map_data/tiles/nj-complete.pmtiles`
+- Protocol registered with MapLibre GL JS
 
 ## 🎯 Design Principles
 
@@ -291,18 +398,35 @@ update(deltaMs: number) {
 
 ### Server
 - **Fixed timestep**: 60Hz ensures deterministic simulation
-- **Snapshot rate**: 20Hz balances bandwidth and responsiveness
+- **Broadcast rate**: 60Hz for responsive state updates
 - **Spatial grid**: Efficient collision detection (O(n) instead of O(n²))
+- **Hot-reload**: Config file watching for NPC count changes
 
 ### Client
-- **Render interpolation**: Smooth visuals between snapshots
-- **Efficient rendering**: WebGL instanced rendering for NPCs
-- **Minimal computation**: No game logic, just display
+- **Render interpolation**: Smooth visuals between snapshots (NpcController)
+- **Dual rendering paths**: 
+  - WebGL instanced rendering (`NpcInstancedLayer`) for Mercator projection
+  - Canvas overlay (`NpcLayer`) for Globe projection
+- **Sprite animations**: Frame-based animation system with accumulator pattern
+- **Performance overlay**: Built-in FPS and frame time monitoring
+- **Minimal computation**: No game logic, just display and interpolation
 
 ## 🚀 Future Architecture Improvements
 
 - **Delta compression**: Send only changed entities
-- **Client-side prediction**: Predict movement for lower latency
-- **Interpolation**: Smooth position updates between snapshots
+- **Client-side prediction**: Code exists but currently disabled (see `ClientPrediction.ts`)
+  - Full reconciliation system implemented with smooth correction
+  - Three-tier error handling (tiny/medium/catastrophic)
+  - Disabled to prevent rubber-banding issues
+- **Interpolation**: Already implemented in `NpcController` for NPCs
 - **Chunking**: Load map regions on-demand
 - **Caching**: Cache snapshots for reconnection
+- **Input buffering**: Queue inputs for reconciliation with server state
+
+## 🌍 Timezone Support
+
+The game uses `tz-lookup` library for timezone-aware time display:
+- Game time is stored in UTC
+- Display time is converted based on player's geographic location (lat/lng)
+- HUD shows local time for the current map position
+- Timezone lookup happens automatically via `tzLookup(lat, lng)`

@@ -67,7 +67,7 @@ Edit `server/src/config.ts`:
 ```typescript
 export const ServerConfig = {
   // NPC Spawning
-  NPC_COUNT: 10,                    // Number of NPCs to spawn
+  NPC_COUNT: 10,                    // Number of NPCs to spawn (hot-reloadable)
   DEFAULT_SPAWN_CENTER: {
     lng: -74.05682,                 // Default spawn longitude (NYC)
     lat: 40.69337,                  // Default spawn latitude (NYC)
@@ -79,6 +79,8 @@ export const ServerConfig = {
 };
 ```
 
+**Hot-Reload**: The server watches `config.ts` for changes and automatically adjusts NPC count without restarting. Change `NPC_COUNT` and save - the server will spawn or remove NPCs to match the new count.
+
 ### Environment Variables
 
 - `PORT`: Server port (default: 8080)
@@ -87,12 +89,15 @@ export const ServerConfig = {
 
 The server runs a **fixed-timestep game loop** at 60Hz:
 
-1. **Process Input**: Handle player input from clients
-2. **NPC AI**: Run `randomWalkSystem` (NPCs change direction)
-3. **Movement**: Run `movementSystem` (apply velocity to position)
-4. **Collision**: Run `entityCollisionSystem` (resolve collisions)
-5. **Time**: Advance game time
-6. **Snapshot**: Create and broadcast state snapshot (20Hz)
+1. **Time**: Advance game time
+2. **Process Input**: Process player movement based on stored input state
+3. **NPC AI**: Run `randomWalkSystem` (NPCs change direction)
+4. **Movement**: Run `movementSystem` (apply velocity to position)
+5. **Collision**: Rebuild spatial grid and run `entityCollisionSystem` (resolve collisions)
+
+**State Broadcasting** (separate from game loop):
+- Snapshots are created and broadcast at **60Hz** via `WebSocketServer.startBroadcasting()`
+- Each snapshot contains all player and NPC state
 
 ## 🔌 WebSocket Protocol
 
@@ -118,9 +123,9 @@ type ServerMessage =
 
 ### Message Flow
 
-1. **Client connects** → Server assigns player ID
-2. **Client sends input** → Server processes movement
-3. **Server broadcasts snapshots** → All clients receive updates (20Hz)
+1. **Client connects** → Server assigns player ID and creates player entity
+2. **Client sends input** → Server stores input in `PlayerManager` (processed every frame)
+3. **Server broadcasts snapshots** → All clients receive updates (60Hz)
 
 ## 🧩 ECS Architecture
 
@@ -155,7 +160,7 @@ This world is the **single source of truth** for all game state.
 
 ## 📊 State Snapshots
 
-Snapshots are created at **20Hz** (every 3rd frame of 60Hz loop):
+Snapshots are created and broadcast at **60Hz** (separate interval from game loop):
 
 ```typescript
 interface GameStateSnapshot {
@@ -165,7 +170,9 @@ interface GameStateSnapshot {
 }
 ```
 
-Snapshots are broadcast to **all connected clients**.
+Snapshots are broadcast to **all connected clients** via `WebSocketServer.startBroadcasting()`.
+
+**Note**: The game loop runs at 60Hz for simulation, and snapshots are broadcast at 60Hz for responsive updates. This provides smooth client-side rendering with minimal latency.
 
 ## 🔧 Development
 
@@ -226,10 +233,15 @@ console.log('[Server] Player connected:', playerId);
 ### Debug Helpers
 
 **Spawn NPCs:**
-```bash
-# From client browser console
-window.spawnNpc(5);  # Spawns 5 NPCs
+```javascript
+// From client browser console
+window.spawnNpc(5);  // Requests server to spawn 5 NPCs
 ```
+
+**Hot-Reload Config:**
+- Edit `server/src/config.ts` and change `NPC_COUNT`
+- Save the file - server automatically adjusts NPC count without restart
+- Check server logs for confirmation
 
 **Check Connections:**
 - Server logs show player connections/disconnections
@@ -254,9 +266,10 @@ window.spawnNpc(5);  # Spawns 5 NPCs
 
 ### Optimization Tips
 
-- **Snapshot rate**: 20Hz balances bandwidth and responsiveness
-- **Spatial grid**: Efficient collision detection (O(n))
+- **Broadcast rate**: 60Hz provides responsive updates (can be adjusted in `WebSocketServer.BROADCAST_RATE`)
+- **Spatial grid**: Efficient collision detection (O(n) instead of O(n²))
 - **Fixed timestep**: Deterministic simulation (60Hz)
+- **Config hot-reload**: Server watches `config.ts` and automatically adjusts NPC count without restart
 
 ### Monitoring
 

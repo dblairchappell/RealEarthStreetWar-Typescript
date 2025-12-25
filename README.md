@@ -4,12 +4,16 @@ A top-down GTA1-style game prototype set on a real-world map. Players explore an
 
 ## 🎮 Current Features
 
-- **Real-World Maps**: Authentic street layouts using MapLibre GL JS
+- **Real-World Maps**: Authentic street layouts using MapLibre GL JS with offline PMTiles support
 - **Server-Authoritative Simulation**: NPCs and game state managed by the server
-- **Player Movement**: WASD-style character controls with smooth movement
-- **NPC Simulation**: Server-controlled NPCs that walk around the map
-- **Time Progression**: In-game time advances at 60x speed (1 game minute = 1 real second)
-- **Multiplayer-Ready**: WebSocket-based client-server architecture
+- **Player Movement**: WASD-style character controls with smooth movement and sprite animations
+- **NPC Simulation**: Server-controlled NPCs that walk around the map with collision detection
+- **Time Progression**: In-game time advances at 60x speed (1 game minute = 1 real second) with timezone-aware display (uses `tz-lookup` based on lat/lng)
+- **Multiplayer-Ready**: WebSocket-based client-server architecture (60Hz state broadcasts)
+- **Advanced Camera**: Continuous zoom/rotation/pan controls with camera following
+- **Multiple Projections**: Support for Mercator, Globe, and Vertical-Perspective projections
+- **Performance Tools**: Built-in performance overlay for FPS and frame time monitoring
+- **Sprite System**: Animated character sprites with idle/walking/running states
 
 ## 🏗️ Architecture
 
@@ -67,8 +71,11 @@ Visit `http://localhost:5173` to start playing!
 - **Arrow Keys**: Move character (↑↓←→)
 - **Shift + ←/→**: Rotate character left/right
 - **Double-tap ↑**: Run
-- **W/S**: Zoom in/out
-- **A/D**: Rotate camera 45°
+- **W/S**: Continuous zoom in/out (with acceleration)
+- **A/D**: Continuous camera rotation left/right (with acceleration)
+- **Q/E**: Continuous camera pan left/right
+- **R/F**: Continuous camera pan up/down
+- **Shift + C**: Toggle camera follow lock
 
 ## 📁 Project Structure
 
@@ -94,12 +101,20 @@ RealEarthStreetWar/
 │
 ├── src/                    # Client application
 │   ├── controller/        # Game controller (MVC)
+│   ├── debug/             # Debug tools (PerfOverlay)
 │   ├── ecs/               # Client ECS world instance
 │   ├── input/             # Input handling
 │   ├── loop/              # Game loop
 │   ├── model/             # (deprecated - use shared)
 │   ├── network/           # WebSocket client
 │   ├── view/              # Rendering and UI
+│   │   ├── map/           # Map components (CameraController, FeatureQuery, MarkerLayer)
+│   │   ├── CharacterView.ts  # Player sprite rendering
+│   │   ├── HUDView.ts     # UI and HUD
+│   │   ├── MapView.ts     # Main map view
+│   │   ├── NpcLayer.ts    # Canvas NPC rendering (globe fallback)
+│   │   ├── NpcInstancedLayer.ts  # WebGL NPC rendering (Mercator)
+│   │   └── NpcController.ts  # NPC interpolation controller
 │   └── main.ts            # Entry point
 │
 └── package.json            # Root workspace config
@@ -153,11 +168,18 @@ npm install <package> --workspace=shared
 
 **Implemented:**
 - ✅ Server-authoritative game state
-- ✅ Player movement synchronization
-- ✅ NPC spawning and simulation
-- ✅ Time progression system
+- ✅ Player movement synchronization (60Hz server, 60Hz client broadcasts)
+- ✅ NPC spawning and simulation with collision detection
+- ✅ Time progression system with timezone-aware display
 - ✅ WebSocket client-server communication
 - ✅ Shared code package (npm workspaces)
+- ✅ Sprite animation system (idle/walking/running)
+- ✅ Advanced camera controls (zoom/rotation/pan)
+- ✅ Multiple map projections (Mercator/Globe/Vertical-Perspective)
+- ✅ Dual NPC rendering paths (WebGL for Mercator, Canvas for Globe)
+- ✅ Performance monitoring overlay
+- ✅ Offline map support (PMTiles)
+- ✅ Server config hot-reload
 
 **Planned:**
 - 🔲 Gameplay mechanics (HQ placement, territory control)
@@ -188,8 +210,17 @@ export const ServerConfig = {
 Edit `src/config.ts`:
 
 ```typescript
-export const SERVER_URL = 'ws://localhost:8080';  // Server WebSocket URL
-export const MAP_PROJECTION = 'mercator';          // Map projection type
+// Visual style
+export const GTA1_STYLE_TOP_DOWN = true;   // Toggle top-down vs 3D angled view
+export const ENABLE_GLOBE = true;           // Enable globe projection mode
+export const MAP_PROJECTION: 'mercator' | 'globe' | 'vertical-perspective' = 'mercator';
+
+// Debug tools
+export const SHOW_PERF_OVERLAY = true;      // Show performance overlay (FPS, frame time)
+export const SHOW_COLLISION_BOUNDS = false; // Show collision circles around NPCs
+
+// Network
+export const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'ws://localhost:8080';
 ```
 
 ## 🐛 Troubleshooting

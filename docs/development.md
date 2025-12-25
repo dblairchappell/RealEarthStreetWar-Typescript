@@ -129,7 +129,13 @@ import { Position } from '../model/GameState';
 ```
 src/
 ├── controller/     # Game logic coordination
+├── debug/          # Debug tools (PerfOverlay)
 ├── view/           # Rendering and UI
+│   ├── map/        # Map components (CameraController, FeatureQuery, MarkerLayer)
+│   ├── CharacterView.ts      # Player sprite rendering
+│   ├── NpcLayer.ts           # Canvas NPC rendering
+│   ├── NpcInstancedLayer.ts  # WebGL NPC rendering
+│   └── NpcController.ts      # NPC interpolation
 ├── network/        # WebSocket client
 ├── ecs/           # Client ECS world instance
 ├── input/         # Input handling
@@ -250,8 +256,14 @@ sendNewMessage(data: SomeData): void {
 **Debug Helpers:**
 ```typescript
 // In browser console
-window.spawnNpc(5);  // Spawn 5 NPCs (dev helper)
+window.spawnNpc(5);  // Request server to spawn 5 NPCs
+window.loop;         // Access game loop (pause, resume, etc.)
+window.state;        // Access game state
 ```
+
+**Performance Overlay:**
+- Enable `SHOW_PERF_OVERLAY` in `src/config.ts` to see FPS, frame time, and CPU usage
+- Enable `SHOW_COLLISION_BOUNDS` to visualize collision circles around NPCs
 
 ### Server-Side Debugging
 
@@ -318,9 +330,10 @@ checkFPS();
 ```
 
 **Monitor Network:**
-- Check WebSocket message frequency (should be ~20Hz)
+- Check WebSocket message frequency (should be ~60Hz)
 - Monitor snapshot size
 - Check for connection drops
+- Use performance overlay (`SHOW_PERF_OVERLAY` in config) for FPS monitoring
 
 ## 📝 Git Workflow
 
@@ -369,9 +382,25 @@ npm run build
 
 **Server:**
 - `PORT`: Server port (default: 8080)
+- Config hot-reload: Server watches `server/src/config.ts` for changes and automatically adjusts NPC count
 
 **Client:**
 - `VITE_SERVER_URL`: WebSocket server URL (default: `ws://localhost:8080`)
+
+### Client Configuration Options
+
+Edit `src/config.ts` for visual and debug settings:
+
+```typescript
+// Visual style
+export const GTA1_STYLE_TOP_DOWN = true;   // Top-down vs 3D angled view
+export const ENABLE_GLOBE = true;           // Globe projection mode
+export const MAP_PROJECTION: 'mercator' | 'globe' | 'vertical-perspective' = 'mercator';
+
+// Debug tools
+export const SHOW_PERF_OVERLAY = true;      // Performance overlay
+export const SHOW_COLLISION_BOUNDS = false; // Collision visualization
+```
 
 ## 📚 Additional Resources
 

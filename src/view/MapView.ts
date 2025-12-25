@@ -308,10 +308,37 @@ export default class MapView implements Updatable, Renderable {
     });
 
     // Detect manual camera interactions to disable auto-follow
-    // When user drags camera manually, stop following player until player moves again
+    // When user interacts with camera via mouse (drag, rotate, pitch, zoom), 
+    // stop following player until movement key is pressed
     // (unless camera follow is locked via Shift+C toggle)
+    
+    // Detect drag start (panning)
     this.map.on('dragstart', () => {
-      console.log('[MapView] Drag started');
+      console.log('[MapView] Drag started - disabling camera follow');
+      if (!this.cameraFollowLocked) {
+        this.setCameraFollowEnabled(false);
+      }
+    });
+    
+    // Detect rotation start (drag to rotate)
+    this.map.on('rotatestart', () => {
+      console.log('[MapView] Rotation started - disabling camera follow');
+      if (!this.cameraFollowLocked) {
+        this.setCameraFollowEnabled(false);
+      }
+    });
+    
+    // Detect pitch start (drag to change pitch/angle)
+    this.map.on('pitchstart', () => {
+      console.log('[MapView] Pitch started - disabling camera follow');
+      if (!this.cameraFollowLocked) {
+        this.setCameraFollowEnabled(false);
+      }
+    });
+    
+    // Detect zoom start (mouse wheel or pinch) - also handled by wheel event listener below
+    this.map.on('zoomstart', () => {
+      console.log('[MapView] Zoom started - disabling camera follow');
       if (!this.cameraFollowLocked) {
         this.setCameraFollowEnabled(false);
       }
