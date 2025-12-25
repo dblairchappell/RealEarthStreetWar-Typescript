@@ -38,11 +38,20 @@ export class ClientPrediction {
   
   // Server reconciliation state
   private serverPosition: { lng: number; lat: number; rotation: number } | null = null;
-  // Only reconcile for truly significant errors (like teleports, collisions, or major desync)
-  // Normal movement differences due to network latency are expected and should be ignored
-  private reconciliationThreshold = 0.01; // Very large threshold - only reconcile major errors (about 1km at equator)
-  private lastReconciliationTime = 0;
-  private readonly MIN_RECONCILIATION_INTERVAL = 500; // Minimum ms between reconciliations (500ms = 2Hz max)
+  
+  // Smooth reconciliation thresholds (three-tier system)
+  // Tiny differences (<10m): ignored - within acceptable tolerance
+  // Medium differences (10m-1km): smooth gradual correction over multiple reconciliations
+  // Catastrophic errors (>1km): instant snap (teleports, major bugs)
+  private readonly SMOOTH_RECONCILIATION_THRESHOLD = 0.0001; // ~10m at equator - smooth correct below catastrophic
+  private readonly CATASTROPHIC_THRESHOLD = 0.01; // ~1km at equator - instant snap above this
+  private readonly SMOOTH_CORRECTION_RATE = 0.1; // Blend 10% towards server per reconciliation (adjustable)
+  
+  // Rotation reconciliation thresholds
+  // Rotation differences accumulate due to network latency, but need to be corrected to prevent drift
+  private readonly ROTATION_SMOOTH_THRESHOLD = 5; // Smooth correct rotations >5° difference
+  private readonly ROTATION_CATASTROPHIC_THRESHOLD = 90; // Instant snap for rotations >90° difference
+  private readonly ROTATION_CORRECTION_RATE = 0.2; // Blend 20% towards server rotation per reconciliation (faster than position)
 
   /**
    * Set the player entity ID to predict for
@@ -149,9 +158,12 @@ export class ClientPrediction {
    * Reconcile predicted position with server position
    * Called when server snapshot arrives
    * 
-   * RECONCILIATION DISABLED - Client prediction is trusted completely for normal movement.
-   * Only reconciles for catastrophic errors (teleports > 1km, rotation > 180°).
-   * This prevents rubber-banding from network latency differences.
+   * Implements three-tier reconciliation system:
+   * 1. Catastrophic errors (>1km): Instant snap (teleports, major bugs)
+   * 2. Medium differences (10m-1km): Smooth gradual correction over multiple reconciliations
+   * 3. Tiny differences (<10m): Ignored (within acceptable tolerance)
+   * 
+   * This prevents drift while avoiding visible snap-backs, ensuring accurate P2P interactions.
    */
   reconcile(serverLng: number, serverLat: number, serverRotation: number): void {
     if (this.playerEid === null) return;
@@ -170,35 +182,69 @@ export class ClientPrediction {
       rotDiff = 360 - rotDiff; // Take the shorter path around the circle
     }
 
-    // Only reconcile for catastrophic POSITION errors (teleports, major bugs, etc.)
-    // Rotation reconciliation is DISABLED - rotation differences accumulate due to network latency
-    // and are expected. Client prediction is trusted completely for rotation.
-    // Position threshold is very large (~1km at equator) - only triggers for real errors
-    const catastrophicError = lngDiff > this.reconciliationThreshold || 
-                              latDiff > this.reconciliationThreshold;
-    // NOTE: Rotation reconciliation disabled - rotation differences are normal due to network latency
-    // and accumulate over time. Client prediction is authoritative for rotation.
+    // Tier 1: Catastrophic error - instant snap (teleports, major bugs)
+    const catastrophicPosError = lngDiff > this.CATASTROPHIC_THRESHOLD || 
+                                  latDiff > this.CATASTROPHIC_THRESHOLD;
+    const catastrophicRotError = rotDiff > this.ROTATION_CATASTROPHIC_THRESHOLD;
 
-    if (catastrophicError) {
-      console.error('[ClientPrediction] CATASTROPHIC POSITION desync detected - forcing reconciliation:', {
+    if (catastrophicPosError || catastrophicRotError) {
+      console.error('[ClientPrediction] CATASTROPHIC desync - instant reconciliation:', {
         predicted: { lng: predictedLng.toFixed(8), lat: predictedLat.toFixed(8), rot: predictedRot.toFixed(2) },
         server: { lng: serverLng.toFixed(8), lat: serverLat.toFixed(8), rot: serverRotation.toFixed(2) },
         diff: { lng: lngDiff.toFixed(8), lat: latDiff.toFixed(8), rot: rotDiff.toFixed(2) }
       });
 
-      // Only reconcile POSITION for catastrophic errors - trust client prediction for rotation
-      // Apply server correction immediately for catastrophic position errors
+      // Instant snap for catastrophic errors
       Position.x[this.playerEid] = serverLng;
       Position.y[this.playerEid] = serverLat;
-      // DO NOT reconcile rotation - client prediction is authoritative
-      // Rotation.angle[this.playerEid] = serverRotation;
+      Rotation.angle[this.playerEid] = serverRotation;
+      return;
     }
-    // For all normal movement, trust client prediction completely
-    // Network latency causes small differences that are expected and should be ignored
-    // This eliminates rubber-banding completely
-    // 
-    // NOTE: We do NOT store server position for normal movement to avoid any potential
-    // side effects that might cause visual artifacts
+
+    // Tier 2: Medium differences - smooth gradual correction
+    // This prevents drift while avoiding visible snap-backs
+    // Correction happens over multiple reconciliations (every ~16ms at 60Hz broadcast)
+    // Spread over several frames, making it imperceptible
+    const needsSmoothCorrection = lngDiff > this.SMOOTH_RECONCILIATION_THRESHOLD || 
+                                   latDiff > this.SMOOTH_RECONCILIATION_THRESHOLD;
+
+    if (needsSmoothCorrection) {
+      // Gradually blend towards server position
+      // At 10% per reconciliation, a 100m error corrects in ~10 reconciliations (~160ms)
+      const correctionFactor = this.SMOOTH_CORRECTION_RATE;
+      
+      Position.x[this.playerEid] = predictedLng + (serverLng - predictedLng) * correctionFactor;
+      Position.y[this.playerEid] = predictedLat + (serverLat - predictedLat) * correctionFactor;
+      
+    }
+    // Tier 3: Tiny differences (<10m) - ignored
+    // These are within acceptable tolerance for gameplay and P2P interactions
+    // Prevents micro-corrections that could cause jitter
+
+    // Rotation reconciliation - smooth correction for rotation differences
+    // Rotation drift causes movement direction mismatch, so we need to correct it
+    if (rotDiff > this.ROTATION_SMOOTH_THRESHOLD) {
+      // Smoothly correct rotation difference
+      // Use shortest path around circle (already handled by rotDiff calculation)
+      let rotationCorrection = serverRotation - predictedRot;
+      
+      // Handle wrapping - take shortest path
+      if (rotationCorrection > 180) {
+        rotationCorrection -= 360;
+      } else if (rotationCorrection < -180) {
+        rotationCorrection += 360;
+      }
+      
+      // Apply smooth correction
+      Rotation.angle[this.playerEid] = predictedRot + rotationCorrection * this.ROTATION_CORRECTION_RATE;
+      
+      // Normalize to 0-360 range
+      Rotation.angle[this.playerEid] = ((Rotation.angle[this.playerEid] % 360) + 360) % 360;
+    }
+    // Small rotation differences (<5°) are ignored to prevent micro-corrections
+
+    // Store server position for reference (but don't use it for normal movement)
+    this.serverPosition = { lng: serverLng, lat: serverLat, rotation: serverRotation };
   }
 
   /**

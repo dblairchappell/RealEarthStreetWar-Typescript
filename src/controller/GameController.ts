@@ -16,8 +16,8 @@ export default class GameController implements FixedUpdatable {
     
     // Set up callback for when player entity is created by network state manager
     this.networkStateManager.setOnPlayerEntityCreated((eid: number, playerData) => {
-      // Set up client prediction for this player entity
-      this.clientPrediction.setPlayerEntity(eid);
+      // Client-side prediction disabled - no need to set up prediction
+      // this.clientPrediction.setPlayerEntity(eid);
       
       // Update view with player entity
       this.view.setPlayerEntity(eid);
@@ -44,17 +44,16 @@ export default class GameController implements FixedUpdatable {
   public update(_deltaMs: number): void {}
 
   // Fixed-step update (60 Hz)
-  // Process client-side prediction for local player movement
+  // Client-side prediction DISABLED - using server-authoritative movement only
   public fixedUpdate(): void {
-    // Process client-side prediction every fixed timestep
-    // This matches the server's fixed timestep processing
-    // Movement is processed based on stored input state, matching server behavior
-    this.clientPrediction.fixedUpdate();
+    // Client-side prediction disabled to prevent rubber-banding
+    // Player position is updated directly from server snapshots
+    // this.clientPrediction.fixedUpdate();
   }
 
   /**
-   * Handle player input - stores input state for client-side prediction
-   * and sends to server for authoritative processing
+   * Handle player input - sends to server for authoritative processing
+   * Client-side prediction DISABLED - server is authoritative
    */
   public handlePlayerInput(input: { 
     forward: boolean, 
@@ -65,31 +64,30 @@ export default class GameController implements FixedUpdatable {
     rotateRight: boolean,
     running: boolean
   }) {
-    // Store input state for fixed timestep processing
-    // Movement will be processed every fixed timestep in fixedUpdate()
-    // This matches server behavior and eliminates jitter
-    const sequence = this.clientPrediction.storeInput(input);
+    // Client-side prediction disabled - input is sent to server only
+    // Server processes movement and sends back authoritative state
+    // Player position is updated directly from server snapshots
+    // this.clientPrediction.storeInput(input);
     
-    // Input is also sent to server via GameClient (handled in main.ts)
+    // Input is sent to server via GameClient (handled in main.ts)
     // Server will process and send back authoritative state
-    // ClientPrediction will reconcile when server state arrives
   }
 
   /**
    * Apply server state snapshot to local game state and ECS
-   * Reconciles client-side prediction with server-authoritative state
+   * Client-side prediction DISABLED - server state is authoritative
    */
   public applyServerState(snapshot: any): void {
-    // Apply snapshot to ECS (updates NPCs and other players)
+    // Apply snapshot to ECS (updates NPCs, other players, and local player)
+    // NetworkStateManager now updates player position directly from server snapshots
     this.networkStateManager.applySnapshot(snapshot);
     
-    // Reconcile local player prediction with server state
-    // NOTE: Reconciliation is only enabled for catastrophic errors (>1km or >90° rotation)
-    // Normal movement differences due to network latency are ignored to prevent rubber-banding
-    if (snapshot.players && snapshot.players.length > 0) {
-      const player = snapshot.players[0];
-      this.clientPrediction.reconcile(player.lng, player.lat, player.rotation);
-    }
+    // Client-side prediction disabled - no reconciliation needed
+    // Player position is updated directly from server snapshots in NetworkStateManager
+    // if (snapshot.players && snapshot.players.length > 0) {
+    //   const player = snapshot.players[0];
+    //   this.clientPrediction.reconcile(player.lng, player.lat, player.rotation);
+    // }
   }
 
   /**

@@ -24,7 +24,7 @@ export class WebSocketServer {
   private gameWorld: GameWorld;
   private handlers: MessageHandlers = {};
   private broadcastInterval: NodeJS.Timeout | null = null;
-  private readonly BROADCAST_RATE = 120; // Broadcast state n times per second
+  private readonly BROADCAST_RATE = 60; // Broadcast state n times per second
 
   constructor(port: number, playerManager: PlayerManager, gameWorld: GameWorld) {
     this.playerManager = playerManager;

@@ -80,16 +80,19 @@ export class NetworkStateManager {
       addComponent(world, SpriteRef, this.playerEid);
       SpriteRef.id[this.playerEid] = 0;
       
-      // Set initial position from server (only on creation)
+      // Set initial position from server
       Position.x[this.playerEid] = player.lng;
       Position.y[this.playerEid] = player.lat;
       Rotation.angle[this.playerEid] = player.rotation;
       Velocity.x[this.playerEid] = 0;
       Velocity.y[this.playerEid] = 0;
+    } else {
+      // Client-side prediction DISABLED - update position directly from server
+      // Server is authoritative for player position
+      Position.x[this.playerEid] = player.lng;
+      Position.y[this.playerEid] = player.lat;
+      Rotation.angle[this.playerEid] = player.rotation;
     }
-    // Note: We don't update position here for existing player entity
-    // ClientPrediction handles position updates via client-side prediction
-    // Reconciliation happens in GameController.applyServerState()
 
     // Notify that player entity was created (after position is set)
     // Only call once on first snapshot when entity is newly created
