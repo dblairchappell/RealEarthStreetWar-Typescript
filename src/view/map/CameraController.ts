@@ -350,6 +350,20 @@ export class CameraController implements Updatable {
   }
 
   /**
+   * Check if camera is currently zooming via keyboard controls
+   */
+  isZooming(): boolean {
+    return this.isCameraZooming;
+  }
+
+  /**
+   * Check if camera is currently rotating via keyboard controls
+   */
+  isRotating(): boolean {
+    return this.isCameraRotating;
+  }
+
+  /**
    * Sets whether camera should follow the player.
    * When disabled, zoom/rotate operations preserve the current panned position.
    */

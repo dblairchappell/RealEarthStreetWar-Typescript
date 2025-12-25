@@ -80,6 +80,7 @@ export default class MapView implements Updatable, Renderable {
   // Camera control state
   private cameraFollowEnabled = true; // Whether camera should auto-follow player
   private cameraFollowLocked = false; // When true, cameraFollowEnabled cannot be auto-changed (locked via Shift+C toggle)
+  private movementKeysJustPressed = false; // Track if movement keys were just pressed (to avoid re-enabling follow every frame)
   // Note: Per-frame camera state is handled by CameraController, not MapView
 
   
@@ -268,13 +269,26 @@ export default class MapView implements Updatable, Renderable {
     // Update movement state (triggers animation switching in CharacterView)
     this.updateMovementState();
 
-    // If player starts moving or rotating, re-enable auto-follow camera
-    // This allows user to manually drag camera, but resumes following when player moves
-    // However, if camera follow is locked (via Shift+C toggle), don't auto-re-enable it
-    if (input.forward || input.backward || input.left || input.right || input.rotateLeft || input.rotateRight) {
-      if (!this.cameraFollowLocked) {
+    // Check if movement keys are currently pressed
+    const movementKeysPressed = input.forward || input.backward || input.left || input.right || input.rotateLeft || input.rotateRight;
+    
+    // Only re-enable camera follow when movement keys are FIRST pressed (not every frame)
+    // AND only if camera is not busy with user controls
+    if (movementKeysPressed && !this.movementKeysJustPressed) {
+      this.movementKeysJustPressed = true;
+      
+      // Check if camera is currently busy with user controls (zoom/rotate/pan)
+      const cameraBusy = this.camera?.isBusy() ?? false;
+      
+      // Only re-enable follow if camera is not busy and not locked
+      // This prevents race conditions where follow gets enabled but can't actually follow
+      // until camera controls are released
+      if (!cameraBusy && !this.cameraFollowLocked) {
         this.setCameraFollowEnabled(true);
       }
+    } else if (!movementKeysPressed) {
+      // Reset flag when no movement keys are pressed
+      this.movementKeysJustPressed = false;
     }
   }
 
@@ -325,10 +339,18 @@ export default class MapView implements Updatable, Renderable {
     });
     
     // Detect rotation start (drag to rotate)
-    this.map.on('rotatestart', () => {
-      console.log('[MapView] Rotation started - disabling camera follow');
-      if (!this.cameraFollowLocked) {
-        this.setCameraFollowEnabled(false);
+    // Only disable follow if this is user-initiated (mouse drag), not programmatic (keyboard)
+    this.map.on('rotatestart', (e: any) => {
+      // Check if rotation was initiated by keyboard controls
+      // If camera is already rotating via keyboard, don't disable follow
+      const isKeyboardRotation = this.camera?.isRotating() ?? false;
+      if (!isKeyboardRotation) {
+        console.log('[MapView] Rotation started (mouse) - disabling camera follow');
+        if (!this.cameraFollowLocked) {
+          this.setCameraFollowEnabled(false);
+        }
+      } else {
+        console.log('[MapView] Rotation started (keyboard) - keeping camera follow enabled');
       }
     });
     
@@ -341,10 +363,18 @@ export default class MapView implements Updatable, Renderable {
     });
     
     // Detect zoom start (mouse wheel or pinch) - also handled by wheel event listener below
-    this.map.on('zoomstart', () => {
-      console.log('[MapView] Zoom started - disabling camera follow');
-      if (!this.cameraFollowLocked) {
-        this.setCameraFollowEnabled(false);
+    // Only disable follow if this is user-initiated (mouse/pinch), not programmatic (keyboard)
+    this.map.on('zoomstart', (e: any) => {
+      // Check if zoom was initiated by keyboard controls
+      // If camera is already zooming via keyboard, don't disable follow
+      const isKeyboardZoom = this.camera?.isZooming() ?? false;
+      if (!isKeyboardZoom) {
+        console.log('[MapView] Zoom started (mouse/pinch) - disabling camera follow');
+        if (!this.cameraFollowLocked) {
+          this.setCameraFollowEnabled(false);
+        }
+      } else {
+        console.log('[MapView] Zoom started (keyboard) - keeping camera follow enabled');
       }
     });
     
