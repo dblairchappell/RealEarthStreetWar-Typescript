@@ -3,7 +3,6 @@
  */
 
 export { default } from './GameState';
-export type { PlayerCharacter } from './GameState';
 
 // Re-export static properties for easier access
 import GameStateClass from './GameState';

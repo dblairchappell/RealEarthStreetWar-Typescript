@@ -15,46 +15,16 @@
  */
 
 /**
- * Player character state structure.
- * Tracks the player's position, rotation, and movement status.
- */
-export interface PlayerCharacter {
-  /** Longitude coordinate (degrees) */
-  lng: number;
-  /** Latitude coordinate (degrees) */
-  lat: number;
-  /** Rotation angle in degrees: 0 = north, 90 = east, 180 = south, 270 = west */
-  rotation: number;
-  /** Whether the player is currently moving */
-  isMoving: boolean;
-}
-
-/**
  * Central game state class containing all persistent game data.
  * 
- * This is the single source of truth for game state. All systems read from
- * and write to this class. It's instantiated once on both client and server
- * and passed to controllers/views that need access to game data.
+ * This is the single source of truth for non-entity game state. Entity state
+ * (positions, rotations, etc.) is managed by the ECS world. This class stores
+ * only non-entity state like game time.
+ * 
+ * It's instantiated once on both client and server and passed to controllers/views
+ * that need access to game data.
  */
 export default class GameState {
-  /* ----- Player State ----- */
-  
-  /**
-   * Player character state.
-   * Tracks position, rotation, and movement status.
-   * Position is synchronized with ECS player entity.
-   */
-  player: PlayerCharacter = {
-    /** Starting longitude: New York City area */
-    lng: -74.05682,
-    /** Starting latitude: New York City area */
-    lat: 40.69337,
-    /** Initial rotation: 180 degrees = facing south (toward camera in typical map view) */
-    rotation: 180,
-    /** Initial movement state */
-    isMoving: false
-  };
-
   /* ----- Game Progression ----- */
   
   /**

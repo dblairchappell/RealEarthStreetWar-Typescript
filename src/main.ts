@@ -45,8 +45,8 @@ import { SERVER_URL } from "./config";
 /* ───────── Core System Initialization ───────── */
 
 /**
- * Central game state - single source of truth for all game data.
- * Contains player position and game time.
+ * Central game state - stores non-entity game data (like game time).
+ * Entity state (player/NPC positions, rotations) is stored in ECS world.
  */
 const state = new GameState();
 

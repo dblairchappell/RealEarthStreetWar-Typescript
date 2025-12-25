@@ -1,8 +1,11 @@
 /**
  * NetworkStateManager - Manages synchronization between server state and client ECS
  * 
- * Applies server state snapshots to the local ECS world and GameState.
+ * Applies server state snapshots to the local ECS world and GameState (for non-entity state like gameDate).
  * Handles entity creation/removal, position updates, and state synchronization.
+ * 
+ * Player and NPC state is stored in ECS components (Position, Rotation, Velocity).
+ * Views read directly from ECS for rendering.
  */
 
 import { GameStateSnapshot, PlayerSnapshot, NpcSnapshot } from './types';
@@ -102,11 +105,8 @@ export class NetworkStateManager {
       });
     }
 
-    // Update GameState player data
-    this.gameState.player.lng = player.lng;
-    this.gameState.player.lat = player.lat;
-    this.gameState.player.rotation = player.rotation;
-    this.gameState.player.isMoving = player.isMoving;
+    // Player state is now stored only in ECS components (Position, Rotation, Velocity)
+    // No need to duplicate in GameState - views read directly from ECS
   }
 
   /**
