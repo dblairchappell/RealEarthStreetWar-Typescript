@@ -7,11 +7,13 @@ import { ClientPrediction } from "../network/ClientPrediction";
 import { Position, Rotation } from "../ecs/world";
 import { EntityInfo } from "../view/EntityClickHandler";
 import HUDView from "../view/HUDView";
+import { GameClient } from "../network/GameClient";
 
 export default class GameController implements FixedUpdatable {
   private networkStateManager: NetworkStateManager;
   private clientPrediction: ClientPrediction;
   private hud: HUDView | null = null;
+  private gameClient: GameClient | null = null;
 
   constructor(private state: GameState, private view: MapView) {
     this.networkStateManager = new NetworkStateManager(state);
@@ -112,9 +114,26 @@ export default class GameController implements FixedUpdatable {
     
     // Set up HUD callbacks
     hud.setCallbacks({
-      onVacateBody: () => this.handleVacateBody(),
       onPossessBody: (entityId: number) => this.handlePossessBody(entityId),
       onCommandMenu: () => this.handleCommandMenu(),
+    });
+  }
+
+  /**
+   * Set GameClient reference for sending messages
+   * Note: Callbacks are merged with existing callbacks, not replaced
+   */
+  public setGameClient(gameClient: GameClient): void {
+    this.gameClient = gameClient;
+    
+    // Add possession callbacks (merged with existing callbacks from main.ts)
+    gameClient.setCallbacks({
+      onPossessionTransferred: (newEntityId: number, oldEntityId: number) => {
+        this.handlePossessionTransferred(newEntityId, oldEntityId);
+      },
+      onPossessionFailed: (reason: string) => {
+        this.handlePossessionFailed(reason);
+      },
     });
   }
 
@@ -135,9 +154,10 @@ export default class GameController implements FixedUpdatable {
   /**
    * Handle NPC clicked - show NPC info panel
    * Called by EntityClickHandler when NPC is clicked
+   * Note: eid is client entity ID, we need to convert to server entity ID for possession
    */
   public handleNpcClicked(eid: number, info: EntityInfo, distanceMeters: number): void {
-    console.log('[GameController] NPC clicked:', eid, info, `Distance: ${distanceMeters.toFixed(2)}m`);
+    console.log('[GameController] NPC clicked (client eid):', eid, info, `Distance: ${distanceMeters.toFixed(2)}m`);
     
     // Set selected NPC for visual feedback (red outline)
     console.log('[GameController] Setting selected NPC to:', eid);
@@ -147,7 +167,20 @@ export default class GameController implements FixedUpdatable {
       // Check if NPC is within possession range
       const inRange = distanceMeters <= GameStateConstants.POSSESSION_RANGE_METERS;
       
-      this.hud.showNpcPanel(eid, info, distanceMeters, inRange);
+      // Get server entity ID for this client entity ID
+      const serverEid = this.networkStateManager.getServerEntityId(eid);
+      if (serverEid === null) {
+        console.error(`[GameController] Cannot find server entity ID for client eid ${eid}`);
+        // Still show panel but disable possess button
+        this.hud.showNpcPanel(eid, info, distanceMeters, false);
+        return;
+      }
+      
+      console.log(`[GameController] NPC clicked - client eid: ${eid}, server eid: ${serverEid}`);
+      
+      // Store server entity ID in HUD (will be used when possess button is clicked)
+      // Pass server eid for possession, but use client eid for display
+      this.hud.showNpcPanel(serverEid, info, distanceMeters, inRange);
     }
   }
 
@@ -167,21 +200,94 @@ export default class GameController implements FixedUpdatable {
   }
 
   /**
-   * Handle vacate body button clicked
+   * Handle possess body button clicked
+   * When possessing a new body, the current body is automatically vacated (becomes an NPC)
+   * Note: entityId is the server entity ID (stored in HUD panel)
    */
-  private handleVacateBody(): void {
-    console.log('[GameController] Vacate body requested');
-    // TODO: Implement vacate body logic
-    // This will send a message to server to vacate current body
+  private handlePossessBody(entityId: number): void {
+    console.log('[GameController] Possess body requested (server eid):', entityId);
+    
+    if (!this.gameClient || !this.gameClient.isConnected()) {
+      console.warn('[GameController] Cannot possess body - not connected to server');
+      if (this.hud) {
+        // Show error in HUD (could add an error display method)
+        alert('Cannot possess body - not connected to server');
+      }
+      return;
+    }
+    
+    // Send possession request to server with server entity ID
+    this.gameClient.sendMessage({
+      type: 'possess_entity',
+      targetEid: entityId,
+    });
   }
 
   /**
-   * Handle possess body button clicked
+   * Handle successful possession transfer from server
+   * Note: newEntityId and oldEntityId are SERVER entity IDs, not client entity IDs
    */
-  private handlePossessBody(entityId: number): void {
-    console.log('[GameController] Possess body requested:', entityId);
-    // TODO: Implement possess body logic
-    // This will send a message to server to possess the target entity
+  private handlePossessionTransferred(newEntityId: number, oldEntityId: number): void {
+    console.log(`[GameController] Possession transferred (server eids): ${oldEntityId} -> ${newEntityId}`);
+    
+    // Transfer player entity in NetworkStateManager (maps server eids to client eids)
+    this.networkStateManager.transferPlayerEntity(newEntityId, oldEntityId);
+    
+    // Get the new client entity ID
+    const newClientEid = this.networkStateManager.getPlayerEntityId();
+    
+    if (newClientEid === null) {
+      console.error('[GameController] Failed to get new player entity ID after possession transfer');
+      return;
+    }
+    
+    // Update view with new player entity (client entity ID)
+    this.view.setPlayerEntity(newClientEid);
+    
+    // Read position from ECS to update sprite immediately
+    // Note: This position might be from the NPC snapshot before possession transfer
+    // The next server snapshot will update it to the correct player position
+    const lng = Position.x[newClientEid];
+    const lat = Position.y[newClientEid];
+    const rotDeg = Rotation.angle[newClientEid];
+    const rotRad = (rotDeg * Math.PI) / 180;
+    
+    // Reset interpolation state to prevent drift from stale prevPosition
+    // This ensures the sprite immediately snaps to the new entity's position
+    // We set both prevPosition and playerPosition to the same value so interpolation
+    // doesn't cause movement until the next server snapshot updates the position
+    this.view.resetInterpolationState({ lng, lat }, rotRad);
+    
+    // Update character sprite position (without camera swoop)
+    // This ensures the sprite is immediately visible at the correct location
+    this.view.updatePlayerPosition({ lng, lat }, rotRad, false);
+    
+    // Note: The next server snapshot will update the ECS position via updatePlayers(),
+    // and then update() will read it and update playerPosition, and render() will
+    // interpolate smoothly between the reset position and the new position
+    
+    // Hide HUD panel
+    if (this.hud) {
+      this.hud.hideEntityPanel();
+    }
+    
+    // Clear selected NPC visual feedback
+    this.view.setSelectedNpc(null);
+  }
+
+  /**
+   * Handle failed possession transfer from server
+   */
+  private handlePossessionFailed(reason: string): void {
+    console.warn(`[GameController] Possession failed: ${reason}`);
+    
+    // Show error to user
+    alert(`Cannot possess body: ${reason}`);
+    
+    // Hide HUD panel
+    if (this.hud) {
+      this.hud.hideEntityPanel();
+    }
   }
 
   /**

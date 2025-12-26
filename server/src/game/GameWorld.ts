@@ -86,6 +86,69 @@ export class GameWorld {
   }
 
   /**
+   * Transfer player control to a different entity (possession)
+   * The current player entity becomes an NPC, and the target entity becomes the player
+   */
+  transferPossession(playerId: string, targetEid: number): { success: boolean; oldEid?: number; reason?: string } {
+    const currentEid = this.playerEntities.get(playerId);
+    if (currentEid === undefined) {
+      return { success: false, reason: 'Player not found' };
+    }
+
+    // Check if target entity exists and has required components
+    if (Position.x[targetEid] === undefined || Position.y[targetEid] === undefined) {
+      return { success: false, reason: 'Target entity does not exist' };
+    }
+
+    // Check if target is already a player (can't possess another player's body)
+    // We need to check if targetEid is in playerEntities values
+    for (const [pid, eid] of this.playerEntities.entries()) {
+      if (eid === targetEid && pid !== playerId) {
+        return { success: false, reason: 'Cannot possess another player\'s body' };
+      }
+    }
+
+    // Check distance (must be within possession range)
+    const currentLng = Position.x[currentEid];
+    const currentLat = Position.y[currentEid];
+    const targetLng = Position.x[targetEid];
+    const targetLat = Position.y[targetEid];
+    
+    const lngDiff = targetLng - currentLng;
+    const latDiff = targetLat - currentLat;
+    const distanceDeg = Math.sqrt(lngDiff * lngDiff + latDiff * latDiff);
+    
+    if (distanceDeg > GameStateConstants.POSSESSION_RANGE_DEG) {
+      return { success: false, reason: 'Target entity too far away' };
+    }
+
+    // Transfer possession:
+    // 1. Remove PlayerTag from current entity, add NpcTag
+    removeComponent(this.world, PlayerTag, currentEid);
+    addComponent(this.world, NpcTag, currentEid);
+    this.npcEntities.add(currentEid);
+    // Reset velocity for old player entity (now NPC) - stops any movement
+    Velocity.x[currentEid] = 0;
+    Velocity.y[currentEid] = 0;
+
+    // 2. Remove NpcTag from target entity (if it has it), add PlayerTag
+    if (this.npcEntities.has(targetEid)) {
+      removeComponent(this.world, NpcTag, targetEid);
+      this.npcEntities.delete(targetEid);
+    }
+    addComponent(this.world, PlayerTag, targetEid);
+    // Reset velocity for new player entity - stops NPC wandering movement
+    Velocity.x[targetEid] = 0;
+    Velocity.y[targetEid] = 0;
+
+    // 3. Update player entity mapping
+    this.playerEntities.set(playerId, targetEid);
+
+    console.log(`[GameWorld] Transferred possession for player ${playerId}: entity ${currentEid} -> ${targetEid}`);
+    return { success: true, oldEid: currentEid };
+  }
+
+  /**
    * Get current NPC count
    */
   getNpcCount(): number {

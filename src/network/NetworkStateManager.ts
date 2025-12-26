@@ -19,15 +19,25 @@ import { addComponent, addEntity, defineQuery, removeComponent } from 'bitecs';
  */
 export class NetworkStateManager {
   private gameState: GameState;
-  private playerEid: number | null = null;
+  private playerEid: number | null = null; // Client entity ID for player
+  private playerServerEid: number | null = null; // Server entity ID for player (for mapping)
+  private playerId: string | null = null; // Player ID string from server (e.g., "player_1")
   private playerEntityCreated = false; // Track if player entity creation callback has been called
   private npcEntityMap: Map<number, number> = new Map(); // Maps server eid -> client eid
+  private npcEntityMapReverse: Map<number, number> = new Map(); // Maps client eid -> server eid (reverse lookup)
   private playerQuery = defineQuery([PlayerTag, Position, Rotation]);
   private npcQuery = defineQuery([NpcTag, Position, Rotation, Velocity]);
   private onPlayerEntityCreated?: (eid: number, playerData: PlayerSnapshot) => void;
 
   constructor(gameState: GameState) {
     this.gameState = gameState;
+  }
+
+  /**
+   * Set player ID string (from server, e.g., "player_1")
+   */
+  setPlayerId(playerId: string): void {
+    this.playerId = playerId;
   }
 
   /**
@@ -39,9 +49,63 @@ export class NetworkStateManager {
 
   /**
    * Set the player entity ID (called when player entity is created locally)
+   * @param eid - Client entity ID
    */
   setPlayerEntity(eid: number): void {
     this.playerEid = eid;
+  }
+
+  /**
+   * Transfer player control to a different entity (possession)
+   * Maps server entity IDs to client entity IDs
+   * @param newServerEid - Server entity ID of the new player entity
+   * @param oldServerEid - Server entity ID of the old player entity
+   */
+  transferPlayerEntity(newServerEid: number, oldServerEid: number): void {
+    // Find client entity ID for the new server entity ID
+    // The new entity should already exist as an NPC in npcEntityMap
+    const newClientEid = this.npcEntityMap.get(newServerEid);
+    
+    if (newClientEid === undefined) {
+      console.error(`[NetworkStateManager] Cannot find client entity for server eid ${newServerEid}`);
+      return;
+    }
+
+    // Convert old player entity to NPC on client side (match server state)
+    const oldClientEid = this.playerEid;
+    if (oldClientEid !== null) {
+      // Remove PlayerTag and add NpcTag to match server state
+      removeComponent(world, PlayerTag, oldClientEid);
+      addComponent(world, NpcTag, oldClientEid);
+      
+      // Reset velocity for old player entity (now NPC) - stops any movement
+      Velocity.x[oldClientEid] = 0;
+      Velocity.y[oldClientEid] = 0;
+      
+      // Add to npcEntityMap so future NPC updates work correctly
+      this.npcEntityMap.set(oldServerEid, oldClientEid);
+      this.npcEntityMapReverse.set(oldClientEid, oldServerEid); // Store reverse mapping
+      
+      console.log(`[NetworkStateManager] Converted old player entity ${oldClientEid} (server ${oldServerEid}) to NPC`);
+    }
+
+    // Update player entity tracking
+    this.playerEid = newClientEid;
+    this.playerServerEid = newServerEid;
+    
+    // Remove new entity from npcEntityMap (it's now a player, not an NPC)
+    this.npcEntityMap.delete(newServerEid);
+    this.npcEntityMapReverse.delete(newClientEid); // Remove reverse mapping
+    
+    // Add PlayerTag and remove NpcTag from new entity (match server state)
+    removeComponent(world, NpcTag, newClientEid);
+    addComponent(world, PlayerTag, newClientEid);
+    
+    // Reset velocity for new player entity - stops NPC wandering movement
+    Velocity.x[newClientEid] = 0;
+    Velocity.y[newClientEid] = 0;
+    
+    console.log(`[NetworkStateManager] Transferred player entity: ${oldClientEid} (server ${oldServerEid}) -> ${newClientEid} (server ${newServerEid})`);
   }
 
   /**
@@ -64,11 +128,22 @@ export class NetworkStateManager {
    * This method only creates the entity if needed; reconciliation happens in GameController.
    */
   private updatePlayers(players: PlayerSnapshot[]): void {
-    // For now, handle single player (local player)
-    // In multiplayer, we'd iterate through all players
     if (players.length === 0) return;
 
-    const player = players[0]; // Get first player (should be local player)
+    // Find the local player by matching player ID string
+    // If playerId is not set yet, use first player (for initial connection)
+    let player: PlayerSnapshot | null = null;
+    if (this.playerId) {
+      player = players.find(p => p.id === this.playerId) || null;
+    } else {
+      // No player ID set yet - use first player (will be set when player_joined message arrives)
+      player = players[0];
+    }
+
+    if (!player) {
+      console.warn('[NetworkStateManager] Local player not found in snapshot');
+      return;
+    }
     
     if (this.playerEid === null) {
       // Create player entity if it doesn't exist
@@ -89,6 +164,7 @@ export class NetworkStateManager {
     } else {
       // Client-side prediction DISABLED - update position directly from server
       // Server is authoritative for player position
+      // Only update if this is still the correct entity (possession might have changed it)
       Position.x[this.playerEid] = player.lng;
       Position.y[this.playerEid] = player.lat;
       Rotation.angle[this.playerEid] = player.rotation;
@@ -118,6 +194,7 @@ export class NetworkStateManager {
         // This removes the entity from ECS queries, so it won't be rendered
         this.removeNpcEntity(clientEid);
         this.npcEntityMap.delete(serverEid);
+        this.npcEntityMapReverse.delete(clientEid); // Remove reverse mapping
         console.log(`[NetworkStateManager] Removed NPC entity ${clientEid} (server eid: ${serverEid})`);
       }
     }
@@ -136,6 +213,7 @@ export class NetworkStateManager {
         addComponent(world, SpriteRef, clientEid);
         
         this.npcEntityMap.set(npc.eid, clientEid);
+        this.npcEntityMapReverse.set(clientEid, npc.eid); // Store reverse mapping
         console.log(`[NetworkStateManager] Created NPC entity ${clientEid} (server eid: ${npc.eid})`);
       }
 
@@ -163,10 +241,18 @@ export class NetworkStateManager {
   }
 
   /**
-   * Get player entity ID
+   * Get player entity ID (client entity ID)
    */
   getPlayerEntityId(): number | null {
     return this.playerEid;
+  }
+
+  /**
+   * Get server entity ID for a client entity ID (for NPCs)
+   * Returns null if entity is not found or is a player
+   */
+  getServerEntityId(clientEid: number): number | null {
+    return this.npcEntityMapReverse.get(clientEid) ?? null;
   }
 }
 

@@ -116,6 +116,31 @@ wsServer.setHandlers({
       );
     }
   },
+  
+  onPossessEntity: (playerId: string, targetEid: number) => {
+    // Handle possession transfer request
+    const result = gameWorld.transferPossession(playerId, targetEid);
+    
+    if (result.success && result.oldEid !== undefined) {
+      // Success - notify the requesting player
+      const successMessage: ServerMessage = {
+        type: 'possession_transferred',
+        playerId: playerId,
+        newEntityId: targetEid,
+        oldEntityId: result.oldEid,
+      };
+      playerManager.sendToPlayer(playerId, JSON.stringify(successMessage));
+      console.log(`[Server] Possession transferred for ${playerId}: ${result.oldEid} -> ${targetEid}`);
+    } else {
+      // Failure - send error message
+      const errorMessage: ServerMessage = {
+        type: 'possession_failed',
+        reason: result.reason || 'Unknown error',
+      };
+      playerManager.sendToPlayer(playerId, JSON.stringify(errorMessage));
+      console.log(`[Server] Possession failed for ${playerId}: ${result.reason}`);
+    }
+  },
 });
 
 // Register game world in game loop

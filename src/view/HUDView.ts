@@ -18,12 +18,11 @@ export default class HUDView implements Updatable {
   private occupantPanel: HTMLElement | null;
   private npcPanel: HTMLElement | null;
   
-  // Occupant panel elements
-  private occupantIdEl: HTMLElement | null;
-  private occupantPositionEl: HTMLElement | null;
-  private occupantCommandEl: HTMLElement | null;
-  private vacateBodyBtn: HTMLElement | null;
-  private commandMenuBtn: HTMLElement | null;
+    // Occupant panel elements
+    private occupantIdEl: HTMLElement | null;
+    private occupantPositionEl: HTMLElement | null;
+    private occupantCommandEl: HTMLElement | null;
+    private commandMenuBtn: HTMLElement | null;
   
   // NPC panel elements
   private npcIdEl: HTMLElement | null;
@@ -35,7 +34,6 @@ export default class HUDView implements Updatable {
   private gameState: any = null; // Will be set by setGameState
   
   // Callbacks
-  private onVacateBody?: () => void;
   private onPossessBody?: (entityId: number) => void;
   private onCommandMenu?: () => void;
 
@@ -56,7 +54,6 @@ export default class HUDView implements Updatable {
     this.occupantIdEl = document.getElementById('occupant-id');
     this.occupantPositionEl = document.getElementById('occupant-position');
     this.occupantCommandEl = document.getElementById('occupant-command');
-    this.vacateBodyBtn = document.getElementById('vacate-body-btn');
     this.commandMenuBtn = document.getElementById('command-menu-btn');
     
     // Query NPC panel elements
@@ -73,14 +70,6 @@ export default class HUDView implements Updatable {
    * Set up event listeners for panel buttons
    */
   private setupEventListeners(): void {
-    if (this.vacateBodyBtn) {
-      this.vacateBodyBtn.addEventListener('click', () => {
-        if (this.onVacateBody) {
-          this.onVacateBody();
-        }
-      });
-    }
-    
     if (this.possessBtn) {
       this.possessBtn.addEventListener('click', () => {
         if (this.onPossessBody && this.possessBtn) {
@@ -105,11 +94,9 @@ export default class HUDView implements Updatable {
    * Set callbacks for panel actions
    */
   public setCallbacks(callbacks: {
-    onVacateBody?: () => void;
     onPossessBody?: (entityId: number) => void;
     onCommandMenu?: () => void;
   }): void {
-    this.onVacateBody = callbacks.onVacateBody;
     this.onPossessBody = callbacks.onPossessBody;
     this.onCommandMenu = callbacks.onCommandMenu;
   }

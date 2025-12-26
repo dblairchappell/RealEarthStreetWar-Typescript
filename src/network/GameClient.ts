@@ -12,6 +12,9 @@ export interface GameClientCallbacks {
   onConnected?: () => void;
   onDisconnected?: () => void;
   onStateSnapshot?: (snapshot: GameStateSnapshot) => void;
+  onPlayerIdReceived?: (playerId: string) => void;
+  onPossessionTransferred?: (newEntityId: number, oldEntityId: number) => void;
+  onPossessionFailed?: (reason: string) => void;
   onError?: (error: Error) => void;
 }
 
@@ -35,9 +38,10 @@ export class GameClient {
 
   /**
    * Set callbacks for client events
+   * Merges with existing callbacks (doesn't replace them)
    */
   setCallbacks(callbacks: GameClientCallbacks): void {
-    this.callbacks = callbacks;
+    this.callbacks = { ...this.callbacks, ...callbacks };
   }
 
   /**
@@ -222,6 +226,9 @@ export class GameClient {
         if (message.playerId) {
           this.playerId = message.playerId;
           console.log(`[GameClient] Player ID assigned: ${this.playerId}`);
+          if (this.callbacks.onPlayerIdReceived) {
+            this.callbacks.onPlayerIdReceived(message.playerId);
+          }
         }
         break;
 
@@ -232,6 +239,20 @@ export class GameClient {
       case 'pong':
         // Handle ping response (for latency measurement)
         // const latency = Date.now() - message.timestamp;
+        break;
+
+      case 'possession_transferred':
+        console.log(`[GameClient] Possession transferred: ${message.oldEntityId} -> ${message.newEntityId}`);
+        if (this.callbacks.onPossessionTransferred) {
+          this.callbacks.onPossessionTransferred(message.newEntityId, message.oldEntityId);
+        }
+        break;
+
+      case 'possession_failed':
+        console.warn(`[GameClient] Possession failed: ${message.reason}`);
+        if (this.callbacks.onPossessionFailed) {
+          this.callbacks.onPossessionFailed(message.reason);
+        }
         break;
 
       case 'error':

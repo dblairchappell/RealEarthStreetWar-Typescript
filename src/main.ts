@@ -104,6 +104,17 @@ gameClient.setCallbacks({
     },
 });
 
+// Set player ID in NetworkStateManager when received from server
+// This allows matching the correct player snapshot after possession
+gameClient.setCallbacks({
+    onPlayerIdReceived: (playerId: string) => {
+        controller.getNetworkStateManager().setPlayerId(playerId);
+    },
+});
+
+// Set GameClient reference in controller for sending possession requests
+controller.setGameClient(gameClient);
+
 // Connect to server
 gameClient.connect();
 

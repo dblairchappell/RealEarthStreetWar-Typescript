@@ -13,6 +13,7 @@ import type { InputState } from '@shared/realearthstreetwar';
 export interface MessageHandlers {
   onInput?: (playerId: string, input: InputState) => void;
   onSpawnNpc?: (playerId: string, count: number) => void;
+  onPossessEntity?: (playerId: string, targetEid: number) => void;
 }
 
 /**
@@ -156,6 +157,12 @@ export class WebSocketServer {
         case 'spawn_npc':
           if (this.handlers.onSpawnNpc) {
             this.handlers.onSpawnNpc(playerId, message.count);
+          }
+          break;
+          
+        case 'possess_entity':
+          if (this.handlers.onPossessEntity) {
+            this.handlers.onPossessEntity(playerId, message.targetEid);
           }
           break;
           

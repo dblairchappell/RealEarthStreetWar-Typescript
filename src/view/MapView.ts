@@ -602,6 +602,26 @@ export default class MapView implements Updatable, Renderable {
   }
 
   /**
+   * Reset interpolation state to prevent drift when possession transfers.
+   * Clears prevPosition so render() skips interpolation on first frame after possession,
+   * matching the behavior of initial character creation.
+   * 
+   * @param position - New position to set (lat/lng)
+   * @param rotation - New rotation to set (radians)
+   */
+  public resetInterpolationState(position: { lng: number; lat: number }, rotation: number): void {
+    // Clear prevPosition so render() skips interpolation on first frame after possession
+    // This matches the behavior of initial character creation - interpolation starts
+    // naturally from the next fixed-timestep position update
+    this.prevPosition = null;
+    this.prevRotation = rotation;
+    this.playerPosition = { ...position };
+    this.playerRotation = rotation;
+    
+    console.log(`[MapView] Reset interpolation state:`, { lng: position.lng.toFixed(8), lat: position.lat.toFixed(8), rot: rotation.toFixed(4) });
+  }
+
+  /**
    * Get the current occupant entity ID
    */
   public getCurrentOccupantEid(): number | null {

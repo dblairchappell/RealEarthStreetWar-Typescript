@@ -13,6 +13,7 @@ import { InputState } from '@shared/realearthstreetwar';
 export type ClientMessage =
   | { type: 'input'; input: InputState }
   | { type: 'spawn_npc'; count: number }
+  | { type: 'possess_entity'; targetEid: number }
   | { type: 'ping'; timestamp: number };
 
 /**
@@ -22,6 +23,8 @@ export type ServerMessage =
   | { type: 'state_snapshot'; state: GameStateSnapshot; timestamp: number }
   | { type: 'player_joined'; playerId: string }
   | { type: 'player_left'; playerId: string }
+  | { type: 'possession_transferred'; playerId: string; newEntityId: number; oldEntityId: number }
+  | { type: 'possession_failed'; reason: string }
   | { type: 'pong'; timestamp: number }
   | { type: 'error'; message: string };
 
