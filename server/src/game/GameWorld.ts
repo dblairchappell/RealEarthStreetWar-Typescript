@@ -6,7 +6,7 @@
  */
 
 import { addComponent, addEntity, createWorld, defineQuery, IWorld, removeComponent } from 'bitecs';
-import { Position, Rotation, Velocity, PlayerTag, NpcTag, SpriteRef, entityCollisionSystem, SpatialGrid, GameState, GameStateConstants } from '@shared/realearthstreetwar';
+import { Position, Rotation, Velocity, PlayerTag, NpcTag, SpriteRef, entityCollisionSystem, SpatialGrid, GameState, GameStateConstants, calculateDistanceMeters } from '@shared/realearthstreetwar';
 import { randomWalkSystem } from './systems/randomWalkSystem';
 import { movementSystem } from './systems/movementSystem';
 import { GameStateSnapshot, PlayerSnapshot, NpcSnapshot } from '../network/types';
@@ -109,17 +109,16 @@ export class GameWorld {
     }
 
     // Check distance (must be within possession range)
+    // Use meters-based calculation for accuracy (accounts for latitude)
     const currentLng = Position.x[currentEid];
     const currentLat = Position.y[currentEid];
     const targetLng = Position.x[targetEid];
     const targetLat = Position.y[targetEid];
     
-    const lngDiff = targetLng - currentLng;
-    const latDiff = targetLat - currentLat;
-    const distanceDeg = Math.sqrt(lngDiff * lngDiff + latDiff * latDiff);
+    const distanceMeters = calculateDistanceMeters(currentLng, currentLat, targetLng, targetLat);
     
-    if (distanceDeg > GameStateConstants.POSSESSION_RANGE_DEG) {
-      return { success: false, reason: 'Target entity too far away' };
+    if (distanceMeters > GameStateConstants.POSSESSION_RANGE_METERS) {
+      return { success: false, reason: `Target entity too far away (${distanceMeters.toFixed(1)}m, max ${GameStateConstants.POSSESSION_RANGE_METERS}m)` };
     }
 
     // Transfer possession:

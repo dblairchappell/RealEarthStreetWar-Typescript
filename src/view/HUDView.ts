@@ -4,6 +4,8 @@ import { formatInTimeZone } from "../utils/time";
 import { Updatable } from "../loop/GameLoop";
 import tzLookup from "tz-lookup";
 import { EntityInfo } from "./EntityClickHandler";
+import { Position } from "../ecs/world";
+import { calculateDistanceMeters, GameStateConstants } from "@shared/realearthstreetwar";
 
 export default class HUDView implements Updatable {
   private gameDateEl: HTMLElement | null;
@@ -32,6 +34,11 @@ export default class HUDView implements Updatable {
 
   private mapInstance: any = null; // Will be set by setMapInstance
   private gameState: any = null; // Will be set by setGameState
+  
+  // Selected NPC tracking for continuous distance updates
+  private selectedNpcClientEid: number | null = null; // Client entity ID of selected NPC
+  private selectedNpcServerEid: number | null = null; // Server entity ID (for possess button)
+  private getPlayerEntityId: (() => number | null) | null = null; // Callback to get player entity ID
   
   // Callbacks
   private onPossessBody?: (entityId: number) => void;
@@ -116,7 +123,15 @@ export default class HUDView implements Updatable {
   }
 
   /**
+   * Set callback to get player entity ID for distance calculations
+   */
+  setGetPlayerEntityIdCallback(callback: () => number | null): void {
+    this.getPlayerEntityId = callback;
+  }
+
+  /**
    * Updatable implementation - updates time display every frame for smooth progression
+   * Also updates NPC distance if an NPC is selected
    */
   public update(_deltaMs: number): void {
     if (!this.gameState || !this.mapInstance) return;
@@ -132,6 +147,11 @@ export default class HUDView implements Updatable {
 
     // Update time displays with current game time
     this.updateTimeDisplays(this.gameState.gameDate, zone);
+
+    // Update NPC distance if an NPC is selected and panel is visible
+    if (this.selectedNpcClientEid !== null && this.npcPanel && !this.npcPanel.classList.contains('hidden')) {
+      this.updateSelectedNpcDistance();
+    }
   }
 
   /* ----------------------------------------------------------------
@@ -207,6 +227,10 @@ export default class HUDView implements Updatable {
 
   /**
    * Show NPC info panel with entity details and distance
+   * @param entityId - Server entity ID (for possess button)
+   * @param info - Entity info (contains client entity ID in entityId field)
+   * @param distanceMeters - Initial distance
+   * @param inRange - Whether NPC is in range
    */
   public showNpcPanel(entityId: number, info: EntityInfo, distanceMeters: number, inRange: boolean): void {
     if (!this.entityInfoPanel || !this.occupantPanel || !this.npcPanel) return;
@@ -218,23 +242,78 @@ export default class HUDView implements Updatable {
     this.npcPanel.classList.remove('hidden');
     this.entityInfoPanel.classList.remove('hidden');
     
+    // Store selected NPC info for continuous distance updates
+    this.selectedNpcClientEid = info.entityId; // Client entity ID from EntityInfo
+    this.selectedNpcServerEid = entityId; // Server entity ID passed as parameter
+    
     // Update NPC info
     if (this.npcIdEl) {
-      this.npcIdEl.textContent = entityId.toString();
+      this.npcIdEl.textContent = entityId.toString(); // Show server entity ID
     }
     
     if (this.npcPositionEl) {
       this.npcPositionEl.textContent = `${info.lat.toFixed(6)}, ${info.lng.toFixed(6)}`;
     }
     
+    // Initial distance update
+    this.updateNpcDistanceDisplay(distanceMeters, inRange);
+  }
+
+  /**
+   * Update the distance display for the selected NPC
+   * Called continuously while NPC panel is visible
+   */
+  private updateSelectedNpcDistance(): void {
+    if (this.selectedNpcClientEid === null || !this.getPlayerEntityId) return;
+
+    const playerEid = this.getPlayerEntityId();
+    if (playerEid === null) return;
+
+    // Read player position from ECS
+    const playerLng = Position.x[playerEid];
+    const playerLat = Position.y[playerEid];
+
+    // Read NPC position from ECS
+    const npcLng = Position.x[this.selectedNpcClientEid];
+    const npcLat = Position.y[this.selectedNpcClientEid];
+
+    // Check if positions are valid
+    if (
+      playerLng === undefined || playerLat === undefined ||
+      npcLng === undefined || npcLat === undefined
+    ) {
+      return;
+    }
+
+    // Calculate distance
+    const distanceMeters = calculateDistanceMeters(playerLng, playerLat, npcLng, npcLat);
+    const inRange = distanceMeters <= GameStateConstants.POSSESSION_RANGE_METERS;
+
+    // Update display
+    this.updateNpcDistanceDisplay(distanceMeters, inRange);
+  }
+
+  /**
+   * Update NPC distance display and possess button state
+   */
+  private updateNpcDistanceDisplay(distanceMeters: number, inRange: boolean): void {
     if (this.npcDistanceEl) {
       this.npcDistanceEl.textContent = `${distanceMeters.toFixed(2)} m`;
     }
-    
+
+    // Update position display (in case NPC moved)
+    if (this.selectedNpcClientEid !== null && this.npcPositionEl) {
+      const npcLng = Position.x[this.selectedNpcClientEid];
+      const npcLat = Position.y[this.selectedNpcClientEid];
+      if (npcLng !== undefined && npcLat !== undefined) {
+        this.npcPositionEl.textContent = `${npcLat.toFixed(6)}, ${npcLng.toFixed(6)}`;
+      }
+    }
+
     // Enable/disable possess button based on range
-    if (this.possessBtn) {
+    if (this.possessBtn && this.selectedNpcServerEid !== null) {
       this.possessBtn.disabled = !inRange;
-      this.possessBtn.setAttribute('data-entity-id', entityId.toString());
+      this.possessBtn.setAttribute('data-entity-id', this.selectedNpcServerEid.toString());
       
       if (inRange) {
         this.possessBtn.title = 'Click to possess this body';
@@ -257,6 +336,10 @@ export default class HUDView implements Updatable {
     if (this.npcPanel) {
       this.npcPanel.classList.add('hidden');
     }
+    
+    // Clear selected NPC tracking
+    this.selectedNpcClientEid = null;
+    this.selectedNpcServerEid = null;
   }
 
   /**

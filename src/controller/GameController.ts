@@ -117,6 +117,11 @@ export default class GameController implements FixedUpdatable {
       onPossessBody: (entityId: number) => this.handlePossessBody(entityId),
       onCommandMenu: () => this.handleCommandMenu(),
     });
+
+    // Set callback for HUD to get player entity ID for distance calculations
+    hud.setGetPlayerEntityIdCallback(() => {
+      return this.networkStateManager.getPlayerEntityId();
+    });
   }
 
   /**
