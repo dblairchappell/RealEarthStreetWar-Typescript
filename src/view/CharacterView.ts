@@ -362,19 +362,19 @@ export default class CharacterView implements Updatable {
     const newScreen = this.map.project(coords);
     
     // Log if position changed significantly
-    if (oldPos && (
-      Math.abs(coords.lng - oldPos.lng) > 0.000001 ||
-      Math.abs(coords.lat - oldPos.lat) > 0.000001
-    )) {
-      console.log('[CharacterView] Position updated:', {
-        coords: { lng: coords.lng.toFixed(8), lat: coords.lat.toFixed(8) },
-        screen: { x: newScreen.x.toFixed(2), y: newScreen.y.toFixed(2) },
-        screenDelta: oldScreen ? { 
-          x: (newScreen.x - oldScreen.x).toFixed(2), 
-          y: (newScreen.y - oldScreen.y).toFixed(2) 
-        } : null
-      });
-    }
+    // if (oldPos && (
+    //   Math.abs(coords.lng - oldPos.lng) > 0.000001 ||
+    //   Math.abs(coords.lat - oldPos.lat) > 0.000001
+    // )) {
+    //   console.log('[CharacterView] Position updated:', {
+    //     coords: { lng: coords.lng.toFixed(8), lat: coords.lat.toFixed(8) },
+    //     screen: { x: newScreen.x.toFixed(2), y: newScreen.y.toFixed(2) },
+    //     screenDelta: oldScreen ? { 
+    //       x: (newScreen.x - oldScreen.x).toFixed(2), 
+    //       y: (newScreen.y - oldScreen.y).toFixed(2) 
+    //     } : null
+    //   });
+    // }
     
     this.updatePlayerScreenPosition();
   }

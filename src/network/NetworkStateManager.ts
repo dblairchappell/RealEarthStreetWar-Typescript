@@ -214,7 +214,7 @@ export class NetworkStateManager {
         
         this.npcEntityMap.set(npc.eid, clientEid);
         this.npcEntityMapReverse.set(clientEid, npc.eid); // Store reverse mapping
-        console.log(`[NetworkStateManager] Created NPC entity ${clientEid} (server eid: ${npc.eid})`);
+        //console.log(`[NetworkStateManager] Created NPC entity ${clientEid} (server eid: ${npc.eid})`);
       }
 
       // Update NPC state from server

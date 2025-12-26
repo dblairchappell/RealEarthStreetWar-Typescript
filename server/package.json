@@ -14,9 +14,12 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@mapbox/vector-tile": "^2.0.4",
     "@shared/realearthstreetwar": "*",
     "@turf/turf": "^7.2.0",
     "bitecs": "^0.3.40",
+    "pbf": "^4.0.1",
+    "pmtiles": "^4.3.1",
     "ws": "^8.18.0"
   },
   "devDependencies": {
@@ -26,4 +29,3 @@
     "typescript": "^5.8.3"
   }
 }
-

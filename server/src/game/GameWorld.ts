@@ -6,11 +6,16 @@
  */
 
 import { addComponent, addEntity, createWorld, defineQuery, IWorld, removeComponent } from 'bitecs';
-import { Position, Rotation, Velocity, PlayerTag, NpcTag, SpriteRef, entityCollisionSystem, SpatialGrid, GameState, GameStateConstants, calculateDistanceMeters } from '@shared/realearthstreetwar';
+import { Position, Rotation, Velocity, PlayerTag, NpcTag, SpriteRef, entityCollisionSystem, SpatialGrid, GameState, GameStateConstants, calculateDistanceMeters, BuildingCollider, buildingCollisionSystem } from '@shared/realearthstreetwar';
 import { randomWalkSystem } from './systems/randomWalkSystem';
 import { movementSystem } from './systems/movementSystem';
 import { GameStateSnapshot, PlayerSnapshot, NpcSnapshot } from '../network/types';
 import { PlayerManager } from '../players/PlayerManager';
+import { BuildingDataLoader } from '../data/BuildingDataLoader';
+import * as path from 'path';
+import * as fs from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 
 /**
  * Authoritative game world running on server
@@ -24,6 +29,12 @@ export class GameWorld {
   
   /** Spatial grid for collision detection */
   private spatialGrid = new SpatialGrid();
+  
+  /** Building data loader for building collision detection */
+  private buildingLoader: BuildingDataLoader | null = null;
+  
+  /** Building collider wrapper */
+  private buildingCollider: BuildingCollider | null = null;
   
   /** Player entity IDs mapped by player ID */
   private playerEntities: Map<string, number> = new Map();
@@ -40,6 +51,46 @@ export class GameWorld {
 
   constructor() {
     console.log('[GameWorld] Initialized');
+    
+    // Initialize building loader with local PMTiles file
+    try {
+      // Get the directory where this file is located (server/src/game/)
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = dirname(__filename);
+      
+      // Try multiple possible paths - server might run from root or server directory
+      const possiblePaths = [
+        path.join(process.cwd(), 'map_data', 'tiles', 'nj-complete.pmtiles'),
+        path.join(process.cwd(), '..', 'map_data', 'tiles', 'nj-complete.pmtiles'),
+        path.resolve(__dirname, '..', '..', '..', 'map_data', 'tiles', 'nj-complete.pmtiles'),
+      ];
+      
+      let pmtilesPath: string | null = null;
+      for (const testPath of possiblePaths) {
+        const resolved = path.resolve(testPath);
+        if (fs.existsSync(resolved)) {
+          pmtilesPath = resolved;
+          break;
+        }
+      }
+      
+      if (!pmtilesPath) {
+        throw new Error(`PMTiles file not found. Checked paths: ${possiblePaths.map(p => path.resolve(p)).join(', ')}`);
+      }
+      this.buildingLoader = new BuildingDataLoader(pmtilesPath);
+      
+      // Create building collider wrapper
+      this.buildingCollider = new BuildingCollider(
+        (lat: number, lng: number, radiusDegrees?: number) => {
+          return this.buildingLoader!.getBuildingsNearPoint(lat, lng, radiusDegrees);
+        }
+      );
+      
+      console.log('[GameWorld] Building collision system initialized');
+    } catch (error) {
+      console.error('[GameWorld] Failed to initialize building collision system:', error);
+      console.warn('[GameWorld] Building collision will be disabled');
+    }
   }
 
   /**
@@ -266,7 +317,7 @@ export class GameWorld {
   /**
    * Process player movement based on stored input state (called every frame)
    */
-  private processPlayerMovement(playerId: string, input: {
+  private async processPlayerMovement(playerId: string, input: {
     forward: boolean;
     backward: boolean;
     left: boolean;
@@ -333,6 +384,37 @@ export class GameWorld {
       const latRadians = (Position.y[eid] * Math.PI) / 180;
       const correctedLng = deltaLng / Math.cos(latRadians);
 
+      // Check for building collision and slide along wall if needed
+      if (this.buildingCollider) {
+        try {
+          const intendedLng = Position.x[eid] + correctedLng;
+          const intendedLat = Position.y[eid] + deltaLat;
+          
+          const building = await this.buildingCollider.checkCollision2D(intendedLng, intendedLat);
+          
+          if (building) {
+            // Get push direction (normal to wall)
+            const pushDir = this.buildingCollider.findPushDirection(intendedLng, intendedLat, building);
+            
+            // Project movement onto wall for sliding
+            const slide = this.buildingCollider.projectOntoWall(
+              correctedLng,
+              deltaLat,
+              pushDir.dx,
+              pushDir.dy
+            );
+            
+            // Apply sliding movement instead of original movement
+            Position.x[eid] += slide.slideX;
+            Position.y[eid] += slide.slideY;
+            return; // Don't apply original movement
+          }
+        } catch (error) {
+          console.error('[GameWorld] Error checking building collision:', error);
+        }
+      }
+
+      // Normal movement if no collision
       Position.x[eid] += correctedLng;
       Position.y[eid] += deltaLat;
     }
@@ -341,7 +423,7 @@ export class GameWorld {
   /**
    * Run one fixed-timestep update
    */
-  fixedUpdate(): void {
+  async fixedUpdate(): Promise<void> {
     // Update game time
     // Game time advances MINUTES_PER_TICK minutes per second of real time
     // Server runs at 60Hz, so per frame: (MINUTES_PER_TICK * 60 * 1000) / 60 ms
@@ -352,7 +434,7 @@ export class GameWorld {
     if (this.playerManager) {
       const players = this.playerManager.getAllPlayers();
       for (const player of players) {
-        this.processPlayerMovement(player.id, player.input);
+        await this.processPlayerMovement(player.id, player.input);
       }
     }
 
@@ -371,8 +453,23 @@ export class GameWorld {
     // Rebuild spatial grid with all collidable entities
     this.spatialGrid.rebuild(allCollidableEntities, Position);
     
-    // Run collision detection on all entities (players + NPCs)
+    // Run entity-to-entity collision detection (players + NPCs)
     entityCollisionSystem(allCollidableEntities, this.spatialGrid, Position, Velocity);
+    
+    // Run building collision detection (if building loader is available)
+    if (this.buildingCollider && this.buildingLoader) {
+      try {
+        await buildingCollisionSystem(
+          allCollidableEntities,
+          this.buildingCollider,
+          Position,
+          Velocity,
+          undefined // Altitude component - undefined means 2D collision (ground level)
+        );
+      } catch (error) {
+        console.error('[GameWorld] Error in building collision system:', error);
+      }
+    }
   }
 
   /**

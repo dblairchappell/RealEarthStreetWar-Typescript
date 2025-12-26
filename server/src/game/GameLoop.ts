@@ -6,7 +6,7 @@
  */
 
 export interface FixedUpdatable {
-  fixedUpdate(): void;
+  fixedUpdate(): void | Promise<void>;
 }
 
 /**
@@ -66,14 +66,14 @@ export class ServerGameLoop {
    * Main tick function
    * Uses setTimeout to maintain consistent 60Hz timing
    */
-  private tick = (): void => {
+  private tick = async (): Promise<void> => {
     if (!this.running) return;
 
     const start = performance.now();
     
-    // Run all fixed-timestep systems
+    // Run all fixed-timestep systems (await async updates)
     for (const system of this.fixedUpdatables) {
-      system.fixedUpdate();
+      await system.fixedUpdate();
     }
     
     // Broadcast state to clients (if callback is set)

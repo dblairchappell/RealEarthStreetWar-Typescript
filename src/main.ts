@@ -133,7 +133,7 @@ input.addCallbacks({
         if (gameClient.isConnected()) {
             // Only log if there's actual movement input
             if (inp.forward || inp.backward || inp.left || inp.right || inp.rotateLeft || inp.rotateRight) {
-                console.log('[Input] Sending to server:', { forward: inp.forward, backward: inp.backward, left: inp.left, right: inp.right });
+                //console.log('[Input] Sending to server:', { forward: inp.forward, backward: inp.backward, left: inp.left, right: inp.right });
             }
             gameClient.sendInput(inp);
         }

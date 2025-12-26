@@ -332,7 +332,7 @@ export default class MapView implements Updatable, Renderable {
     
     // Detect drag start (panning)
     this.map.on('dragstart', () => {
-      console.log('[MapView] Drag started - disabling camera follow');
+      //console.log('[MapView] Drag started - disabling camera follow');
       if (!this.cameraFollowLocked) {
         this.setCameraFollowEnabled(false);
       }
@@ -369,7 +369,7 @@ export default class MapView implements Updatable, Renderable {
       // If camera is already zooming via keyboard, don't disable follow
       const isKeyboardZoom = this.camera?.isZooming() ?? false;
       if (!isKeyboardZoom) {
-        console.log('[MapView] Zoom started (mouse/pinch) - disabling camera follow');
+        //console.log('[MapView] Zoom started (mouse/pinch) - disabling camera follow');
         if (!this.cameraFollowLocked) {
           this.setCameraFollowEnabled(false);
         }
@@ -414,10 +414,10 @@ export default class MapView implements Updatable, Renderable {
       const currentZoom = this.map.getZoom();
       const currentCenter = this.map.getCenter();
       
-      console.log('[MapView] Starting camera swoop:', {
-        from: { center: [currentCenter.lng, currentCenter.lat], zoom: currentZoom },
-        to: { center: coords, zoom: 21.5 }
-      });
+      // console.log('[MapView] Starting camera swoop:', {
+      //   from: { center: [currentCenter.lng, currentCenter.lat], zoom: currentZoom },
+      //   to: { center: coords, zoom: 21.5 }
+      // });
 
       // Cinematic zoom-in effect: smoothly animate camera to player location
       // Starts from initial zoom (14) and zooms in to close-up view (21.5)
@@ -514,12 +514,12 @@ export default class MapView implements Updatable, Renderable {
       const rot = (rotDeg * Math.PI) / 180;
 
       // Log position changes (only when significant change detected)
-      if (this.playerPosition && (
-        Math.abs(lng - this.playerPosition.lng) > 0.000001 ||
-        Math.abs(lat - this.playerPosition.lat) > 0.000001
-      )) {
-        console.log('[MapView] Position updated from ECS:', { lng: lng.toFixed(8), lat: lat.toFixed(8), rotDeg });
-      }
+      // if (this.playerPosition && (
+      //   Math.abs(lng - this.playerPosition.lng) > 0.000001 ||
+      //   Math.abs(lat - this.playerPosition.lat) > 0.000001
+      // )) {
+      //   console.log('[MapView] Position updated from ECS:', { lng: lng.toFixed(8), lat: lat.toFixed(8), rotDeg });
+      // }
 
       // Update camera bearing for sprite rotation
       if (this.characterView) {

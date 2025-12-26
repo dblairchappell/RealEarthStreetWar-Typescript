@@ -30,6 +30,13 @@ export const Rotation = defineComponent({ angle: Types.f32 }); // degrees
 export const Velocity = defineComponent({ x: Types.f64, y: Types.f64 }); // units/second in degrees
 
 /**
+ * Altitude component: stores altitude/elevation in meters above ground level.
+ * Used for flying entities and 3D collision detection with buildings.
+ * Default is 0 (ground level).
+ */
+export const Altitude = defineComponent({ value: Types.f64 }); // meters above ground
+
+/**
  * PlayerTag component: marker component to identify player entities.
  * Entities with this tag are treated as the player character.
  */
