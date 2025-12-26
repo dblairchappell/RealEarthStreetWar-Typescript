@@ -30,7 +30,7 @@ export default class HUDView implements Updatable {
   private npcIdEl: HTMLElement | null;
   private npcPositionEl: HTMLElement | null;
   private npcDistanceEl: HTMLElement | null;
-  private possessBtn: HTMLElement | null;
+  private possessBtn: HTMLButtonElement | null;
 
   private mapInstance: any = null; // Will be set by setMapInstance
   private gameState: any = null; // Will be set by setGameState
@@ -67,7 +67,7 @@ export default class HUDView implements Updatable {
     this.npcIdEl = document.getElementById('npc-id');
     this.npcPositionEl = document.getElementById('npc-position');
     this.npcDistanceEl = document.getElementById('npc-distance');
-    this.possessBtn = document.getElementById('possess-btn');
+    this.possessBtn = document.getElementById('possess-btn') as HTMLButtonElement | null;
     
     // Set up button event listeners
     this.setupEventListeners();
@@ -159,7 +159,7 @@ export default class HUDView implements Updatable {
      ---------------------------------------------------------------- */
   public updateTimeDisplays(gameDate: Date, localTimeZone: string) {
     // Include seconds in format for smooth progression
-    const format = 'dd MMM yyyy HH:mm:ss';
+    const format = 'dd MMM yyyy HH:mm';
 
     // Update local time
     if (this.gameDateEl) {
