@@ -36,6 +36,21 @@ export function degreesToMeters(degrees: number, latitude: number): number {
 }
 
 /**
+ * Convert meters to degrees
+ * Approximate conversion that accounts for latitude
+ * 
+ * @param meters - Distance in meters
+ * @param latitude - Latitude for accurate conversion (degrees vary by latitude)
+ * @returns Distance in degrees
+ */
+export function metersToDegrees(meters: number, latitude: number): number {
+  // At equator: 1 degree ≈ 111,320 meters
+  // Adjust for latitude (degrees get shorter as you move away from equator)
+  const metersPerDegree = 111320 * Math.cos(latitude * Math.PI / 180);
+  return meters / metersPerDegree;
+}
+
+/**
  * Calculate distance between two points in meters
  */
 export function calculateDistanceMeters(

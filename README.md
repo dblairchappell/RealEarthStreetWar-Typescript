@@ -8,6 +8,9 @@ A top-down GTA1-style game prototype set on a real-world map. Players explore an
 - **Server-Authoritative Simulation**: NPCs and game state managed by the server
 - **Player Movement**: WASD-style character controls with smooth movement and sprite animations
 - **NPC Simulation**: Server-controlled NPCs that walk around the map with collision detection
+- **Possession System**: Click on NPCs to take control of them - your current body becomes an NPC
+- **Entity Interaction**: Click on entities to view info and possess nearby NPCs (within 50m range)
+- **Visual Feedback**: Green outline for possessed body, red outline for selected NPCs
 - **Time Progression**: In-game time advances at 60x speed (1 game minute = 1 real second) with timezone-aware display (uses `tz-lookup` based on lat/lng)
 - **Multiplayer-Ready**: WebSocket-based client-server architecture (60Hz state broadcasts)
 - **Advanced Camera**: Continuous zoom/rotation/pan controls with camera following
@@ -76,6 +79,8 @@ Visit `http://localhost:5173` to start playing!
 - **Q/E**: Continuous camera pan left/right
 - **R/F**: Continuous camera pan up/down
 - **Shift + C**: Toggle camera follow lock
+- **Mouse Click**: Click on NPCs to view info and possess (must be within 50m)
+- **Mouse Click**: Click on your current body to view occupant info
 
 ## 📁 Project Structure
 
@@ -110,7 +115,8 @@ RealEarthStreetWar/
 │   ├── view/              # Rendering and UI
 │   │   ├── map/           # Map components (CameraController, FeatureQuery, MarkerLayer)
 │   │   ├── CharacterView.ts  # Player sprite rendering
-│   │   ├── HUDView.ts     # UI and HUD
+│   │   ├── EntityClickHandler.ts  # Entity click detection
+│   │   ├── HUDView.ts     # UI and HUD (entity info panels)
 │   │   ├── MapView.ts     # Main map view
 │   │   ├── NpcLayer.ts    # Canvas NPC rendering (globe fallback)
 │   │   ├── NpcInstancedLayer.ts  # WebGL NPC rendering (Mercator)
@@ -170,6 +176,10 @@ npm install <package> --workspace=shared
 - ✅ Server-authoritative game state
 - ✅ Player movement synchronization (60Hz server, 60Hz client broadcasts)
 - ✅ NPC spawning and simulation with collision detection
+- ✅ Possession system - transfer control between entities
+- ✅ Entity click detection and interaction
+- ✅ HUD system with entity info panels
+- ✅ Visual feedback (green outline for possessed, red outline for selected)
 - ✅ Time progression system with timezone-aware display
 - ✅ WebSocket client-server communication
 - ✅ Shared code package (npm workspaces)

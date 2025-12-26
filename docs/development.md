@@ -244,6 +244,30 @@ sendNewMessage(data: SomeData): void {
 }
 ```
 
+### Adding Entity Interaction Features
+
+The possession system demonstrates how to add entity interactions:
+
+1. **Click Detection** (`src/view/EntityClickHandler.ts`):
+   - Uses ECS queries to find entities at click point
+   - Projects lat/lng to screen coordinates
+   - Calculates distances between entities
+
+2. **HUD Integration** (`src/view/HUDView.ts`):
+   - Create UI panels for entity info
+   - Show/hide panels based on selection
+   - Handle button clicks for actions
+
+3. **Server Validation** (`server/src/game/GameWorld.ts`):
+   - Validate range, entity existence
+   - Transfer ECS components (tags)
+   - Send success/failure messages
+
+4. **Client State Sync** (`src/network/NetworkStateManager.ts`):
+   - Mirror server ECS changes
+   - Map server entity IDs to client IDs
+   - Update interpolation state for smooth visuals
+
 ## 🐛 Debugging
 
 ### Client-Side Debugging

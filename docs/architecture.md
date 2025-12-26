@@ -184,6 +184,9 @@ export const SpriteRef = defineComponent({ id: Types.ui16 }); // Sprite ID for r
 - `Velocity`: Stores velocity in degrees per second
 - `SpriteRef`: Stores sprite ID (ui16) for selecting which sprite to render
 - `PlayerTag` / `NpcTag`: Marker components for entity identification
+  - Entities can switch between these tags during possession transfer
+  - Server transfers `PlayerTag` from old entity to new entity
+  - Client mirrors this change in its ECS world
 
 ### World Instances (Separate)
 
@@ -216,6 +219,7 @@ public readonly world = createWorld();  // Server's world
 type ClientMessage =
   | { type: 'input'; input: InputState }
   | { type: 'spawn_npc'; count: number }
+  | { type: 'possess_entity'; targetEid: number }
   | { type: 'ping'; timestamp: number };
 ```
 
@@ -226,6 +230,8 @@ type ServerMessage =
   | { type: 'state_snapshot'; state: GameStateSnapshot; timestamp: number }
   | { type: 'player_joined'; playerId: string }
   | { type: 'player_left'; playerId: string }
+  | { type: 'possession_transferred'; playerId: string; newEntityId: number; oldEntityId: number }
+  | { type: 'possession_failed'; reason: string }
   | { type: 'pong'; timestamp: number }
   | { type: 'error'; message: string };
 ```
@@ -287,6 +293,8 @@ The client uses a modular view system with specialized components:
 - Manages MapLibre GL map instance
 - Coordinates sub-components (CharacterView, CameraController, etc.)
 - Handles map events (clicks, drags, zoom)
+- Manages player entity tracking and interpolation state
+- Resets interpolation state on possession transfer for smooth movement
 
 **CharacterView** (`src/view/CharacterView.ts`):
 - Player sprite rendering and animation
@@ -318,9 +326,18 @@ The client uses a modular view system with specialized components:
 - Passes data to rendering layer
 
 **Other Components**:
+- **EntityClickHandler** (`src/view/EntityClickHandler.ts`):
+  - Detects clicks on entities (player's current body or NPCs)
+  - Calculates distances between entities
+  - Triggers callbacks for entity interactions
+  - Uses ECS queries and map projection for accurate click detection
+- **HUDView** (`src/view/HUDView.ts`):
+  - Displays game time and stats
+  - Shows entity info panels (occupant info, NPC info)
+  - Manages possession and command UI
+  - Handles panel visibility and range checking
 - **FeatureQuery**: Queries map features (buildings, transport) at click points
 - **MarkerLayer**: Manages map markers
-- **HUDView**: Displays game time and stats
 - **PerfOverlay**: Performance monitoring (FPS, frame time, CPU)
 
 ### Sprite Animation System
@@ -418,10 +435,64 @@ The game uses **PMTiles** protocol for offline map tiles:
   - Full reconciliation system implemented with smooth correction
   - Three-tier error handling (tiny/medium/catastrophic)
   - Disabled to prevent rubber-banding issues
-- **Interpolation**: Already implemented in `NpcController` for NPCs
+- **Interpolation**: Already implemented in `NpcController` for NPCs and `MapView` for player
+- **Command System**: Issue commands to NPCs when vacating bodies (planned)
 - **Chunking**: Load map regions on-demand
 - **Caching**: Cache snapshots for reconnection
 - **Input buffering**: Queue inputs for reconciliation with server state
+
+## 🎮 Possession System
+
+The game features a **possession system** that allows players to transfer control between entities:
+
+### How It Works
+
+1. **Player starts** with control of an initial body (spawned as a player entity)
+2. **Click on NPC** within 50 meters to view info and possess
+3. **Click "Possess Body"** button in HUD to transfer control
+4. **Server transfers** `PlayerTag` from old entity to new entity
+5. **Old body becomes NPC** (receives `NpcTag` and starts wandering)
+6. **New body becomes player** (receives `PlayerTag` and responds to input)
+
+### Implementation Details
+
+**Server-Side** (`server/src/game/GameWorld.ts`):
+- `transferPossession()` validates distance and transfers tags
+- Resets velocity for both entities to prevent drift
+- Updates `playerEntities` mapping
+
+**Client-Side** (`src/network/NetworkStateManager.ts`):
+- `transferPlayerEntity()` mirrors server tag changes
+- Maps server entity IDs to client entity IDs
+- Maintains reverse mapping for click detection
+
+**Visual Feedback**:
+- **Green outline**: Current possessed body (via CSS class `possessed-body`)
+- **Red outline**: Selected NPC (rendered by `NpcLayer`)
+
+**Interpolation Handling** (`src/view/MapView.ts`):
+- `resetInterpolationState()` clears `prevPosition` on possession transfer
+- Prevents jittery movement by skipping interpolation on first frame
+- Matches behavior of initial character creation
+
+### Network Messages
+
+**Client → Server**:
+```typescript
+{ type: 'possess_entity'; targetEid: number }
+```
+
+**Server → Client**:
+```typescript
+{ type: 'possession_transferred'; playerId: string; newEntityId: number; oldEntityId: number }
+{ type: 'possession_failed'; reason: string }
+```
+
+### Range and Validation
+
+- **Possession Range**: 50 meters (0.0005 degrees)
+- **Validation**: Server checks distance, entity existence, and prevents possessing other players
+- **Visual Range Indicator**: HUD shows distance and enables/disables possess button
 
 ## 🌍 Timezone Support
 

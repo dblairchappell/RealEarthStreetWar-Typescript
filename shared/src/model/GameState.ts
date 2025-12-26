@@ -75,16 +75,26 @@ export default class GameState {
   static readonly PLAYER_ROTATION_SPEED = 360;
   
   /**
-   * Possession range in degrees.
+   * Possession range in meters.
    * The controlling entity must be within this distance to possess an NPC.
-   * Approximately 50 meters at equator.
+   * This is the primary constant - degrees are calculated from this value.
+   * 
+   * To change the possession range, modify this value only.
    */
-  static readonly POSSESSION_RANGE_DEG = 0.0005;
+  static readonly POSSESSION_RANGE_METERS = 5;
   
   /**
-   * Possession range in meters (approximate at equator).
-   * Used for display purposes.
+   * Possession range in degrees (calculated from POSSESSION_RANGE_METERS).
+   * Calculated using equator value (latitude 0) for consistency.
+   * At equator: 1 degree ≈ 111,320 meters
+   * 
+   * This value is automatically calculated - do not modify directly.
    */
-  static readonly POSSESSION_RANGE_METERS = 50;
+  static readonly POSSESSION_RANGE_DEG = (() => {
+    // Using equator (latitude 0) as reference for constant calculation
+    // At equator: 1 degree ≈ 111,320 meters
+    const metersPerDegreeAtEquator = 111320;
+    return GameState.POSSESSION_RANGE_METERS / metersPerDegreeAtEquator;
+  })();
 }
 
