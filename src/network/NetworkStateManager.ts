@@ -28,6 +28,7 @@ export class NetworkStateManager {
   private playerQuery = defineQuery([PlayerTag, Position, Rotation]);
   private npcQuery = defineQuery([NpcTag, Position, Rotation, Velocity]);
   private onPlayerEntityCreated?: (eid: number, playerData: PlayerSnapshot) => void;
+  private npcLayer: any = null; // Reference to NpcLayer for speed updates
 
   constructor(gameState: GameState) {
     this.gameState = gameState;
@@ -45,6 +46,13 @@ export class NetworkStateManager {
    */
   setOnPlayerEntityCreated(callback: (eid: number, playerData: PlayerSnapshot) => void): void {
     this.onPlayerEntityCreated = callback;
+  }
+  
+  /**
+   * Set reference to NpcLayer for speed updates
+   */
+  setNpcLayer(npcLayer: any): void {
+    this.npcLayer = npcLayer;
   }
 
   /**
@@ -195,6 +203,12 @@ export class NetworkStateManager {
         this.removeNpcEntity(clientEid);
         this.npcEntityMap.delete(serverEid);
         this.npcEntityMapReverse.delete(clientEid); // Remove reverse mapping
+        
+        // Remove NPC speed from NpcLayer
+        if (this.npcLayer && typeof this.npcLayer.removeNpcSpeed === 'function') {
+          this.npcLayer.removeNpcSpeed(clientEid);
+        }
+        
         console.log(`[NetworkStateManager] Removed NPC entity ${clientEid} (server eid: ${serverEid})`);
       }
     }
@@ -224,6 +238,11 @@ export class NetworkStateManager {
       Velocity.x[clientEid] = npc.velocityX;
       Velocity.y[clientEid] = npc.velocityY;
       SpriteRef.id[clientEid] = npc.spriteId;
+      
+      // Update NPC speed in NpcLayer for animation scaling
+      if (this.npcLayer && typeof this.npcLayer.updateNpcSpeed === 'function') {
+        this.npcLayer.updateNpcSpeed(clientEid, npc.speed);
+      }
     }
   }
 

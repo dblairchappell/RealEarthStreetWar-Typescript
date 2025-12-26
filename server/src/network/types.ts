@@ -81,5 +81,8 @@ export interface NpcSnapshot {
   
   /** Sprite ID */
   spriteId: number;
+  
+  /** Pre-calculated movement speed (for animation scaling) */
+  speed: number;
 }
 

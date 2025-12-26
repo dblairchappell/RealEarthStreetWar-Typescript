@@ -272,6 +272,9 @@ map.on('load', () => {
         
         // Store reference for selection feedback
         view.setNpcRenderingLayers(npcCanvasLayer, null);
+        
+        // Wire up NPC speed updates for animation scaling
+        controller.getNetworkStateManager().setNpcLayer(npcCanvasLayer);
     }
 
     /**

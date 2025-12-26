@@ -15,7 +15,7 @@ export const ServerConfig = {
   },
   
   /** Spawn radius in degrees (0.001 is approximately 111 meters at equator) */
-  NPC_SPAWN_RADIUS: 0.0001,
+  NPC_SPAWN_RADIUS: 0.0003,
   
   /** Server port */
   PORT: process.env.PORT ? parseInt(process.env.PORT, 10) : 8080,

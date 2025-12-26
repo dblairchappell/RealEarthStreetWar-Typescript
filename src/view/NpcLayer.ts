@@ -95,20 +95,13 @@ export default class NpcLayer implements Renderable, Updatable {
     running: false
   };
   
-  // Animation frame accumulators (one per animation type)
-  // Uses accumulator pattern to advance frames at correct rate
-  private frameAccumulators = {
-    idle: 0,
-    walking: 0,
-    running: 0
-  };
-  
-  // Current frame indices (one per animation type)
-  private currentFrames = {
-    idle: 0,
-    walking: 0,
-    running: 0
-  };
+  // Per-NPC animation state (for speed-scaled animations)
+  // Maps entity ID to frame accumulator and current frame
+  private npcAnimationState: Map<number, {
+    accumulator: number;
+    currentFrame: number;
+    animType: 'idle' | 'walking' | 'running';
+  }> = new Map();
   
   // Velocity threshold for determining animation type
   // Below this threshold: idle, above: walking or running
@@ -117,6 +110,25 @@ export default class NpcLayer implements Renderable, Updatable {
   
   // Base size multiplier (same as CharacterView for consistency)
   private readonly npcBaseSize = 0.075;
+  
+  // Storage for NPC speeds (from server snapshot) - used for animation scaling
+  private npcSpeeds: Map<number, number> = new Map();
+  private readonly baseSpeed = 0.000000225; // Same as BASE_SPEED on server
+  
+  /**
+   * Update NPC speed for animation scaling
+   * Called by NetworkStateManager when NPC data is received
+   */
+  public updateNpcSpeed(clientEid: number, speed: number): void {
+    this.npcSpeeds.set(clientEid, speed);
+  }
+  
+  /**
+   * Remove NPC speed when NPC is removed
+   */
+  public removeNpcSpeed(clientEid: number): void {
+    this.npcSpeeds.delete(clientEid);
+  }
 
   /**
    * Constructor - sets up the canvas overlay.
@@ -235,22 +247,64 @@ export default class NpcLayer implements Renderable, Updatable {
    * @param deltaMs - Time elapsed since last update (milliseconds)
    */
   public update(deltaMs: number): void {
-    // Update each animation type independently
-    for (const animType of ['idle', 'walking', 'running'] as const) {
+    // Update animation frames for each NPC based on their speed
+    // Query NPCs to get current animation types
+    const ents = this.query(world);
+    
+    for (let i = 0; i < ents.length; i++) {
+      const eid = ents[i];
+      
+      // Get velocity to determine animation type
+      const velocityX = Velocity.x[eid] || 0;
+      const velocityY = Velocity.y[eid] || 0;
+      const animType = this.determineAnimationType(velocityX, velocityY);
+      
+      // Get or create animation state for this NPC
+      let animState = this.npcAnimationState.get(eid);
+      if (!animState) {
+        animState = {
+          accumulator: 0,
+          currentFrame: 0,
+          animType: animType
+        };
+        this.npcAnimationState.set(eid, animState);
+      }
+      
+      // Update animation type if it changed
+      if (animState.animType !== animType) {
+        animState.animType = animType;
+        animState.currentFrame = 0; // Reset to first frame when animation changes
+        animState.accumulator = 0;
+      }
+      
+      // Get base frame rate for this animation type
       const anim = this.animations[animType];
-      const frameRate = anim.frameRate;
-      const frameDuration = 1000 / frameRate;
+      const baseFrameRate = anim.frameRate;
+      
+      // Scale frame rate based on NPC speed (faster NPCs animate faster)
+      const npcSpeed = this.npcSpeeds.get(eid) || this.baseSpeed;
+      const speedRatio = npcSpeed / this.baseSpeed;
+      const scaledFrameRate = baseFrameRate * speedRatio;
+      const frameDuration = 1000 / scaledFrameRate;
       
       // Accumulate elapsed time
-      this.frameAccumulators[animType] += deltaMs;
+      animState.accumulator += deltaMs;
       
       // Advance frames until caught up (handles frame drops)
-      while (this.frameAccumulators[animType] >= frameDuration) {
+      while (animState.accumulator >= frameDuration) {
         // Advance to next frame (wraps around using modulo)
-        this.currentFrames[animType] = (this.currentFrames[animType] + 1) % anim.frames;
+        animState.currentFrame = (animState.currentFrame + 1) % anim.frames;
         
         // Subtract frame duration from accumulator (preserve remainder)
-        this.frameAccumulators[animType] -= frameDuration;
+        animState.accumulator -= frameDuration;
+      }
+    }
+    
+    // Clean up animation state for NPCs that no longer exist
+    const existingEids = new Set(ents);
+    for (const eid of this.npcAnimationState.keys()) {
+      if (!existingEids.has(eid)) {
+        this.npcAnimationState.delete(eid);
       }
     }
   }
@@ -476,7 +530,9 @@ export default class NpcLayer implements Renderable, Updatable {
         
         // Draw sprite (skip rendering if sprite not loaded)
         if (this.spritesLoaded[animType] && this.spriteImages[animType]) {
-          const frame = this.currentFrames[animType];
+          // Get current frame for this NPC from animation state
+          const animState = this.npcAnimationState.get(eid);
+          const frame = animState ? animState.currentFrame : 0;
           this.drawSprite(ctx, p.x, p.y, rotation, spriteSize, animType, frame);
         }
 

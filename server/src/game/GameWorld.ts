@@ -7,7 +7,7 @@
 
 import { addComponent, addEntity, createWorld, defineQuery, IWorld, removeComponent } from 'bitecs';
 import { Position, Rotation, Velocity, PlayerTag, NpcTag, SpriteRef, entityCollisionSystem, SpatialGrid, GameState, GameStateConstants, calculateDistanceMeters, BuildingCollider, buildingCollisionSystem } from '@shared/realearthstreetwar';
-import { randomWalkSystem } from './systems/randomWalkSystem';
+import { randomWalkSystem, initializeNpcSpeedMultiplier, getNpcSpeed } from './systems/randomWalkSystem';
 import { movementSystem } from './systems/movementSystem';
 import { GameStateSnapshot, PlayerSnapshot, NpcSnapshot } from '../network/types';
 import { PlayerManager } from '../players/PlayerManager';
@@ -276,6 +276,9 @@ export class GameWorld {
       Velocity.y[eid] = 0;
       SpriteRef.id[eid] = 0;
       
+      // Initialize random walk speed multiplier for this NPC
+      initializeNpcSpeedMultiplier(eid);
+      
       this.npcEntities.add(eid);
     }
     console.log(`[GameWorld] Spawned ${count} NPCs`);
@@ -513,6 +516,7 @@ export class GameWorld {
         velocityX: Velocity.x[eid],
         velocityY: Velocity.y[eid],
         spriteId: SpriteRef.id[eid],
+        speed: getNpcSpeed(eid),
       });
     }
 
