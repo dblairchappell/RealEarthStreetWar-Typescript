@@ -267,6 +267,10 @@ export default class GameController implements FixedUpdatable {
     // This ensures the sprite is immediately visible at the correct location
     this.view.updatePlayerPosition({ lng, lat }, rotRad, false);
     
+    // Smoothly transition camera to new player position
+    // This provides a smooth camera movement instead of instant snap
+    this.view.smoothTransitionCameraToPlayer(2000); // 2 second transition
+    
     // Note: The next server snapshot will update the ECS position via updatePlayers(),
     // and then update() will read it and update playerPosition, and render() will
     // interpolate smoothly between the reset position and the new position

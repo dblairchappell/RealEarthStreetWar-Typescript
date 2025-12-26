@@ -475,6 +475,16 @@ export default class MapView implements Updatable, Renderable {
   }
 
   /**
+   * Smoothly transition camera to player position (used for possession transfers).
+   * Always uses smooth animation regardless of distance.
+   */
+  public smoothTransitionCameraToPlayer(duration: number = 2000): void {
+    if (this.playerPosition && this.camera) {
+      this.camera.smoothTransitionTo(this.playerPosition, duration);
+    }
+  }
+
+  /**
    * Updates movement state and triggers animation switching in CharacterView.
    * CharacterView handles the actual logic for switching between idle/walk/run animations.
    */

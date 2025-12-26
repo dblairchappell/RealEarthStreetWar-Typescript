@@ -191,6 +191,27 @@ export class CameraController implements Updatable {
   /* ---------------- public API ---------------- */
 
   /**
+   * Smoothly transition camera to a new position (used for possession transfers).
+   * Always uses smooth animation regardless of distance.
+   */
+  smoothTransitionTo(coords: { lng: number; lat: number }, duration: number = 2000): void {
+    if (!this.cameraFollowEnabled) {
+      return;
+    }
+    
+    this.playerPosition = coords;
+    
+    // Always use smooth transition for possession
+    this.map.easeTo({
+      center: [coords.lng, coords.lat],
+      duration: duration,
+      essential: true
+    } as any);
+    
+    this.lastCenter = { ...coords };
+  }
+
+  /**
    * Called every time the player moves; keeps track of where we should
    * centre the camera. If the camera is not currently busy (zooming or
    * rotating) the centre is updated immediately, or smoothly if transitioning from manual control.

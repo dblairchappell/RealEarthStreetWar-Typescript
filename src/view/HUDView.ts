@@ -40,6 +40,9 @@ export default class HUDView implements Updatable {
   private selectedNpcServerEid: number | null = null; // Server entity ID (for possess button)
   private getPlayerEntityId: (() => number | null) | null = null; // Callback to get player entity ID
   
+  // Selected occupant tracking for continuous position updates
+  private selectedOccupantEid: number | null = null; // Client entity ID of selected occupant (player)
+  
   // Callbacks
   private onPossessBody?: (entityId: number) => void;
   private onCommandMenu?: () => void;
@@ -152,6 +155,11 @@ export default class HUDView implements Updatable {
     if (this.selectedNpcClientEid !== null && this.npcPanel && !this.npcPanel.classList.contains('hidden')) {
       this.updateSelectedNpcDistance();
     }
+    
+    // Update occupant position if occupant panel is visible
+    if (this.selectedOccupantEid !== null && this.occupantPanel && !this.occupantPanel.classList.contains('hidden')) {
+      this.updateSelectedOccupantPosition();
+    }
   }
 
   /* ----------------------------------------------------------------
@@ -211,6 +219,9 @@ export default class HUDView implements Updatable {
     this.occupantPanel.classList.remove('hidden');
     this.entityInfoPanel.classList.remove('hidden');
     
+    // Store selected occupant entity ID for continuous position updates
+    this.selectedOccupantEid = info.entityId; // Client entity ID from EntityInfo
+    
     // Update occupant info
     if (this.occupantIdEl) {
       this.occupantIdEl.textContent = entityId.toString();
@@ -223,6 +234,26 @@ export default class HUDView implements Updatable {
     if (this.occupantCommandEl) {
       this.occupantCommandEl.textContent = currentCommand || 'None';
     }
+  }
+  
+  /**
+   * Update the position display for the selected occupant
+   * Called continuously while occupant panel is visible
+   */
+  private updateSelectedOccupantPosition(): void {
+    if (this.selectedOccupantEid === null || !this.occupantPositionEl) return;
+
+    // Read occupant position from ECS
+    const occupantLng = Position.x[this.selectedOccupantEid];
+    const occupantLat = Position.y[this.selectedOccupantEid];
+
+    // Check if positions are valid
+    if (occupantLng === undefined || occupantLat === undefined) {
+      return;
+    }
+
+    // Update position display
+    this.occupantPositionEl.textContent = `${occupantLat.toFixed(6)}, ${occupantLng.toFixed(6)}`;
   }
 
   /**
@@ -340,6 +371,9 @@ export default class HUDView implements Updatable {
     // Clear selected NPC tracking
     this.selectedNpcClientEid = null;
     this.selectedNpcServerEid = null;
+    
+    // Clear selected occupant tracking
+    this.selectedOccupantEid = null;
   }
 
   /**
