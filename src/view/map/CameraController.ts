@@ -72,7 +72,7 @@ export class CameraController implements Updatable {
       const currentZoom = this.map.getZoom();
       const delta = (this.continuousZoomDirection === "in" ? 1 : -1) * this.currentZoomSpeed;
       const newZoom = this.continuousZoomDirection === "in"
-        ? Math.min(22, currentZoom + delta)
+        ? Math.min(25, currentZoom + delta)
         : currentZoom + delta;
 
       // Use player position if camera follow is enabled, otherwise preserve current panned position

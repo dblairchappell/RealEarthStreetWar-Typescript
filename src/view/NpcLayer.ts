@@ -110,7 +110,7 @@ export default class NpcLayer implements Renderable, Updatable {
   private readonly runningSpeedMultiplier = 1.5; // Running is 1.5x walking speed
   
   // Base size multiplier (same as CharacterView for consistency)
-  private readonly npcBaseSize = 0.075;
+  private readonly npcBaseSize = 0.07;
   
   // Storage for NPC speeds (from server snapshot) - used for animation scaling
   private npcSpeeds: Map<number, number> = new Map();

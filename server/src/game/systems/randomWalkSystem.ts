@@ -11,8 +11,8 @@ const BASE_SPEED = 0.000000225;
 const CHANGE_TIMER = 180;  
 
 // Speed variation: each NPC gets a random multiplier between 0.7x and 1.3x
-const MIN_SPEED_MULTIPLIER = 0.5;
-const MAX_SPEED_MULTIPLIER = 1.8;
+const MIN_SPEED_MULTIPLIER = 0.8;
+const MAX_SPEED_MULTIPLIER = 1.9;
 
 // Local timer per entity (sparse array)
 const changeCounter: number[] = [];

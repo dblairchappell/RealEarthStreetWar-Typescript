@@ -137,6 +137,7 @@ export default class MapView implements Updatable, Renderable {
       center: [-74.05682, 40.69337], // Starting position [lng, lat] (New York area)
       zoom: 14, // Start zoomed out for cinematic effect (will zoom in when player spawns)
       minZoom: 1, // Allow zooming out to see the full globe
+      maxZoom: 23.5, // Maximum zoom level
       pitch: GTA1_STYLE_TOP_DOWN ? 0 : 55, // Camera angle: 0 = top-down, 55 = angled view
       bearing: 0, // Map rotation (0 = north up)
       antialias: true, // Enable antialiasing for smoother rendering
