@@ -228,6 +228,17 @@ map.on('load', () => {
     loop.add(hud);
 
     /**
+     * Register PlayerLayer for canvas rendering path (if used).
+     * PlayerLayer implements Updatable and Renderable, so it needs game loop registration.
+     * CharacterView (DOM path) is updated through MapView.update(), so no separate registration needed.
+     */
+    const playerLayer = view.getPlayerLayer();
+    if (playerLayer) {
+        loop.add(playerLayer); // Register as Updatable for animation frame advancement
+        loop.addRenderable(playerLayer); // Register as Renderable for rendering
+    }
+
+    /**
      * Set up NPC rendering based on selected rendering path.
      * 
      * NPCs are spawned by the server and arrive via state snapshots.

@@ -40,10 +40,11 @@
 
 // view/MapView.ts
 import CharacterView from "./CharacterView";
+import PlayerLayer from "./PlayerLayer";
 import InputManager from "../input/InputManager";
 import { IInputService } from "../input/IInputService";
 import { InputState } from "@shared/realearthstreetwar";
-import { GTA1_STYLE_TOP_DOWN, MAP_PROJECTION, SHOW_BUILDINGS, SHOW_BUILDINGS_3D } from "../config";
+import { GTA1_STYLE_TOP_DOWN, MAP_PROJECTION, SHOW_BUILDINGS, SHOW_BUILDINGS_3D, PLAYER_RENDER_PATH } from "../config";
 import { MarkerLayer, CameraController, FeatureQuery } from './map';
 import { Position, Rotation } from "../ecs/world";
 import { Renderable, Updatable } from "../loop/GameLoop";
@@ -64,7 +65,8 @@ export default class MapView implements Updatable, Renderable {
   private featureQuery: FeatureQuery | null = null; // Queries map features (buildings, transport) at click points
   private markerLayer: MarkerLayer | null = null; // Manages map markers
   private camera: CameraController | null = null; // Handles camera following, zoom, and rotation
-  private characterView: CharacterView | null = null; // Renders and animates the player character sprite
+  private characterView: CharacterView | null = null; // Renders and animates the player character sprite (DOM path)
+  private playerLayer: PlayerLayer | null = null; // Renders and animates the player character sprite (Canvas path)
   private entityClickHandler: EntityClickHandler | null = null; // Handles clicking on entities
   private npcLayer: any = null; // NPC rendering layer (NpcLayer or NpcInstancedLayer)
   private npcController: any = null; // NPC controller (for WebGL path)
@@ -151,8 +153,14 @@ export default class MapView implements Updatable, Renderable {
       projection: projectionConfig // Set projection at initialization (required for proper reprojection)
     } as any);
 
-    // Create CharacterView for player sprite rendering (created early, before map loads)
-    this.characterView = new CharacterView(this.map);
+    // Create player rendering layer based on config
+    // DOM path: CharacterView (CSS transforms)
+    // Canvas path: PlayerLayer (consistent with NPC rendering)
+    if (PLAYER_RENDER_PATH === 'canvas') {
+      this.playerLayer = new PlayerLayer(this.map);
+    } else {
+      this.characterView = new CharacterView(this.map);
+    }
 
     // Use injected input service if provided (for testing or shared input), otherwise create one locally
     if (inputService) {
@@ -228,6 +236,7 @@ export default class MapView implements Updatable, Renderable {
       
       // Initialize all specialized sub-components (they need the map to be loaded)
       this.markerLayer    = new MarkerLayer(this.map); // Map markers
+      // Camera controller needs CharacterView for DOM path (for compatibility), but can work without it
       this.camera         = new CameraController(this.map, this.characterView); // Camera controls
       this.featureQuery   = new FeatureQuery(this.map); // Building/transport feature queries
       
@@ -273,12 +282,15 @@ export default class MapView implements Updatable, Renderable {
    * @param input - Current input state (keys pressed, rotation, etc.)
    */
   private handlePlayerInput(input: InputState): void {
-    // Sync input state to CharacterView (for animation switching)
+    // Sync input state to player rendering layer (for animation switching)
     if (this.characterView) {
-      this.characterView.inputState = { ...input }; // Copy to avoid reference issues
+      this.characterView.inputState = { ...input }; // Copy to avoid reference issues (DOM path)
+    }
+    if (this.playerLayer) {
+      this.playerLayer.updateInputState(input); // Canvas path
     }
     
-    // Update movement state (triggers animation switching in CharacterView)
+    // Update movement state (triggers animation switching)
     this.updateMovementState();
 
     // Check if movement keys are currently pressed
@@ -330,10 +342,17 @@ export default class MapView implements Updatable, Renderable {
     // Keep character sprite pitch/bearing synced with camera
     // This ensures the character sprite appears correctly oriented relative to camera angle
     this.map.on('move', () => {
+      const pitch = this.map.getPitch();
+      const bearing = this.map.getBearing();
       if (this.characterView) {
-        this.characterView.setCameraPitch(this.map.getPitch()); // Camera angle
-        this.characterView.setCameraBearing(this.map.getBearing()); // Camera rotation
-        this.characterView.redraw(); // Redraw sprite with new camera state
+        this.characterView.setCameraPitch(pitch); // Camera angle (DOM path)
+        this.characterView.setCameraBearing(bearing); // Camera rotation (DOM path)
+        this.characterView.redraw(); // Redraw sprite with new camera state (DOM path)
+      }
+      if (this.playerLayer) {
+        this.playerLayer.setCameraPitch(pitch); // Camera angle (Canvas path)
+        this.playerLayer.setCameraBearing(bearing); // Camera rotation (Canvas path)
+        this.playerLayer.redraw(); // Trigger redraw (Canvas path)
       }
     });
 
@@ -398,7 +417,7 @@ export default class MapView implements Updatable, Renderable {
    * Called once when the player spawns. Performs a cinematic zoom-in effect.
    * 
    * Process:
-   * 1. Creates character sprite via CharacterView
+   * 1. Creates character sprite via CharacterView (DOM) or PlayerLayer (Canvas)
    * 2. Stores initial position/rotation for camera tracking
    * 3. Animates camera zoom-in to player location
    * 4. Ensures sprite is visible and correctly sized
@@ -407,18 +426,21 @@ export default class MapView implements Updatable, Renderable {
    * @param rotation - Initial player rotation (radians, default: 0)
    */
   createPlayerCharacter(coords: { lng: number; lat: number }, rotation: number = 0): void {
-    if (!this.characterView) return;
-
-    // Delegate sprite creation to CharacterView
-    this.characterView.createPlayerCharacter(coords, rotation);
-
-    // Store position and rotation for camera controls
-    this.playerPosition = this.characterView.getPlayerPosition();
-    this.playerRotation = this.characterView.getPlayerRotation();
-
-    // Ensure sprite is visible with correct size immediately
-    this.characterView.updateCharacterSize(false);
-    this.characterView.redraw();
+    if (this.characterView) {
+      // DOM path
+      this.characterView.createPlayerCharacter(coords, rotation);
+      this.playerPosition = this.characterView.getPlayerPosition();
+      this.playerRotation = this.characterView.getPlayerRotation();
+      this.characterView.updateCharacterSize(false);
+      this.characterView.redraw();
+    } else if (this.playerLayer) {
+      // Canvas path
+      this.playerLayer.updatePlayerPosition(coords, rotation);
+      this.playerPosition = this.playerLayer.getPlayerPosition();
+      this.playerRotation = this.playerLayer.getPlayerRotation();
+    } else {
+      return; // No rendering layer initialized
+    }
 
     // Perform camera swoop-in effect
     // Check if map is loaded - if not, wait for load event
@@ -458,7 +480,7 @@ export default class MapView implements Updatable, Renderable {
    * Called each frame to keep the sprite synchronized with game state.
    * 
    * Process:
-   * 1. Updates sprite position/rotation via CharacterView
+   * 1. Updates sprite position/rotation via CharacterView (DOM) or PlayerLayer (Canvas)
    * 2. Stores updated state for camera tracking
    * 
    * Note: Camera follow is handled separately in update() to avoid calling it
@@ -469,14 +491,19 @@ export default class MapView implements Updatable, Renderable {
    * @param updateCamera - If true, also update camera to follow player (default: false)
    */
   updatePlayerPosition(coords: { lng: number; lat: number }, rotation: number, updateCamera: boolean = false): void {
-    if (!this.characterView) return;
-
-    // Delegate position update to CharacterView (handles sprite positioning)
-    this.characterView.updatePlayerPosition(coords, rotation);
-    
-    // Get updated position and rotation from CharacterView (may have been adjusted)
-    this.playerPosition = this.characterView.getPlayerPosition();
-    this.playerRotation = this.characterView.getPlayerRotation();
+    if (this.characterView) {
+      // DOM path
+      this.characterView.updatePlayerPosition(coords, rotation);
+      this.playerPosition = this.characterView.getPlayerPosition();
+      this.playerRotation = this.characterView.getPlayerRotation();
+    } else if (this.playerLayer) {
+      // Canvas path
+      this.playerLayer.updatePlayerPosition(coords, rotation);
+      this.playerPosition = this.playerLayer.getPlayerPosition();
+      this.playerRotation = this.playerLayer.getPlayerRotation();
+    } else {
+      return; // No rendering layer initialized
+    }
     
     // Only update camera from fixed timestep (update()), not from render() interpolation
     // This prevents jitter from calling easeTo() every frame
@@ -497,13 +524,14 @@ export default class MapView implements Updatable, Renderable {
   }
 
   /**
-   * Updates movement state and triggers animation switching in CharacterView.
-   * CharacterView handles the actual logic for switching between idle/walk/run animations.
+   * Updates movement state and triggers animation switching.
+   * CharacterView (DOM) or PlayerLayer (Canvas) handles the actual logic for switching between idle/walk/run animations.
    */
   private updateMovementState(): void {
     if (this.characterView) {
-      this.characterView.updateMovementState();
+      this.characterView.updateMovementState(); // DOM path
     }
+    // Canvas path handles animation switching automatically in update() based on input state
   }
 
   /**
@@ -523,7 +551,10 @@ export default class MapView implements Updatable, Renderable {
   public update(deltaMs: number): void {
     // Advance character sprite animations (frame updates)
     if (this.characterView) {
-      this.characterView.update(deltaMs);
+      this.characterView.update(deltaMs); // DOM path
+    }
+    if (this.playerLayer) {
+      this.playerLayer.update(deltaMs); // Canvas path
     }
 
     // If player entity ID is set, read position from ECS
@@ -531,7 +562,7 @@ export default class MapView implements Updatable, Renderable {
       // Read directly from ECS components
       const lng = Position.x[this.playerEid];
       const lat = Position.y[this.playerEid];
-      // Rotation.angle is stored in degrees, convert to radians for CharacterView
+      // Rotation.angle is stored in degrees, convert to radians
       const rotDeg = Rotation.angle[this.playerEid];
       const rot = (rotDeg * Math.PI) / 180;
 
@@ -544,9 +575,12 @@ export default class MapView implements Updatable, Renderable {
       // }
 
       // Update camera bearing for sprite rotation
+      const bearing = this.map.getBearing(); // Returns degrees
       if (this.characterView) {
-        const bearing = this.map.getBearing(); // Returns degrees
-        this.characterView.setCameraBearing(bearing);
+        this.characterView.setCameraBearing(bearing); // DOM path
+      }
+      if (this.playerLayer) {
+        this.playerLayer.setCameraBearing(bearing); // Canvas path
       }
 
       // Update player position FIRST so camera.update() uses latest position for zoom/rotation
@@ -591,9 +625,12 @@ export default class MapView implements Updatable, Renderable {
     const currRot = (currRotDeg * Math.PI) / 180;
 
     // Update camera bearing for sprite rotation (needs to be updated every frame)
+    const bearing = this.map.getBearing(); // Returns degrees
     if (this.characterView) {
-      const bearing = this.map.getBearing(); // Returns degrees
-      this.characterView.setCameraBearing(bearing);
+      this.characterView.setCameraBearing(bearing); // DOM path
+    }
+    if (this.playerLayer) {
+      this.playerLayer.setCameraBearing(bearing); // Canvas path
     }
 
     // Interpolate between previous and current position
@@ -621,6 +658,10 @@ export default class MapView implements Updatable, Renderable {
    */
   public setPlayerEntity(id: number) {
     this.playerEid = id;
+    // Also set in player rendering layer
+    if (this.playerLayer) {
+      this.playerLayer.setPlayerEntity(id);
+    }
   }
 
   /**
@@ -648,6 +689,14 @@ export default class MapView implements Updatable, Renderable {
    */
   public getCurrentOccupantEid(): number | null {
     return this.playerEid;
+  }
+
+  /**
+   * Get player rendering layer (for game loop registration)
+   * Returns PlayerLayer if canvas path is used, null otherwise
+   */
+  public getPlayerLayer(): any {
+    return this.playerLayer;
   }
 
   /**

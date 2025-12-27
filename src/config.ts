@@ -2,10 +2,19 @@
 // -----------------------------------------------------------------
 export const GTA1_STYLE_TOP_DOWN = true;   // ← flip to false for 3-D mode
 
+// Player rendering path selection
+// - 'dom': DOM-based rendering with CSS transforms (current implementation)
+//   - Pros: Simple, CSS effects, easy debugging
+//   - Cons: Different from NPC rendering, less consistent
+// - 'canvas': Canvas-based rendering (consistent with NPC rendering)
+//   - Pros: Unified rendering path, easier to maintain, consistent visuals
+//   - Cons: Slightly more complex, no CSS effects
+export const PLAYER_RENDER_PATH: 'dom' | 'canvas' = 'canvas';
+
 // NPC rendering path selection
 // - 'webgl': High-performance WebGL instanced rendering (best for Mercator projection)
 // - 'canvas': Canvas-based rendering (works with any projection, including Globe)
-export const NPC_RENDER_PATH: 'webgl' | 'canvas' = 'webgl';
+export const NPC_RENDER_PATH: 'webgl' | 'canvas' = 'canvas';
 
 // Map projection type: 'mercator' (default), 'globe', or 'vertical-perspective'
 // Note: MapLibre GL JS v5.6.1 only supports these three projections.
