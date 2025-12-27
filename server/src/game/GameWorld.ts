@@ -6,7 +6,7 @@
  */
 
 import { addComponent, addEntity, createWorld, defineQuery, IWorld, removeComponent } from 'bitecs';
-import { Position, Rotation, Velocity, PlayerTag, NpcTag, SpriteRef, entityCollisionSystem, SpatialGrid, GameState, GameStateConstants, calculateDistanceMeters, BuildingCollider, buildingCollisionSystem } from '@shared/realearthstreetwar';
+import { Position, Rotation, Velocity, PlayerTag, NpcTag, SpriteRef, entityCollisionSystem, SpatialGrid, GameState, GameStateConstants, calculateDistanceMeters, BuildingCollider, buildingCollisionSystem, buildingCollisionPreventSystem } from '@shared/realearthstreetwar';
 import { randomWalkSystem, initializeNpcSpeedMultiplier, getNpcSpeed } from './systems/randomWalkSystem';
 import { movementSystem } from './systems/movementSystem';
 import { GameStateSnapshot, PlayerSnapshot, NpcSnapshot } from '../network/types';
@@ -443,7 +443,6 @@ export class GameWorld {
 
     // Run NPC systems
     randomWalkSystem(this.world);
-    movementSystem(this.world);
     
     // Get all entities for collision detection (players + NPCs)
     const npcEnts = this.npcQuery(this.world);
@@ -453,13 +452,33 @@ export class GameWorld {
     // Both players and NPCs have Position, Velocity components (required for collision)
     const allCollidableEntities: number[] = [...playerEnts, ...npcEnts];
     
-    // Rebuild spatial grid with all collidable entities
+    // Check building collision BEFORE movement to prevent entities from entering buildings
+    // This adjusts velocity to slide along walls instead of moving into buildings
+    if (this.buildingCollider && this.buildingLoader) {
+      try {
+        await buildingCollisionPreventSystem(
+          allCollidableEntities,
+          this.buildingCollider,
+          Position,
+          Velocity,
+          undefined // Altitude component - undefined means 2D collision (ground level)
+        );
+      } catch (error) {
+        console.error('[GameWorld] Error in building collision prevent system:', error);
+      }
+    }
+    
+    // Apply movement with adjusted velocities
+    movementSystem(this.world);
+    
+    // Rebuild spatial grid with all collidable entities (after movement)
     this.spatialGrid.rebuild(allCollidableEntities, Position);
     
     // Run entity-to-entity collision detection (players + NPCs)
     entityCollisionSystem(allCollidableEntities, this.spatialGrid, Position, Velocity);
     
-    // Run building collision detection (if building loader is available)
+    // Run building collision detection as a safety net (corrects any entities that still ended up inside)
+    // This shouldn't happen if preventSystem works correctly, but provides a fallback
     if (this.buildingCollider && this.buildingLoader) {
       try {
         await buildingCollisionSystem(

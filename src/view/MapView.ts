@@ -43,7 +43,7 @@ import CharacterView from "./CharacterView";
 import InputManager from "../input/InputManager";
 import { IInputService } from "../input/IInputService";
 import { InputState } from "@shared/realearthstreetwar";
-import { GTA1_STYLE_TOP_DOWN, MAP_PROJECTION } from "../config";
+import { GTA1_STYLE_TOP_DOWN, MAP_PROJECTION, SHOW_BUILDINGS, SHOW_BUILDINGS_3D } from "../config";
 import { MarkerLayer, CameraController, FeatureQuery } from './map';
 import { Position, Rotation } from "../ecs/world";
 import { Renderable, Updatable } from "../loop/GameLoop";
@@ -208,6 +208,22 @@ export default class MapView implements Updatable, Renderable {
         console.log(`[MapView] Projection set to: ${MAP_PROJECTION}`);
       } else {
         console.log('[MapView] Using default Mercator projection');
+      }
+      
+      // Hide/show building layers based on config flags
+      if (!SHOW_BUILDINGS) {
+        this.map.setLayoutProperty('building-footprints', 'visibility', 'none');
+        console.log('[MapView] Building footprints hidden');
+      }
+      
+      // Hide 3D buildings if disabled OR in top-down mode (orthographic view)
+      if (!SHOW_BUILDINGS_3D || GTA1_STYLE_TOP_DOWN) {
+        this.map.setLayoutProperty('building-3d', 'visibility', 'none');
+        if (!SHOW_BUILDINGS_3D) {
+          console.log('[MapView] 3D building extrusions hidden');
+        } else {
+          console.log('[MapView] Hidden 3D building layer for orthographic view');
+        }
       }
       
       // Initialize all specialized sub-components (they need the map to be loaded)

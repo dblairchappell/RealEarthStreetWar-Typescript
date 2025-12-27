@@ -266,8 +266,8 @@
       "source-layer": "building",
       "minzoom": 13,
       "paint": {
-        "fill-color": "#e0e0e0",
-        "fill-opacity": 0.3
+        "fill-color": "#9e9d9d",
+        "fill-opacity": 1.0
       }
     },
     {

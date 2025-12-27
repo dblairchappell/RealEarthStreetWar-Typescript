@@ -23,6 +23,10 @@ export const SHOW_PERF_OVERLAY = true;
 // Toggle collision bounds visualization (shows collision circles around NPCs)
 export const SHOW_COLLISION_BOUNDS = false; // Set to true to enable
 
+// Toggle building layer visibility
+export const SHOW_BUILDINGS = true; // Set to false to hide building footprints (outlines)
+export const SHOW_BUILDINGS_3D = false; // Set to false to hide 3D building extrusions
+
 // Network configuration
 // Vite uses import.meta.env instead of process.env in the browser
 export const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'ws://localhost:8080';
