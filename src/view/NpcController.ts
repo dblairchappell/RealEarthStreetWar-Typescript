@@ -65,10 +65,8 @@ export default class NpcController implements Renderable, Updatable {
   // Finds entities that have NpcTag, Position, and Velocity components
   private query = defineQuery([NpcTag, Position, Velocity]);
 
-  // Position history for interpolation
-  // Format: Float32Array with [lng0, lat0, lng1, lat1, ...] (2 floats per NPC)
-  private prevPositions: Float32Array | null = null; // Previous fixed-timestep snapshot
-  private currentPositions: Float32Array | null = null; // Current fixed-timestep snapshot
+  // Position history removed - reading directly from ECS each frame (like Canvas path)
+  // This avoids interpolation issues when server snapshots arrive infrequently
   
   /** Currently selected NPC entity ID (for red outline) */
   private selectedNpcEid: number | null = null;
@@ -236,36 +234,19 @@ export default class NpcController implements Renderable, Updatable {
   }
 
   /**
-   * Renderable implementation – called each frame by GameLoop for smooth interpolation.
+   * Renderable implementation – called each frame by GameLoop.
    * 
-   * Process:
-   * 1. Retrieve latest NPC positions from ECS world
-   * 2. Update position history (previous → current)
-   * 3. Interpolate between previous and current positions in lat/lng space
-   * 4. Project interpolated coordinates to screen space
-   * 5. Send screen positions to rendering layer
+   * Reads NPC positions directly from ECS (like Canvas path) and projects to screen coordinates.
+   * No interpolation - matches Canvas behavior for consistency.
    * 
-   * Interpolation happens in lat/lng space (before projection) for smoother movement,
-   * especially when zooming or near map edges where projection distortion occurs.
-   * 
-   * @param alpha - Interpolation factor (0.0 to 1.0) representing position between
-   *                previous fixed update and current fixed update
+   * @param alpha - Interpolation factor (unused - reading directly from ECS)
    */
   render(alpha: number): void {
-    /* ---------------- Step 1: Get Latest Position Data ---------------- */
+    /* ---------------- Step 1: Get NPC Positions from ECS ---------------- */
     
-    // Query ECS world directly for NPC positions
-    // Uses bitecs query to find all entities with NpcTag and Position components
+    // Query ECS world directly for NPC positions (same as Canvas path)
     const ents = this.query(world);
     const count = ents.length;
-    const latestLngLat = new Float32Array(count * 2);
-    
-    // Extract positions from ECS components
-    for (let i = 0; i < count; i++) {
-      const eid = ents[i]; // Entity ID
-      latestLngLat[i * 2] = Position.x[eid];     // lng (stored in Position.x)
-      latestLngLat[i * 2 + 1] = Position.y[eid]; // lat (stored in Position.y)
-    }
 
     // Early exit if no NPCs to render
     if (count === 0) {
@@ -274,73 +255,38 @@ export default class NpcController implements Renderable, Updatable {
       return;
     }
 
-    /* ---------------- Step 2: Manage Position History for Interpolation ---------------- */
+    /* ---------------- Step 2: Project to Screen Coordinates ---------------- */
     
-    // Position history is needed to interpolate between fixed-timestep snapshots
-    // We maintain two snapshots: previous (from last fixed update) and current (from this fixed update)
-    
-    if (!this.currentPositions || this.currentPositions.length !== latestLngLat.length) {
-      // First frame, or number of NPCs changed (spawned/despawned)
-      // Initialize both snapshots with current data (no interpolation on first frame)
-      this.currentPositions = new Float32Array(latestLngLat);
-      this.prevPositions = new Float32Array(latestLngLat);
-    } else if (this.currentPositions && this.prevPositions) {
-      // Normal frame: shift history forward
-      // Previous snapshot becomes the old current snapshot
-      this.prevPositions.set(this.currentPositions);
-      // Current snapshot gets updated with latest authoritative data
-      this.currentPositions.set(latestLngLat);
-    }
-
-    /* ---------------- Step 3: Interpolate and Project to Screen Coordinates ---------------- */
-    
-    // Interpolate between previous and current positions in lat/lng space
-    // This provides smoother movement than interpolating in screen space, especially
-    // when zooming or when NPCs are near map edges (where projection distortion occurs)
-    // 
     // Build vertex buffer with animation data
     // Format: [x, y, frameIndex, animType] per NPC (4 floats per NPC)
     const vertexData = new Float32Array(count * 4);
     
-    if (this.prevPositions && this.currentPositions) {
-      for (let i = 0; i < count; i++) {
-        const eid = ents[i]; // Entity ID for this NPC
-        
-        // Get previous position (from last fixed update)
-        const prevLng = this.prevPositions[i * 2];
-        const prevLat = this.prevPositions[i * 2 + 1];
-
-        // Get current position (from this fixed update)
-        const currentLng = this.currentPositions[i * 2];
-        const currentLat = this.currentPositions[i * 2 + 1];
-
-        // Linear interpolation in lat/lng space
-        // alpha = 0: use previous position
-        // alpha = 1: use current position
-        // alpha = 0.5: halfway between (typical case)
-        const lng = prevLng + (currentLng - prevLng) * alpha;
-        const lat = prevLat + (currentLat - prevLat) * alpha;
-        
-        // Project interpolated lat/lng to screen coordinates
-        // map.project() handles projection math (Mercator, globe, etc.)
-        const screenPos = this.map.project({ lng, lat });
-        
-        // Round to nearest pixel for crisp rendering
-        // WebGL point sprites are centered on the point position
-        const screenX = Math.round(screenPos.x);
-        const screenY = Math.round(screenPos.y);
-        
-        // Get animation state for this NPC
-        const animState = this.npcAnimationState.get(eid);
-        const frame = animState ? animState.currentFrame : 0;
-        const animType = animState ? animState.animType : 'idle';
-        
-        // Store vertex data: [x, y, frameIndex, animType]
-        vertexData[i * 4] = screenX;
-        vertexData[i * 4 + 1] = screenY;
-        vertexData[i * 4 + 2] = frame;
-        vertexData[i * 4 + 3] = this.animTypeToFloat(animType);
-      }
+    for (let i = 0; i < count; i++) {
+      const eid = ents[i]; // Entity ID for this NPC
+      
+      // Read position directly from ECS (no interpolation, like Canvas path)
+      const lng = Position.x[eid];
+      const lat = Position.y[eid];
+      
+      // Project lat/lng to screen coordinates
+      // map.project() handles projection math (Mercator, globe, etc.)
+      const screenPos = this.map.project({ lng, lat });
+      
+      // Round to nearest pixel for crisp rendering
+      // WebGL point sprites are centered on the point position
+      const screenX = Math.round(screenPos.x);
+      const screenY = Math.round(screenPos.y);
+      
+      // Get animation state for this NPC
+      const animState = this.npcAnimationState.get(eid);
+      const frame = animState ? animState.currentFrame : 0;
+      const animType = animState ? animState.animType : 'idle';
+      
+      // Store vertex data: [x, y, frameIndex, animType]
+      vertexData[i * 4] = screenX;
+      vertexData[i * 4 + 1] = screenY;
+      vertexData[i * 4 + 2] = frame;
+      vertexData[i * 4 + 3] = this.animTypeToFloat(animType);
     }
 
     /* ---------------- Step 4: Send Data to Rendering Layer ---------------- */
