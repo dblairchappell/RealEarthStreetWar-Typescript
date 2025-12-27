@@ -201,7 +201,8 @@ export default class CharacterView implements Updatable {
    */
   public createPlayerCharacter(coords: { lng: number; lat: number }, rotation: number = 0): void {
     // Slice stack parameters for pseudo-3D effect
-    const SLICE_COUNT = GTA1_STYLE_TOP_DOWN ? 1 : 3;   // Number of layers to stack (1 = flat, 3 = 3D effect)
+    //const SLICE_COUNT = GTA1_STYLE_TOP_DOWN ? 1 : 3;   // Number of layers to stack (1 = flat, 3 = 3D effect)
+    const SLICE_COUNT = 1;
     const SLICE_GAP   = GTA1_STYLE_TOP_DOWN ? 0 : 1;    // Z-offset gap between slices in pixels
 
     // Create root container element
