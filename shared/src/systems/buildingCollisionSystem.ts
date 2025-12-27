@@ -128,7 +128,6 @@ export class BuildingCollider {
       
       // Check if entity's collision circle overlaps building edge
       // Find distance from entity to nearest point on building boundary
-      let minDistToEdge = Infinity;
       for (let i = 0; i < coords.length - 1; i++) {
         const p1 = coords[i];
         const p2 = coords[i + 1];
@@ -147,14 +146,10 @@ export class BuildingCollider {
         const projLat = p1[1] + t * segDy;
         const dist = Math.sqrt((projLng - lng) ** 2 + (projLat - lat) ** 2);
         
-        if (dist < minDistToEdge) {
-          minDistToEdge = dist;
+        // Early exit: if distance to edge is less than collision radius, circle overlaps polygon
+        if (dist < CHARACTER_RADIUS_DEG) {
+          return building;
         }
-      }
-      
-      // If distance to edge is less than collision radius, circle overlaps polygon
-      if (minDistToEdge < CHARACTER_RADIUS_DEG) {
-        return building;
       }
     }
 
