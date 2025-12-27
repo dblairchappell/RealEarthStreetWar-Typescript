@@ -9,7 +9,7 @@ A top-down GTA1-style game prototype set on a real-world map. Players explore an
 - **Player Movement**: WASD-style character controls with smooth movement and sprite animations
 - **NPC Simulation**: Server-controlled NPCs that walk around the map with collision detection
 - **Possession System**: Click on NPCs to take control of them - your current body becomes an NPC
-- **Entity Interaction**: Click on entities to view info and possess nearby NPCs (within 50m range)
+- **Entity Interaction**: Click on entities to view info and possess nearby NPCs (within 5m range)
 - **Visual Feedback**: Green outline for possessed body, red outline for selected NPCs
 - **Time Progression**: In-game time advances at 60x speed (1 game minute = 1 real second) with timezone-aware display (uses `tz-lookup` based on lat/lng)
 - **Multiplayer-Ready**: WebSocket-based client-server architecture (60Hz state broadcasts)
@@ -54,6 +54,7 @@ npm install
 ### Running the Game
 
 **Terminal 1 - Start the server:**
+
 ```bash
 cd server
 npm run dev
@@ -62,6 +63,7 @@ npm run dev
 The server will start on `ws://localhost:8080` (or the port specified in `PORT` environment variable).
 
 **Terminal 2 - Start the client:**
+
 ```bash
 # From project root
 npm run dev
@@ -173,6 +175,7 @@ npm install <package> --workspace=shared
 ## 🎯 Current Status
 
 **Implemented:**
+
 - ✅ Server-authoritative game state
 - ✅ Player movement synchronization (60Hz server, 60Hz client broadcasts)
 - ✅ NPC spawning and simulation with collision detection
@@ -192,6 +195,7 @@ npm install <package> --workspace=shared
 - ✅ Server config hot-reload
 
 **Planned:**
+
 - 🔲 Gameplay mechanics (HQ placement, territory control)
 - 🔲 Resource management
 - 🔲 Combat system
@@ -236,16 +240,19 @@ export const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'ws://localhost:808
 ## 🐛 Troubleshooting
 
 **Server won't start:**
+
 - Check if port 8080 is available
 - Verify `npm install` completed successfully
 - Check server logs for errors
 
 **Client can't connect:**
+
 - Ensure server is running first
 - Check `SERVER_URL` in `src/config.ts` matches server port
 - Check browser console for WebSocket errors
 
 **Type errors:**
+
 - Run `npm install` to ensure workspace linking is correct
 - Verify TypeScript path mappings in `tsconfig.json` and `server/tsconfig.json`
 

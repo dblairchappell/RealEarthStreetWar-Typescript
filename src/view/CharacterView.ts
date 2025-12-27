@@ -68,7 +68,7 @@ export default class CharacterView implements Updatable {
   // Character state
   private playerPosition: { lng: number; lat: number } | null = null; // Current position in lat/lng
   private playerRotation = 0; // Current rotation in radians (absolute, not relative to camera)
-  private readonly playerBaseSize = 0.07; // Base size multiplier for zoom-based scaling
+  private readonly playerBaseSize = 0.06; // Base size multiplier for zoom-based scaling
   private cameraPitch = 0; // Camera pitch angle (0 = horizontal, 90 = straight down)
   private cameraBearing = 0; // Camera rotation angle (for calculating relative character direction)
 

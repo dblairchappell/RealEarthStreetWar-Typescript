@@ -59,7 +59,7 @@ export default class NpcController implements Renderable, Updatable {
   private npcLayer: NpcInstancedLayer;
   
   // Sprite size constants (must match NpcInstancedLayer)
-  private static readonly BASE_SIZE_PX = 72;
+  private static readonly BASE_SIZE_PX = 70;
   
   // ECS query for finding all NPC entities
   // Finds entities that have NpcTag, Position, and Velocity components

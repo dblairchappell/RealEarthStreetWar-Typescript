@@ -1,7 +1,7 @@
 {
   "name": "realearthstreetwar",
   "version": "1.0.0",
-  "description": "This project is a prototype for a massively multiplayer online strategy game inspired by the classic board game *Risk*. The game world is a 1:1 representation of the real Earth, where players, organized into gangs or factions, fight to capture and control real-world streets and territories.",
+  "description": "This project is a prototype for a massively multiplayer online strategy game with a GTA1-style top-down view. The game world is a 1:1 representation of the real Earth, where players seek to convince others players and NPCs to perform tasks for them - joinging a gang, paying protection money, being an employee, joining your cult. Anything is possible. Or you canjust go on a rampage and destroy everything in sight.",
   "main": "script.js",
   "workspaces": [
     "shared",

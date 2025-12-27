@@ -25,7 +25,7 @@ export const SHOW_COLLISION_BOUNDS = false; // Set to true to enable
 
 // Toggle building layer visibility
 export const SHOW_BUILDINGS = true; // Set to false to hide building footprints (outlines)
-export const SHOW_BUILDINGS_3D = false; // Set to false to hide 3D building extrusions
+export const SHOW_BUILDINGS_3D = true; // Set to false to hide 3D building extrusions
 
 // Network configuration
 // Vite uses import.meta.env instead of process.env in the browser

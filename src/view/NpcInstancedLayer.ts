@@ -134,7 +134,7 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
   private entityIdToIndex: Map<number, number> = new Map();
 
   // Base sprite size at reference zoom level (used for zoom-based scaling)
-  private static readonly BASE_SIZE_PX = 72;
+  private static readonly BASE_SIZE_PX = 70;
 
   /**
    * Called by NpcController each frame to provide updated screen-space positions for NPCs.

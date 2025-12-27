@@ -217,7 +217,7 @@ export default class MapView implements Updatable, Renderable {
       }
       
       // Hide 3D buildings if disabled OR in top-down mode (orthographic view)
-      if (!SHOW_BUILDINGS_3D || GTA1_STYLE_TOP_DOWN) {
+      if (!SHOW_BUILDINGS_3D) {
         this.map.setLayoutProperty('building-3d', 'visibility', 'none');
         if (!SHOW_BUILDINGS_3D) {
           console.log('[MapView] 3D building extrusions hidden');
