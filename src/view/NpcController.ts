@@ -45,11 +45,14 @@ import { NpcTag } from '@shared/realearthstreetwar';
 import { defineQuery } from "bitecs";
 import NpcInstancedLayer from "./NpcInstancedLayer";
 import maplibregl from "maplibre-gl";
+import { calculateRotationFromStored } from "./utils/spriteUtils";
 
 /**
  * Controller that manages NPC position data and coordinates with the rendering layer.
  * Handles interpolation, coordinate projection, and data preparation for WebGL rendering.
  * Also manages animation state for sprite sheet animations.
+ * 
+ * Uses stored rotation from ECS (Rotation.angle) - consistent with player and Canvas path.
  */
 export default class NpcController implements Renderable, Updatable {
   // Map instance for coordinate projection
@@ -277,27 +280,16 @@ export default class NpcController implements Renderable, Updatable {
       const screenX = Math.round(screenPos.x);
       const screenY = Math.round(screenPos.y);
       
-      // Get velocity to determine animation type and rotation
+      // Get velocity to determine animation type
       const velocityX = Velocity.x[eid] || 0;
       const velocityY = Velocity.y[eid] || 0;
-      const speed = Math.sqrt(velocityX * velocityX + velocityY * velocityY);
       
-      // Calculate rotation (same logic as Canvas path)
-      let rotation: number;
-      if (speed > this.velocityThreshold) {
-        // Moving: calculate rotation from velocity
-        const baseRotation = -(Math.atan2(velocityY, velocityX) - Math.PI / 2);
-        // Account for camera bearing (same as player sprite does)
-        const cameraBearingRad = (this.map.getBearing() * Math.PI) / 180;
-        rotation = baseRotation - cameraBearingRad;
-      } else {
-        // Idle: use stored rotation
-        const rotationDeg = Rotation.angle[eid] || 0;
-        const baseRotation = -((rotationDeg * Math.PI) / 180 - Math.PI / 2);
-        // Account for camera bearing
-        const cameraBearingRad = (this.map.getBearing() * Math.PI) / 180;
-        rotation = baseRotation - cameraBearingRad;
-      }
+      // Use stored rotation from ECS (consistent with player and Canvas path)
+      // Rotation.angle is stored in degrees (game system: 0° = north)
+      // This allows NPCs to face a direction independently of movement,
+      // supporting more complex AI behaviors and consistent idle facing
+      const rotationDeg = Rotation.angle[eid] || 0;
+      const rotation = calculateRotationFromStored(rotationDeg, this.map.getBearing());
       
       // Get animation state for this NPC
       const animState = this.npcAnimationState.get(eid);

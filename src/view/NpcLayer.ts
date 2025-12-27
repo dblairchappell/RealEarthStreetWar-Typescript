@@ -10,6 +10,7 @@
  * 
  * - Creates an HTML5 Canvas element positioned absolutely over the map
  * - Renders NPCs as sprites (reusing player sprite) with rotation support
+ * - Uses stored rotation from ECS (Rotation.angle) - consistent with player
  * - Uses map.project() to convert lat/lng to screen coordinates (works with any projection)
  * - Queries ECS world directly for NPC positions
  * - Skips rendering if sprite fails to load
@@ -39,6 +40,7 @@ import { world } from "../ecs/world";
 import { Position, Rotation, Velocity } from "../ecs/world";
 import { NpcTag, CHARACTER_RADIUS_DEG } from "@shared/realearthstreetwar";
 import { SHOW_COLLISION_BOUNDS } from "../config";
+import { calculateRotationFromStored } from "./utils/spriteUtils";
 
 /**
  * Canvas-based NPC rendering layer.
@@ -475,56 +477,17 @@ export default class NpcLayer implements Renderable, Updatable {
         const lng = Position.x[eid];
         const lat = Position.y[eid];
         
-        // Get velocity to determine animation type and rotation
+        // Get velocity to determine animation type
         const velocityX = Velocity.x[eid] || 0;
         const velocityY = Velocity.y[eid] || 0;
         const animType = this.determineAnimationType(velocityX, velocityY);
         
-        // Calculate rotation from velocity direction (ensures NPC faces movement direction)
-        // 
-        // Coordinate system analysis:
-        // - Player movement: rotation 0° = north (deltaLat = cos(0) = 1, deltaLng = sin(0) = 0)
-        // - Velocity (0, 1) = moving north → atan2(velocityY, velocityX) = atan2(1, 0) = π/2 radians
-        // - Canvas rotate(): rotates clockwise from positive X axis (east)
-        //   - rotate(0) = facing east
-        //   - rotate(π/2) = facing south (clockwise)
-        //   - rotate(-π/2) = facing north (counter-clockwise)
-        //   - rotate(π) = facing west
-        // - To match player system (0° = north), we need: canvasRotation = gameRotation - π/2
-        // - But atan2 already gives us the angle from east, so we need to subtract π/2 to get north=0
-        // - However, if sprite faces east by default, no offset needed
-        // - If sprite faces north by default, need -π/2 offset
-        // 
-        // Testing: Try NO offset first (assumes sprite faces east like Canvas default)
-        let rotation: number;
-        const speed = Math.sqrt(velocityX * velocityX + velocityY * velocityY);
-        if (speed > this.velocityThreshold) {
-          // Calculate rotation from velocity to match player's coordinate system
-          // Player system: rotation 0° = north (deltaLat = cos(0) = 1, deltaLng = sin(0) = 0)
-          // When moving north: velocityY = 1, velocityX = 0
-          // atan2(1, 0) = π/2 radians = 90°, but player rotation for north = 0°
-          // So we need: rotation = atan2(velocityY, velocityX) - π/2
-          // Canvas rotate() rotates clockwise, CSS rotateZ() rotates counter-clockwise
-          // So we need to negate to match: rotation = -(atan2(velocityY, velocityX) - π/2)
-          const baseRotation = -(Math.atan2(velocityY, velocityX) - Math.PI / 2);
-          
-          // Account for camera bearing (same as player sprite does)
-          // Player uses: rotateZ(${this.playerRotation - this.cameraBearing}deg)
-          // So we subtract camera bearing from rotation (convert bearing from degrees to radians)
-          const cameraBearingRad = (this.map.getBearing() * Math.PI) / 180;
-          rotation = baseRotation - cameraBearingRad;
-        } else {
-          // Idle: use stored rotation (stored in degrees, convert to radians)
-          // Rotation.angle uses game system (0° = north), same as player
-          // Convert from game system (0° = north) to Canvas system (0 = east)
-          // Same conversion as moving NPCs: subtract π/2 and negate
-          const rotationDeg = Rotation.angle[eid] || 0;
-          const baseRotation = -((rotationDeg * Math.PI) / 180 - Math.PI / 2);
-          
-          // Account for camera bearing (same as player sprite does)
-          const cameraBearingRad = (this.map.getBearing() * Math.PI) / 180;
-          rotation = baseRotation - cameraBearingRad;
-        }
+        // Use stored rotation from ECS (consistent with player)
+        // Rotation.angle is stored in degrees (game system: 0° = north)
+        // This allows NPCs to face a direction independently of movement,
+        // supporting more complex AI behaviors and consistent idle facing
+        const rotationDeg = Rotation.angle[eid] || 0;
+        const rotation = calculateRotationFromStored(rotationDeg, this.map.getBearing());
         
         // Project lat/lng to screen coordinates
         const p = this.map.project({ lng, lat });
