@@ -9,7 +9,10 @@ export const GTA1_STYLE_TOP_DOWN = true;   // ← flip to false for 3-D mode
 // - 'canvas': Canvas-based rendering (consistent with NPC rendering)
 //   - Pros: Unified rendering path, easier to maintain, consistent visuals
 //   - Cons: Slightly more complex, no CSS effects
-export const PLAYER_RENDER_PATH: 'dom' | 'canvas' = 'canvas';
+// - 'webgl': WebGL-based rendering (same pipeline as NPCs, best performance)
+//   - Pros: Same rendering pipeline as NPCs, eliminates sync issues, best performance
+//   - Cons: Requires Mercator projection, more complex
+export const PLAYER_RENDER_PATH: 'dom' | 'canvas' | 'webgl' = 'webgl';
 
 // NPC rendering path selection
 // - 'webgl': High-performance WebGL instanced rendering (best for Mercator projection)

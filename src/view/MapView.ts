@@ -41,6 +41,7 @@
 // view/MapView.ts
 import CharacterView from "./CharacterView";
 import PlayerLayer from "./PlayerLayer";
+import PlayerController from "./PlayerController";
 import InputManager from "../input/InputManager";
 import { IInputService } from "../input/IInputService";
 import { InputState } from "@shared/realearthstreetwar";
@@ -67,6 +68,7 @@ export default class MapView implements Updatable, Renderable {
   private camera: CameraController | null = null; // Handles camera following, zoom, and rotation
   private characterView: CharacterView | null = null; // Renders and animates the player character sprite (DOM path)
   private playerLayer: PlayerLayer | null = null; // Renders and animates the player character sprite (Canvas path)
+  private playerController: PlayerController | null = null; // Manages player rendering for WebGL path
   private entityClickHandler: EntityClickHandler | null = null; // Handles clicking on entities
   private npcLayer: any = null; // NPC rendering layer (NpcLayer or NpcInstancedLayer)
   private npcController: any = null; // NPC controller (for WebGL path)
@@ -289,6 +291,9 @@ export default class MapView implements Updatable, Renderable {
     if (this.playerLayer) {
       this.playerLayer.updateInputState(input); // Canvas path
     }
+    if (this.playerController) {
+      this.playerController.updateInputState(input); // WebGL path
+    }
     
     // Update movement state (triggers animation switching)
     this.updateMovementState();
@@ -354,6 +359,7 @@ export default class MapView implements Updatable, Renderable {
         this.playerLayer.setCameraBearing(bearing); // Camera rotation (Canvas path)
         this.playerLayer.redraw(); // Trigger redraw (Canvas path)
       }
+      // WebGL path doesn't need camera updates - it reads bearing directly in render()
     });
 
     // Detect manual camera interactions to disable auto-follow
@@ -438,6 +444,10 @@ export default class MapView implements Updatable, Renderable {
       this.playerLayer.updatePlayerPosition(coords, rotation);
       this.playerPosition = this.playerLayer.getPlayerPosition();
       this.playerRotation = this.playerLayer.getPlayerRotation();
+    } else if (this.playerController) {
+      // WebGL path - player position is read from ECS, no initialization needed
+      this.playerPosition = coords;
+      this.playerRotation = rotation;
     } else {
       return; // No rendering layer initialized
     }
@@ -501,6 +511,10 @@ export default class MapView implements Updatable, Renderable {
       this.playerLayer.updatePlayerPosition(coords, rotation);
       this.playerPosition = this.playerLayer.getPlayerPosition();
       this.playerRotation = this.playerLayer.getPlayerRotation();
+    } else if (this.playerController) {
+      // WebGL path - player position is read from ECS in render(), just store for camera
+      this.playerPosition = coords;
+      this.playerRotation = rotation;
     } else {
       return; // No rendering layer initialized
     }
@@ -531,7 +545,7 @@ export default class MapView implements Updatable, Renderable {
     if (this.characterView) {
       this.characterView.updateMovementState(); // DOM path
     }
-    // Canvas path handles animation switching automatically in update() based on input state
+    // Canvas and WebGL paths handle animation switching automatically in update() based on input state
   }
 
   /**
@@ -555,6 +569,9 @@ export default class MapView implements Updatable, Renderable {
     }
     if (this.playerLayer) {
       this.playerLayer.update(deltaMs); // Canvas path
+    }
+    if (this.playerController) {
+      this.playerController.update(deltaMs); // WebGL path
     }
 
     // If player entity ID is set, read position from ECS
@@ -582,6 +599,7 @@ export default class MapView implements Updatable, Renderable {
       if (this.playerLayer) {
         this.playerLayer.setCameraBearing(bearing); // Canvas path
       }
+      // WebGL path reads bearing directly in render(), no update needed
 
       // Update player position FIRST so camera.update() uses latest position for zoom/rotation
       // Pass updateCamera=true so camera follows authoritative position (not interpolated)
@@ -632,6 +650,7 @@ export default class MapView implements Updatable, Renderable {
     if (this.playerLayer) {
       this.playerLayer.setCameraBearing(bearing); // Canvas path
     }
+    // WebGL path reads bearing directly in render(), no update needed
 
     // Interpolate between previous and current position
     // This provides smooth rendering even if frame rate doesn't match fixed timestep
@@ -641,7 +660,16 @@ export default class MapView implements Updatable, Renderable {
 
     // Update sprite with interpolated position (smooth visual update)
     // Don't update camera here - camera follows authoritative position from update()
-    this.updatePlayerPosition({ lng, lat }, rot, false);
+    // WebGL path reads position directly from ECS in PlayerController.render(), skip interpolation
+    if (this.playerController) {
+      // WebGL path: PlayerController.render() reads directly from ECS, no interpolation needed
+      // Just update stored position for camera tracking
+      this.playerPosition = { lng, lat };
+      this.playerRotation = rot;
+    } else {
+      // DOM/Canvas paths: use interpolated position
+      this.updatePlayerPosition({ lng, lat }, rot, false);
+    }
 
     // Store current authoritative position as previous for next frame interpolation
     // This ensures we always interpolate between two consecutive fixed-timestep positions
@@ -661,6 +689,9 @@ export default class MapView implements Updatable, Renderable {
     // Also set in player rendering layer
     if (this.playerLayer) {
       this.playerLayer.setPlayerEntity(id);
+    }
+    if (this.playerController) {
+      this.playerController.setPlayerEntity(id);
     }
   }
 
@@ -700,11 +731,23 @@ export default class MapView implements Updatable, Renderable {
   }
 
   /**
+   * Get player controller (for WebGL path)
+   */
+  public getPlayerController(): PlayerController | null {
+    return this.playerController;
+  }
+
+  /**
    * Set NPC rendering layer references (called from main.ts after layers are created)
    */
   public setNpcRenderingLayers(layer: any, controller: any): void {
     this.npcLayer = layer;
     this.npcController = controller;
+    
+    // Initialize PlayerController for WebGL path if needed
+    if (PLAYER_RENDER_PATH === 'webgl' && layer && !this.playerController) {
+      this.playerController = new PlayerController(this.map, layer);
+    }
   }
 
   /**

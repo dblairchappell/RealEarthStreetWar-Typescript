@@ -231,11 +231,18 @@ map.on('load', () => {
      * Register PlayerLayer for canvas rendering path (if used).
      * PlayerLayer implements Updatable and Renderable, so it needs game loop registration.
      * CharacterView (DOM path) is updated through MapView.update(), so no separate registration needed.
+     * PlayerController (WebGL path) also needs game loop registration.
      */
     const playerLayer = view.getPlayerLayer();
     if (playerLayer) {
         loop.add(playerLayer); // Register as Updatable for animation frame advancement
         loop.addRenderable(playerLayer); // Register as Renderable for rendering
+    }
+    
+    const playerController = view.getPlayerController();
+    if (playerController) {
+        loop.add(playerController); // Register as Updatable for animation frame advancement
+        loop.addRenderable(playerController); // Register as Renderable for rendering
     }
 
     /**

@@ -86,6 +86,8 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
   private uFrameCountRunningLocation!: WebGLUniformLocation; // Uniform for running frame count
   private uPointSizeLocation!: WebGLUniformLocation; // Uniform for point sprite size in pixels
   private uViewportSizeLocation!: WebGLUniformLocation; // Uniform for viewport dimensions (width, height)
+  private uOutlineModeLocation!: WebGLUniformLocation; // Uniform for outline rendering mode (0 = normal, 1 = outline)
+  private uOutlineColorLocation!: WebGLUniformLocation; // Uniform for outline color (rgba)
 
   // Sprite texture management - sprite sheets for animation
   private textures: {
@@ -119,10 +121,15 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
   };
 
   // Vertex data received from NpcController (updated each frame)
-  // Format: Float32Array with [x0, y0, frame0, animType0, x1, y1, frame1, animType1, ...]
-  // 4 floats per NPC: x, y, frameIndex, animType
+  // Format: Float32Array with [x0, y0, frame0, animType0, rotation0, x1, y1, frame1, animType1, rotation1, ...]
+  // 5 floats per NPC: x, y, frameIndex, animType, rotation
   private vertexData: Float32Array | null = null;
-  private npcCount = 0; // Number of NPCs to render (vertexData.length / 4)
+  private npcCount = 0; // Number of NPCs to render (vertexData.length / 5)
+  
+  // Player vertex data (separate for outline rendering)
+  // Format: Float32Array with [x, y, frameIndex, animType, rotation] (5 floats)
+  private playerVertexData: Float32Array | null = null;
+  private hasPlayer = false; // Whether player data is set
   
   // Legacy position data (for backward compatibility during transition)
   private positionsToRender: Float32Array | null = null;
@@ -187,6 +194,17 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
   public setVertexData(data: Float32Array, count: number): void {
     this.vertexData = data;
     this.npcCount = count;
+  }
+
+  /**
+   * Called by PlayerController each frame to provide player vertex data.
+   * Player is rendered separately with green outline.
+   * 
+   * @param data - Float32Array with [x, y, frameIndex, animType, rotation] (5 floats)
+   */
+  public setPlayerVertexData(data: Float32Array | null): void {
+    this.playerVertexData = data;
+    this.hasPlayer = data !== null;
   }
 
   /**
@@ -271,6 +289,7 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
 
     // Fragment shader: Samples sprite sheet texture based on animation type and frame
     // Uses gl_PointCoord (built-in) which provides UV coordinates for the point sprite
+    // Supports outline mode for player rendering (green outline)
     const fragSrc = `
     precision highp float;
     uniform sampler2D u_texIdle;      // Idle sprite sheet
@@ -279,6 +298,8 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
     uniform float u_frameCountIdle;   // Number of frames in idle sheet (31)
     uniform float u_frameCountWalking; // Number of frames in walking sheet (31)
     uniform float u_frameCountRunning; // Number of frames in running sheet (23)
+    uniform float u_outlineMode;      // Outline mode: 0.0 = normal, 1.0 = outline
+    uniform vec4 u_outlineColor;      // Outline color (rgba)
     
     varying float v_frame;      // Frame index from vertex shader
     varying float v_animType;   // Animation type from vertex shader
@@ -334,8 +355,18 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
         color = texture2D(u_texRunning, frameUV);
       }
       
-      if (color.a < 0.1) discard; // Discard transparent pixels (optimization)
-      gl_FragColor = color; // Output final color
+      if (u_outlineMode > 0.5) {
+        // Outline mode: render as green glow/outline
+        // Use distance from center to create circular outline
+        float dist = distance(gl_PointCoord.xy, center);
+        // Create smooth falloff for outline (glow effect)
+        float outlineAlpha = smoothstep(0.3, 0.5, dist) * (1.0 - smoothstep(0.5, 0.7, dist));
+        gl_FragColor = vec4(u_outlineColor.rgb, outlineAlpha * u_outlineColor.a);
+      } else {
+        // Normal mode: render sprite
+        if (color.a < 0.1) discard; // Discard transparent pixels (optimization)
+        gl_FragColor = color; // Output final color
+      }
     }`;
 
     // Compile and link shader program
@@ -362,6 +393,8 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
     this.uFrameCountRunningLocation = this.gl.getUniformLocation(this.program, 'u_frameCountRunning')!;
     this.uPointSizeLocation = this.gl.getUniformLocation(this.program, 'u_pointSize')!;
     this.uViewportSizeLocation = this.gl.getUniformLocation(this.program, 'u_viewportSize')!;
+    this.uOutlineModeLocation = this.gl.getUniformLocation(this.program, 'u_outlineMode')!;
+    this.uOutlineColorLocation = this.gl.getUniformLocation(this.program, 'u_outlineColor')!;
 
     // Create GPU buffer for vertex data (will be updated each frame)
     this.vertexBuffer = this.gl.createBuffer()!;
@@ -426,39 +459,18 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
    * @param matrix - Transformation matrix (unused - we use pre-calculated screen coords)
    */
   render(gl: WebGLRenderingContext, matrix: any): void {
-    // Early exit if not ready to render
-    if (!this.texturesLoaded.idle || !this.texturesLoaded.walking || !this.texturesLoaded.running || 
-        !this.vertexData || this.npcCount === 0) {
+    const g = this.gl;
+    
+    // Early exit if textures not loaded
+    if (!this.texturesLoaded.idle || !this.texturesLoaded.walking || !this.texturesLoaded.running) {
       return;
     }
-    const g = this.gl;
 
     // Activate our shader program
     g.useProgram(this.program);
 
-    // Update GPU buffer with latest vertex data
-    // Uses dynamic buffer allocation: only reallocates if buffer is too small
-    g.bindBuffer(g.ARRAY_BUFFER, this.vertexBuffer);
-    const neededBytes = this.vertexData.byteLength;
-    const currentSize = g.getBufferParameter(g.ARRAY_BUFFER, g.BUFFER_SIZE) ?? 0;
-    if (neededBytes > currentSize) {
-      // Buffer too small - reallocate with new size
-      g.bufferData(g.ARRAY_BUFFER, neededBytes, g.DYNAMIC_DRAW);
-    }
-    // Upload vertex data to GPU (only updates, doesn't reallocate if size is same)
-    g.bufferSubData(g.ARRAY_BUFFER, 0, this.vertexData);
-    
-    // Configure vertex attributes: 5 floats per NPC (x, y, frame, animType, rotation)
-    // Stride = 20 bytes (5 floats * 4 bytes each)
-    const stride = 20; // bytes
-    g.vertexAttribPointer(this.aPosLocation, 2, g.FLOAT, false, stride, 0); // Position: offset 0
-    g.vertexAttribPointer(this.aFrameLocation, 1, g.FLOAT, false, stride, 8); // Frame: offset 8 bytes (after x, y)
-    g.vertexAttribPointer(this.aAnimTypeLocation, 1, g.FLOAT, false, stride, 12); // AnimType: offset 12 bytes
-    g.vertexAttribPointer(this.aRotationLocation, 1, g.FLOAT, false, stride, 16); // Rotation: offset 16 bytes
-    
     // Set viewport size uniform (needed for screen-to-clip-space conversion)
     // IMPORTANT: map.project() returns CSS pixels, so we must use CSS pixel dimensions
-    // g.canvas.width/height are physical pixels (scaled by devicePixelRatio), which would cause incorrect positioning
     const container = this.map.getContainer();
     const cssWidth = container.clientWidth;
     const cssHeight = container.clientHeight;
@@ -483,28 +495,90 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
     g.uniform1i(this.uTexRunningLocation, 2);
 
     // Calculate point size based on zoom level
-    // Use same calculation as Canvas path, then multiply by devicePixelRatio for WebGL physical pixels
-    // Canvas uses CSS pixels and handles dpr via transform, WebGL uses physical pixels directly
     const zoom = this.map.getZoom();
     const sizeCssPx = this.calculatePointSizePx(zoom); // Size in CSS pixels (matches Canvas)
     const sizePx = sizeCssPx * (window.devicePixelRatio || 1); // Convert to physical pixels for WebGL
-    g.uniform1f(this.uPointSizeLocation, sizePx);
 
     // Enable alpha blending for transparent sprites
     g.enable(g.BLEND);
     g.blendFunc(g.SRC_ALPHA, g.ONE_MINUS_SRC_ALPHA); // Standard alpha blending
-    
-    // Enable vertex attributes and draw all NPCs as point sprites
-    // This single draw call renders ALL NPCs (GPU instancing via POINTS primitive)
-    g.enableVertexAttribArray(this.aPosLocation);
-    g.enableVertexAttribArray(this.aFrameLocation);
-    g.enableVertexAttribArray(this.aAnimTypeLocation);
-    g.enableVertexAttribArray(this.aRotationLocation);
-    g.drawArrays(g.POINTS, 0, this.npcCount); // Draw npcCount points in one call
-    g.disableVertexAttribArray(this.aPosLocation);
-    g.disableVertexAttribArray(this.aFrameLocation);
-    g.disableVertexAttribArray(this.aAnimTypeLocation);
-    g.disableVertexAttribArray(this.aRotationLocation);
+
+    // Configure vertex attributes: 5 floats per entity (x, y, frame, animType, rotation)
+    const stride = 20; // bytes (5 floats * 4 bytes each)
+
+    /* ---------------- Render NPCs ---------------- */
+    if (this.vertexData && this.npcCount > 0) {
+      // Update GPU buffer with NPC vertex data
+      g.bindBuffer(g.ARRAY_BUFFER, this.vertexBuffer);
+      const neededBytes = this.vertexData.byteLength;
+      const currentSize = g.getBufferParameter(g.ARRAY_BUFFER, g.BUFFER_SIZE) ?? 0;
+      if (neededBytes > currentSize) {
+        g.bufferData(g.ARRAY_BUFFER, neededBytes, g.DYNAMIC_DRAW);
+      }
+      g.bufferSubData(g.ARRAY_BUFFER, 0, this.vertexData);
+      
+      // Set vertex attributes
+      g.vertexAttribPointer(this.aPosLocation, 2, g.FLOAT, false, stride, 0);
+      g.vertexAttribPointer(this.aFrameLocation, 1, g.FLOAT, false, stride, 8);
+      g.vertexAttribPointer(this.aAnimTypeLocation, 1, g.FLOAT, false, stride, 12);
+      g.vertexAttribPointer(this.aRotationLocation, 1, g.FLOAT, false, stride, 16);
+      
+      // Set uniforms for NPC rendering
+      g.uniform1f(this.uPointSizeLocation, sizePx);
+      g.uniform1f(this.uOutlineModeLocation, 0.0); // Normal mode (no outline)
+      
+      // Enable vertex attributes and draw all NPCs
+      g.enableVertexAttribArray(this.aPosLocation);
+      g.enableVertexAttribArray(this.aFrameLocation);
+      g.enableVertexAttribArray(this.aAnimTypeLocation);
+      g.enableVertexAttribArray(this.aRotationLocation);
+      g.drawArrays(g.POINTS, 0, this.npcCount);
+      g.disableVertexAttribArray(this.aPosLocation);
+      g.disableVertexAttribArray(this.aFrameLocation);
+      g.disableVertexAttribArray(this.aAnimTypeLocation);
+      g.disableVertexAttribArray(this.aRotationLocation);
+    }
+
+    /* ---------------- Render Player (with green outline) ---------------- */
+    if (this.hasPlayer && this.playerVertexData) {
+      // Update GPU buffer with player vertex data
+      g.bindBuffer(g.ARRAY_BUFFER, this.vertexBuffer);
+      const neededBytes = this.playerVertexData.byteLength;
+      const currentSize = g.getBufferParameter(g.ARRAY_BUFFER, g.BUFFER_SIZE) ?? 0;
+      if (neededBytes > currentSize) {
+        g.bufferData(g.ARRAY_BUFFER, neededBytes, g.DYNAMIC_DRAW);
+      }
+      g.bufferSubData(g.ARRAY_BUFFER, 0, this.playerVertexData);
+      
+      // Set vertex attributes
+      g.vertexAttribPointer(this.aPosLocation, 2, g.FLOAT, false, stride, 0);
+      g.vertexAttribPointer(this.aFrameLocation, 1, g.FLOAT, false, stride, 8);
+      g.vertexAttribPointer(this.aAnimTypeLocation, 1, g.FLOAT, false, stride, 12);
+      g.vertexAttribPointer(this.aRotationLocation, 1, g.FLOAT, false, stride, 16);
+      
+      // Render player outline first (larger size, green color, behind sprite)
+      g.uniform1f(this.uPointSizeLocation, sizePx * 1.3); // 30% larger for outline
+      g.uniform1f(this.uOutlineModeLocation, 1.0); // Outline mode
+      g.uniform4f(this.uOutlineColorLocation, 0.0, 1.0, 0.0, 0.8); // Green outline (rgba)
+      
+      g.enableVertexAttribArray(this.aPosLocation);
+      g.enableVertexAttribArray(this.aFrameLocation);
+      g.enableVertexAttribArray(this.aAnimTypeLocation);
+      g.enableVertexAttribArray(this.aRotationLocation);
+      g.drawArrays(g.POINTS, 0, 1); // Draw player outline
+      
+      // Render player sprite on top (normal size, normal rendering)
+      g.uniform1f(this.uPointSizeLocation, sizePx); // Normal size
+      g.uniform1f(this.uOutlineModeLocation, 0.0); // Normal mode
+      
+      g.drawArrays(g.POINTS, 0, 1); // Draw player sprite
+      
+      g.disableVertexAttribArray(this.aPosLocation);
+      g.disableVertexAttribArray(this.aFrameLocation);
+      g.disableVertexAttribArray(this.aAnimTypeLocation);
+      g.disableVertexAttribArray(this.aRotationLocation);
+    }
+
     g.disable(g.BLEND);
   }
 

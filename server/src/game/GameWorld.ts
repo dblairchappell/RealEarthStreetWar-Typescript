@@ -369,12 +369,12 @@ export class GameWorld {
 
     // Handle rotation
     if (input.rotateLeft) {
-      Rotation.angle[eid] += GameStateConstants.PLAYER_ROTATION_SPEED * deltaSec;
+      Rotation.angle[eid] -= GameStateConstants.PLAYER_ROTATION_SPEED * deltaSec;
       Rotation.angle[eid] = ((Rotation.angle[eid] % 360) + 360) % 360;
     }
     
     if (input.rotateRight) {
-      Rotation.angle[eid] -= GameStateConstants.PLAYER_ROTATION_SPEED * deltaSec;
+      Rotation.angle[eid] += GameStateConstants.PLAYER_ROTATION_SPEED * deltaSec;
       Rotation.angle[eid] = ((Rotation.angle[eid] % 360) + 360) % 360;
     }
 
@@ -395,26 +395,26 @@ export class GameWorld {
       // cos(0°) = 1, sin(0°) = 0, so deltaLat = step, deltaLng = 0 ✓
       if (input.forward) {
         // Forward moves in the direction the player is facing
-        deltaLat += Math.sin(radians) * step;
-        deltaLng += Math.cos(radians) * step;
+        deltaLat += Math.cos(radians) * step;
+        deltaLng += Math.sin(radians) * step;
       }
       
       if (input.backward) {
         // Backward moves opposite to facing direction
-        deltaLat -= Math.sin(radians) * step;
-        deltaLng -= Math.cos(radians) * step;
+        deltaLat -= Math.cos(radians) * step;
+        deltaLng -= Math.sin(radians) * step;
       }
       
       if (input.left) {
-        const strafeRadians = radians + Math.PI / 2;
-        deltaLat += Math.sin(strafeRadians) * step;
-        deltaLng += Math.cos(strafeRadians) * step;
+        const strafeRadians = radians - Math.PI / 2;
+        deltaLat += Math.cos(strafeRadians) * step;
+        deltaLng += Math.sin(strafeRadians) * step;
       }
       
       if (input.right) {
-        const strafeRadians = radians - Math.PI / 2;
-        deltaLat += Math.sin(strafeRadians) * step;
-        deltaLng += Math.cos(strafeRadians) * step;
+        const strafeRadians = radians + Math.PI / 2;
+        deltaLat += Math.cos(strafeRadians) * step;
+        deltaLng += Math.sin(strafeRadians) * step;
       }
       
       const latRadians = (Position.y[eid] * Math.PI) / 180;
