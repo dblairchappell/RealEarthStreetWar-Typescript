@@ -592,12 +592,27 @@ export default class NpcLayer implements Renderable, Updatable {
     const destSize = Math.round(size);
     const halfSize = destSize / 2;
     
+    // Get camera pitch to simulate rotateX tilt effect (like player sprite)
+    // Canvas 2D can't do true 3D rotation, so we simulate it with vertical scaling
+    const cameraPitch = this.map.getPitch(); // Pitch in degrees (0 = top-down, 90 = straight down)
+    const pitchRad = (cameraPitch * Math.PI) / 180;
+    // Vertical scaling simulates tilt: cos(pitch) gives compression as pitch increases
+    // pitch = 0° → scaleY = 1 (full height, top-down view)
+    // pitch = 55° → scaleY ≈ 0.574 (compressed, angled view)
+    // pitch = 90° → scaleY = 0 (completely flat, edge-on view)
+    const scaleY = Math.cos(pitchRad);
+    
     // Save context state
     ctx.save();
     
-    // Translate to sprite center, rotate, then translate back
+    // Translate to sprite center
     ctx.translate(screenX, screenY);
-    ctx.rotate(rotation); // Rotate around center
+    
+    // Apply vertical scaling to simulate tilt (like rotateX in CSS)
+    ctx.scale(1, scaleY);
+    
+    // Rotate around center (Z-axis rotation for facing direction)
+    ctx.rotate(rotation);
     
     // Draw sprite frame (centered on origin after translate)
     // Use integer coordinates for crisp pixel art rendering

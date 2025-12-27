@@ -1,6 +1,6 @@
 // Global switches & tweakables for the whole game.
 // -----------------------------------------------------------------
-export const GTA1_STYLE_TOP_DOWN = false;   // ← flip to false for 3-D mode
+export const GTA1_STYLE_TOP_DOWN = true;   // ← flip to false for 3-D mode
 
 // NPC rendering path selection
 // - 'webgl': High-performance WebGL instanced rendering (best for Mercator projection)
@@ -15,7 +15,7 @@ export const NPC_RENDER_PATH: 'webgl' | 'canvas' = 'webgl';
 // 
 // Note: WebGL rendering path works best with 'mercator' projection.
 // Canvas rendering path works with any projection.
-export const MAP_PROJECTION: 'mercator' | 'globe' | 'vertical-perspective' = 'globe';
+export const MAP_PROJECTION: 'mercator' | 'globe' | 'vertical-perspective' = 'mercator';
 
 // Toggle developer performance overlay (fps / frame time / CPU)
 export const SHOW_PERF_OVERLAY = true;
