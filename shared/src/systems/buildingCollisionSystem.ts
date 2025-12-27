@@ -11,7 +11,7 @@
  * - Entities are pushed out of buildings along the shortest path to the building edge
  * - Ensures the entity's collision circle no longer overlaps the building polygon
  * - Velocity is dampened when colliding with buildings
- * - Uses Turf.js for circle-polygon intersection and distance calculations
+ * - Uses optimized point-in-polygon and distance calculations
  * 
  * Usage:
  * 
@@ -21,8 +21,7 @@
  * ```
  */
 
-import * as turf from '@turf/turf';
-import type { Feature, Polygon, Point } from 'geojson';
+import type { Feature, Polygon } from 'geojson';
 
 /**
  * Character collision radius in degrees (same as entity collision system).
@@ -41,6 +40,22 @@ export const BUILDING_VELOCITY_DAMPING = 0.5;
  * Ensures entities are pushed far enough to avoid immediate re-collision.
  */
 export const MIN_PUSH_DISTANCE_DEG = CHARACTER_RADIUS_DEG * 1.5;
+
+/**
+ * Simple point-in-polygon check using ray casting algorithm.
+ * Faster than Turf.js booleanPointInPolygon.
+ */
+function pointInPolygon(lng: number, lat: number, ring: number[][]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0], yi = ring[i][1];
+    const xj = ring[j][0], yj = ring[j][1];
+    const intersect = ((yi > lat) !== (yj > lat)) &&
+                     (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
 
 /**
  * Building feature interface (matches BuildingDataLoader)
@@ -101,26 +116,36 @@ export class BuildingCollider {
     lat: number
   ): Promise<BuildingFeature | null> {
     const buildings = await this.getBuildingsNearPointInternal(lat, lng, 0.001);
-    const point = turf.point([lng, lat]);
 
     for (const building of buildings) {
-      // Check if entity center is inside building
-      if (turf.booleanPointInPolygon(point, building.geometry)) {
+      const polygon = building.geometry.geometry;
+      const coords = polygon.coordinates[0]; // Exterior ring
+      
+      // Check if entity center is inside building (using optimized point-in-polygon)
+      if (pointInPolygon(lng, lat, coords)) {
         return building;
       }
       
       // Check if entity's collision circle overlaps building edge
       // Find distance from entity to nearest point on building boundary
-      const polygon = building.geometry.geometry;
-      const coords = polygon.coordinates[0]; // Exterior ring
-      
       let minDistToEdge = Infinity;
       for (let i = 0; i < coords.length - 1; i++) {
-        const segmentStart = coords[i];
-        const segmentEnd = coords[i + 1];
-        const segment = turf.lineString([segmentStart, segmentEnd]);
-        const nearestPoint = turf.nearestPointOnLine(segment, point);
-        const dist = turf.distance(point, nearestPoint, { units: 'degrees' });
+        const p1 = coords[i];
+        const p2 = coords[i + 1];
+        const segDx = p2[0] - p1[0];
+        const segDy = p2[1] - p1[1];
+        const len2 = segDx * segDx + segDy * segDy;
+        
+        if (len2 === 0) continue;
+
+        // Project point onto line segment
+        const t = Math.max(0, Math.min(1,
+          ((lng - p1[0]) * segDx + (lat - p1[1]) * segDy) / len2
+        ));
+        
+        const projLng = p1[0] + t * segDx;
+        const projLat = p1[1] + t * segDy;
+        const dist = Math.sqrt((projLng - lng) ** 2 + (projLat - lat) ** 2);
         
         if (dist < minDistToEdge) {
           minDistToEdge = dist;
@@ -171,34 +196,41 @@ export class BuildingCollider {
     lat: number,
     building: BuildingFeature
   ): { dx: number; dy: number } {
-    const point = turf.point([lng, lat]);
     const polygon = building.geometry.geometry;
-
-    // Get building boundary (exterior ring)
     const coords = polygon.coordinates[0]; // First ring is exterior
 
     // Find closest point on building edge
     let minDist = Infinity;
-    let closestPoint: Feature<Point> | null = null;
+    let closestPoint: [number, number] | null = null;
 
     for (let i = 0; i < coords.length - 1; i++) {
-      const segmentStart = coords[i];
-      const segmentEnd = coords[i + 1];
-      const segment = turf.lineString([segmentStart, segmentEnd]);
+      const p1 = coords[i];
+      const p2 = coords[i + 1];
+      const segDx = p2[0] - p1[0];
+      const segDy = p2[1] - p1[1];
+      const len2 = segDx * segDx + segDy * segDy;
       
-      const nearestPoint = turf.nearestPointOnLine(segment, point);
-      const dist = turf.distance(point, nearestPoint, { units: 'degrees' });
+      if (len2 === 0) continue;
+
+      // Project point onto line segment
+      const t = Math.max(0, Math.min(1,
+        ((lng - p1[0]) * segDx + (lat - p1[1]) * segDy) / len2
+      ));
+      
+      const projLng = p1[0] + t * segDx;
+      const projLat = p1[1] + t * segDy;
+      const dist = Math.sqrt((projLng - lng) ** 2 + (projLat - lat) ** 2);
 
       if (dist < minDist) {
         minDist = dist;
-        closestPoint = nearestPoint;
+        closestPoint = [projLng, projLat];
       }
     }
 
     if (closestPoint) {
       // Calculate direction vector from entity to nearest edge point
-      const dx = closestPoint.geometry.coordinates[0] - lng;
-      const dy = closestPoint.geometry.coordinates[1] - lat;
+      const dx = closestPoint[0] - lng;
+      const dy = closestPoint[1] - lat;
       
       // Normalize and scale by push distance
       // Push far enough so the collision circle no longer overlaps the building
