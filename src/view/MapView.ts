@@ -43,7 +43,7 @@ import CharacterView from "./CharacterView";
 import InputManager from "../input/InputManager";
 import { IInputService } from "../input/IInputService";
 import { InputState } from "@shared/realearthstreetwar";
-import { GTA1_STYLE_TOP_DOWN, ENABLE_GLOBE, MAP_PROJECTION } from "../config";
+import { GTA1_STYLE_TOP_DOWN, MAP_PROJECTION } from "../config";
 import { MarkerLayer, CameraController, FeatureQuery } from './map';
 import { Position, Rotation } from "../ecs/world";
 import { Renderable, Updatable } from "../loop/GameLoop";
@@ -116,13 +116,11 @@ export default class MapView implements Updatable, Renderable {
     // Create MapLibre GL JS map instance
     // MapLibre GL JS doesn't require an access token for open data sources
     
-    // Build projection configuration based on config
+    // Build projection configuration based on MAP_PROJECTION
     // Note: MapLibre GL JS v5.6.1 only supports: 'mercator', 'globe', 'vertical-perspective'
     let projectionConfig: any = undefined;
-    if (ENABLE_GLOBE) {
-      projectionConfig = { type: 'globe' };
-    } else if (MAP_PROJECTION !== 'mercator') {
-      // Only 'globe' and 'vertical-perspective' are supported (besides 'mercator')
+    if (MAP_PROJECTION !== 'mercator') {
+      // Only 'globe' and 'vertical-perspective' need explicit configuration
       projectionConfig = { type: MAP_PROJECTION };
     }
     // Mercator is the default, so no need to set projectionConfig
@@ -204,10 +202,7 @@ export default class MapView implements Updatable, Renderable {
       // Verify and set projection (some MapLibre versions require setProjection after load)
       // This ensures projection is applied even if constructor option didn't work
       // Note: Only 'mercator', 'globe', and 'vertical-perspective' are supported
-      if (ENABLE_GLOBE) {
-        this.map.setProjection({ type: 'globe' });
-        console.log('[MapView] Projection set to: globe');
-      } else if (MAP_PROJECTION !== 'mercator') {
+      if (MAP_PROJECTION !== 'mercator') {
         this.map.setProjection({ type: MAP_PROJECTION });
         console.log(`[MapView] Projection set to: ${MAP_PROJECTION}`);
       } else {

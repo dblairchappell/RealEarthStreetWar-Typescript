@@ -28,7 +28,8 @@ export class NetworkStateManager {
   private playerQuery = defineQuery([PlayerTag, Position, Rotation]);
   private npcQuery = defineQuery([NpcTag, Position, Rotation, Velocity]);
   private onPlayerEntityCreated?: (eid: number, playerData: PlayerSnapshot) => void;
-  private npcLayer: any = null; // Reference to NpcLayer for speed updates
+  private npcLayer: any = null; // Reference to NpcLayer for speed updates (Canvas path)
+  private npcController: any = null; // Reference to NpcController for speed updates (WebGL path)
 
   constructor(gameState: GameState) {
     this.gameState = gameState;
@@ -49,10 +50,17 @@ export class NetworkStateManager {
   }
   
   /**
-   * Set reference to NpcLayer for speed updates
+   * Set reference to NpcLayer for speed updates (Canvas rendering path)
    */
   setNpcLayer(npcLayer: any): void {
     this.npcLayer = npcLayer;
+  }
+
+  /**
+   * Set reference to NpcController for speed updates (WebGL rendering path)
+   */
+  setNpcController(npcController: any): void {
+    this.npcController = npcController;
   }
 
   /**
@@ -204,9 +212,12 @@ export class NetworkStateManager {
         this.npcEntityMap.delete(serverEid);
         this.npcEntityMapReverse.delete(clientEid); // Remove reverse mapping
         
-        // Remove NPC speed from NpcLayer
+        // Remove NPC speed (both rendering paths)
         if (this.npcLayer && typeof this.npcLayer.removeNpcSpeed === 'function') {
           this.npcLayer.removeNpcSpeed(clientEid);
+        }
+        if (this.npcController && typeof this.npcController.removeNpcSpeed === 'function') {
+          this.npcController.removeNpcSpeed(clientEid);
         }
         
         console.log(`[NetworkStateManager] Removed NPC entity ${clientEid} (server eid: ${serverEid})`);
@@ -239,9 +250,12 @@ export class NetworkStateManager {
       Velocity.y[clientEid] = npc.velocityY;
       SpriteRef.id[clientEid] = npc.spriteId;
       
-      // Update NPC speed in NpcLayer for animation scaling
+      // Update NPC speed for animation scaling (both rendering paths)
       if (this.npcLayer && typeof this.npcLayer.updateNpcSpeed === 'function') {
         this.npcLayer.updateNpcSpeed(clientEid, npc.speed);
+      }
+      if (this.npcController && typeof this.npcController.updateNpcSpeed === 'function') {
+        this.npcController.updateNpcSpeed(clientEid, npc.speed);
       }
     }
   }

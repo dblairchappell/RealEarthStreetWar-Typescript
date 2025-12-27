@@ -37,7 +37,7 @@ import tzLookup from "tz-lookup";          // gives us the lat/lon → TZ functi
 // import osmtogeojson from 'osmtogeojson';
 import NpcInstancedLayer from "./view/NpcInstancedLayer";
 import NpcLayer from "./view/NpcLayer";
-import { ENABLE_GLOBE, SHOW_PERF_OVERLAY } from "./config";
+import { NPC_RENDER_PATH, SHOW_PERF_OVERLAY } from "./config";
 import NpcController from "./view/NpcController";
 import { GameClient } from "./network/GameClient";
 import { SERVER_URL } from "./config";
@@ -228,22 +228,24 @@ map.on('load', () => {
     loop.add(hud);
 
     /**
-     * Set up NPC rendering based on projection mode.
+     * Set up NPC rendering based on selected rendering path.
      * 
      * NPCs are spawned by the server and arrive via state snapshots.
      * Rendering layers are always initialized to display NPCs when they arrive.
      * 
-     * Mercator projection (ENABLE_GLOBE = false):
+     * WebGL path (NPC_RENDER_PATH = 'webgl'):
      * - Uses fast WebGL instanced rendering (NpcInstancedLayer)
      * - NpcController handles interpolation and data management
+     * - Works best with Mercator projection
      * 
-     * Globe projection (ENABLE_GLOBE = true):
+     * Canvas path (NPC_RENDER_PATH = 'canvas'):
      * - Falls back to Canvas overlay (NpcLayer)
      * - Uses map.project() for coordinate conversion
+     * - Works with any projection (Globe, Mercator, etc.)
      */
-    if (!ENABLE_GLOBE) {
+    if (NPC_RENDER_PATH === 'webgl') {
         /**
-         * WebGL instanced rendering path (fast, Mercator only).
+         * WebGL instanced rendering path (fast, Mercator recommended).
          * Creates a custom MapLibre layer that renders NPCs using WebGL.
          */
         const npcGlLayer = new NpcInstancedLayer();
@@ -259,10 +261,13 @@ map.on('load', () => {
         
         // Store references for selection feedback
         view.setNpcRenderingLayers(npcGlLayer, npcController);
+        
+        // Wire up WebGL path for speed updates
+        controller.getNetworkStateManager().setNpcController(npcController);
 
     } else {
         /**
-         * Canvas overlay fallback (works with any projection).
+         * Canvas overlay path (works with any projection).
          * Uses map.project() to convert lat/lng to screen coordinates.
          * Slower than WebGL but more flexible.
          */
@@ -273,7 +278,7 @@ map.on('load', () => {
         // Store reference for selection feedback
         view.setNpcRenderingLayers(npcCanvasLayer, null);
         
-        // Wire up NPC speed updates for animation scaling
+        // Wire up Canvas path for speed updates
         controller.getNetworkStateManager().setNpcLayer(npcCanvasLayer);
     }
 

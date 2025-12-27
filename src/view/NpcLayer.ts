@@ -1,9 +1,10 @@
 /**
- * NpcLayer - Canvas-Based NPC Rendering Layer (Fallback for Globe Projection)
+ * NpcLayer - Canvas-Based NPC Rendering Layer
  * 
- * This class provides a Canvas 2D rendering layer for NPCs. It's used as a fallback
- * when the map uses globe projection (ENABLE_GLOBE = true), since the WebGL-based
- * NpcInstancedLayer only works reliably with Mercator projection.
+ * This class provides a Canvas 2D rendering layer for NPCs. It's used when
+ * NPC_RENDER_PATH = 'canvas' in config.ts. This rendering path works with any
+ * map projection (Globe, Mercator, etc.), making it more flexible than the
+ * WebGL-based NpcInstancedLayer which works best with Mercator projection.
  * 
  * Architecture:
  * 
@@ -25,7 +26,7 @@
  * 
  * Usage:
  * 
- * This layer is automatically used when ENABLE_GLOBE = true in config.ts.
+ * This layer is automatically used when NPC_RENDER_PATH = 'canvas' in config.ts.
  * It's registered with the game loop as a Renderable and called each frame.
  * 
  * Note: The alpha parameter from Renderable interface is currently unused.

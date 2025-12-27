@@ -29,8 +29,9 @@
  * - Minimal CPU overhead (positions pre-calculated by controller)
  * 
  * **Usage:**
- * This layer is automatically used by `MapView` when `ENABLE_GLOBE = false` (Mercator projection).
+ * This layer is automatically used when `NPC_RENDER_PATH = 'webgl'` in config.ts.
  * The `NpcController` handles coordinate projection and calls `setPositionsToRender()` each frame.
+ * Works best with Mercator projection, but can be used with other projections.
  */
 
 import maplibregl from 'maplibre-gl';
