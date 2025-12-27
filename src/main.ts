@@ -255,9 +255,11 @@ map.on('load', () => {
          * NPC controller handles interpolation and data management.
          * Reads NPC positions from ECS and passes interpolated
          * screen coordinates to the rendering layer.
+         * Also manages animation state for sprite sheet animations.
          */
         const npcController = new NpcController(map, npcGlLayer);
-        loop.addRenderable(npcController);
+        loop.add(npcController); // Register as Updatable for animation frame advancement
+        loop.addRenderable(npcController); // Register as Renderable for rendering
         
         // Store references for selection feedback
         view.setNpcRenderingLayers(npcGlLayer, npcController);

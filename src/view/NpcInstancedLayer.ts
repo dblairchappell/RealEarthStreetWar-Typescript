@@ -9,9 +9,9 @@
  * - **WebGL Point Sprites**: Uses `gl.POINTS` to render multiple NPCs in a single draw call
  * - **Pre-calculated Positions**: Receives screen-space positions from `NpcController`, avoiding
  *   per-frame coordinate projection overhead
- * - **Single Texture**: Loads one sprite image and reuses it for all NPCs (instanced rendering)
+ * - **Sprite Sheet Animation**: Supports animated sprites (idle/walking/running) with per-NPC frame selection
  * - **Zoom-Based Scaling**: Dynamically adjusts sprite size based on map zoom level
- * - **Mercator-Only**: Optimized for Mercator projection (not compatible with globe projection)
+ * - **Mercator-Recommended**: Optimized for Mercator projection, works with other projections
  * 
  * **Architecture:**
  * - Implements MapLibre's `CustomLayerInterface` to integrate with the map rendering pipeline
@@ -71,23 +71,60 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
 
   // WebGL shader program and buffer resources
   private program!: WebGLProgram; // Compiled vertex + fragment shader program
-  private posBuffer!: WebGLBuffer; // GPU buffer storing NPC screen positions (x, y pairs)
+  private vertexBuffer!: WebGLBuffer; // GPU buffer storing vertex data (x, y, frame, animType per NPC)
   
   // Shader attribute/uniform locations (cached for performance)
   private aPosLocation = 0; // Attribute location for position data (vec2)
-  private uTexLocation!: WebGLUniformLocation; // Uniform for sprite texture sampler
+  private aFrameLocation!: number; // Attribute location for frame index (float)
+  private aAnimTypeLocation!: number; // Attribute location for animation type (float)
+  private uTexIdleLocation!: WebGLUniformLocation; // Uniform for idle sprite sheet sampler
+  private uTexWalkingLocation!: WebGLUniformLocation; // Uniform for walking sprite sheet sampler
+  private uTexRunningLocation!: WebGLUniformLocation; // Uniform for running sprite sheet sampler
+  private uFrameCountIdleLocation!: WebGLUniformLocation; // Uniform for idle frame count
+  private uFrameCountWalkingLocation!: WebGLUniformLocation; // Uniform for walking frame count
+  private uFrameCountRunningLocation!: WebGLUniformLocation; // Uniform for running frame count
   private uPointSizeLocation!: WebGLUniformLocation; // Uniform for point sprite size in pixels
   private uViewportSizeLocation!: WebGLUniformLocation; // Uniform for viewport dimensions (width, height)
 
-  // Sprite texture management
-  private texture!: WebGLTexture; // WebGL texture object containing the sprite image
-  private textureLoaded = false; // Flag to prevent rendering before texture is ready
-  private static readonly SPRITE_SRC = 'sprites/brian/brian_idling/0000.png'; // Path to sprite image
+  // Sprite texture management - sprite sheets for animation
+  private textures: {
+    idle: WebGLTexture | null;
+    walking: WebGLTexture | null;
+    running: WebGLTexture | null;
+  } = {
+    idle: null,
+    walking: null,
+    running: null
+  };
 
-  // Position data received from NpcController (updated each frame)
-  // Format: Float32Array with [x0, y0, x1, y1, ...] screen coordinates
+  private texturesLoaded = {
+    idle: false,
+    walking: false,
+    running: false
+  };
+
+  // Sprite sheet paths
+  private static readonly SPRITE_SHEETS = {
+    idle: 'sprites/brian/brian_idling_31x1.png',
+    walking: 'sprites/brian/brian_walking_forward_31x1.png',
+    running: 'sprites/brian/brian_running_forward_23x1.png'
+  };
+
+  // Animation metadata (frame counts for each sprite sheet)
+  private static readonly ANIMATION_FRAMES = {
+    idle: 31,
+    walking: 31,
+    running: 23
+  };
+
+  // Vertex data received from NpcController (updated each frame)
+  // Format: Float32Array with [x0, y0, frame0, animType0, x1, y1, frame1, animType1, ...]
+  // 4 floats per NPC: x, y, frameIndex, animType
+  private vertexData: Float32Array | null = null;
+  private npcCount = 0; // Number of NPCs to render (vertexData.length / 4)
+  
+  // Legacy position data (for backward compatibility during transition)
   private positionsToRender: Float32Array | null = null;
-  private npcCount = 0; // Number of NPCs to render (positionsToRender.length / 2)
   
   /** Currently selected NPC entity ID (for red outline) */
   private selectedNpcEid: number | null = null;
@@ -105,9 +142,33 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
    * 
    * @param positions - Float32Array with [x0, y0, x1, y1, ...] screen coordinates
    * @param count - Number of NPCs (positions.length / 2)
+   * @deprecated Use setVertexData() instead (includes animation data)
    */
   public setPositionsToRender(positions: Float32Array, count: number) {
     this.positionsToRender = positions;
+    this.npcCount = count;
+    // Convert to vertex data format for compatibility (no animation data)
+    // This is a fallback for code that hasn't been updated yet
+    const vertexData = new Float32Array(count * 4);
+    for (let i = 0; i < count; i++) {
+      vertexData[i * 4] = positions[i * 2];     // x
+      vertexData[i * 4 + 1] = positions[i * 2 + 1]; // y
+      vertexData[i * 4 + 2] = 0; // frame = 0 (first frame)
+      vertexData[i * 4 + 3] = 0; // animType = 0 (idle)
+    }
+    this.vertexData = vertexData;
+  }
+
+  /**
+   * Called by NpcController each frame to provide vertex data with animation information.
+   * The vertex data includes positions and animation state for sprite sheet rendering.
+   * 
+   * @param data - Float32Array with [x0, y0, frame0, animType0, x1, y1, frame1, animType1, ...]
+   *               Format: 4 floats per NPC (x, y, frameIndex, animType)
+   * @param count - Number of NPCs (data.length / 4)
+   */
+  public setVertexData(data: Float32Array, count: number): void {
+    this.vertexData = data;
     this.npcCount = count;
   }
 
@@ -133,66 +194,101 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
 
   /**
    * Called by MapLibre when this layer is added to the map.
-   * Initializes all WebGL resources: texture, shaders, buffers, and uniforms.
+   * Initializes all WebGL resources: textures, shaders, buffers, and uniforms.
    * 
    * Setup process:
    * 1. Store map and WebGL context references
-   * 2. Load sprite texture asynchronously (triggers repaint when ready)
+   * 2. Load sprite sheet textures asynchronously (triggers repaint when ready)
    * 3. Compile vertex and fragment shaders
    * 4. Link shader program
    * 5. Cache attribute/uniform locations for performance
-   * 6. Create GPU buffer for position data
+   * 6. Create GPU buffer for vertex data
    */
   onAdd(map: maplibregl.Map, gl: WebGLRenderingContext): void {
     this.map = map;
     this.gl = gl;
 
-    // Load sprite texture asynchronously
-    // The texture will be used for all NPCs (instanced rendering)
-    const img = new Image();
-    img.src = NpcInstancedLayer.SPRITE_SRC.startsWith('/') ? NpcInstancedLayer.SPRITE_SRC : '/' + NpcInstancedLayer.SPRITE_SRC;
-    img.onload = () => {
-      // Create WebGL texture from loaded image
-      this.texture = this.gl.createTexture()!;
-      this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture);
-      this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, img);
-      
-      // Use NEAREST filtering to preserve pixel art style (no blurring)
-      this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
-      this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST);
-      
-      // Prevent texture wrapping (clamp to edge)
-      this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
-      this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
-      
-      this.textureLoaded = true;
-      this.map.triggerRepaint(); // Redraw map now that texture is ready
-    };
+    // Load all sprite sheet textures asynchronously
+    this.loadSpriteSheets();
 
     // Vertex shader: Converts screen-space coordinates to clip space
     // Uses screen coordinates (pre-calculated by NpcController) for simplicity
-    // This avoids complex matrix math in the shader
+    // Also passes animation data to fragment shader
     const vertSrc = `
     precision highp float;
     uniform float u_pointSize;      // Size of point sprite in pixels
     uniform vec2 u_viewportSize;    // Canvas width and height
     attribute vec2 a_pos;           // Screen coordinates (x, y) for this NPC
+    attribute float a_frame;       // Frame index (0-30 for idle/walking, 0-22 for running)
+    attribute float a_animType;    // Animation type (0=idle, 1=walking, 2=running)
+    
+    // Pass animation data to fragment shader
+    varying float v_frame;
+    varying float v_animType;
+    
     void main() {
       // Convert screen coordinates [0, viewportSize] to clip space [-1, 1]
       vec2 clip_space = (a_pos / u_viewportSize) * 2.0 - 1.0;
       clip_space.y *= -1.0; // Flip Y axis (screen Y increases downward, OpenGL Y increases upward)
       gl_Position = vec4(clip_space, 0.0, 1.0); // Z=0 (on screen plane), W=1 (no perspective)
       gl_PointSize = u_pointSize; // Set size for point sprite rendering
+      
+      // Pass animation data to fragment shader
+      v_frame = a_frame;
+      v_animType = a_animType;
     }`;
 
-    // Fragment shader: Samples texture and applies alpha transparency
+    // Fragment shader: Samples sprite sheet texture based on animation type and frame
     // Uses gl_PointCoord (built-in) which provides UV coordinates for the point sprite
     const fragSrc = `
     precision highp float;
-    uniform sampler2D u_tex; // Sprite texture
+    uniform sampler2D u_texIdle;      // Idle sprite sheet
+    uniform sampler2D u_texWalking;    // Walking sprite sheet
+    uniform sampler2D u_texRunning;    // Running sprite sheet
+    uniform float u_frameCountIdle;   // Number of frames in idle sheet (31)
+    uniform float u_frameCountWalking; // Number of frames in walking sheet (31)
+    uniform float u_frameCountRunning; // Number of frames in running sheet (23)
+    
+    varying float v_frame;      // Frame index from vertex shader
+    varying float v_animType;   // Animation type from vertex shader
+    
     void main() {
-      vec2 uv = gl_PointCoord.xy; // UV coordinates for this point sprite (0-1 range)
-      vec4 color = texture2D(u_tex, uv); // Sample sprite texture
+      vec2 uv = gl_PointCoord.xy; // Base UV coordinates (0-1 range)
+      
+      // Select texture and frame count based on animation type
+      vec4 color;
+      float frameCount;
+      
+      if (v_animType < 0.5) {
+        // Idle (0.0)
+        frameCount = u_frameCountIdle;
+        float frameWidth = 1.0 / frameCount;
+        // Calculate UV offset for this frame: frame 0 starts at 0%, frame N-1 ends at 100%
+        vec2 frameUV = vec2(
+          (v_frame * frameWidth) + (uv.x * frameWidth),
+          uv.y
+        );
+        color = texture2D(u_texIdle, frameUV);
+      } else if (v_animType < 1.5) {
+        // Walking (1.0)
+        frameCount = u_frameCountWalking;
+        float frameWidth = 1.0 / frameCount;
+        vec2 frameUV = vec2(
+          (v_frame * frameWidth) + (uv.x * frameWidth),
+          uv.y
+        );
+        color = texture2D(u_texWalking, frameUV);
+      } else {
+        // Running (2.0)
+        frameCount = u_frameCountRunning;
+        float frameWidth = 1.0 / frameCount;
+        vec2 frameUV = vec2(
+          (v_frame * frameWidth) + (uv.x * frameWidth),
+          uv.y
+        );
+        color = texture2D(u_texRunning, frameUV);
+      }
+      
       if (color.a < 0.1) discard; // Discard transparent pixels (optimization)
       gl_FragColor = color; // Output final color
     }`;
@@ -210,12 +306,60 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
 
     // Cache attribute/uniform locations (avoids string lookups each frame)
     this.aPosLocation = this.gl.getAttribLocation(this.program, 'a_pos');
-    this.uTexLocation = this.gl.getUniformLocation(this.program, 'u_tex')!;
+    this.aFrameLocation = this.gl.getAttribLocation(this.program, 'a_frame');
+    this.aAnimTypeLocation = this.gl.getAttribLocation(this.program, 'a_animType');
+    this.uTexIdleLocation = this.gl.getUniformLocation(this.program, 'u_texIdle')!;
+    this.uTexWalkingLocation = this.gl.getUniformLocation(this.program, 'u_texWalking')!;
+    this.uTexRunningLocation = this.gl.getUniformLocation(this.program, 'u_texRunning')!;
+    this.uFrameCountIdleLocation = this.gl.getUniformLocation(this.program, 'u_frameCountIdle')!;
+    this.uFrameCountWalkingLocation = this.gl.getUniformLocation(this.program, 'u_frameCountWalking')!;
+    this.uFrameCountRunningLocation = this.gl.getUniformLocation(this.program, 'u_frameCountRunning')!;
     this.uPointSizeLocation = this.gl.getUniformLocation(this.program, 'u_pointSize')!;
     this.uViewportSizeLocation = this.gl.getUniformLocation(this.program, 'u_viewportSize')!;
 
-    // Create GPU buffer for position data (will be updated each frame)
-    this.posBuffer = this.gl.createBuffer()!;
+    // Create GPU buffer for vertex data (will be updated each frame)
+    this.vertexBuffer = this.gl.createBuffer()!;
+  }
+
+  /**
+   * Loads all sprite sheet textures asynchronously.
+   * Sets texturesLoaded flags when ready and triggers repaint when all are loaded.
+   */
+  private loadSpriteSheets(): void {
+    const loadTexture = (url: string, type: 'idle' | 'walking' | 'running') => {
+      const img = new Image();
+      img.src = url.startsWith('/') ? url : '/' + url;
+      img.onload = () => {
+        // Create WebGL texture from loaded image
+        const texture = this.gl.createTexture()!;
+        this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
+        this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, img);
+        
+        // Use NEAREST filtering to preserve pixel art style (no blurring)
+        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
+        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST);
+        
+        // Prevent texture wrapping (clamp to edge)
+        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
+        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
+        
+        this.textures[type] = texture;
+        this.texturesLoaded[type] = true;
+        
+        // Trigger repaint when all textures are loaded
+        if (this.texturesLoaded.idle && this.texturesLoaded.walking && this.texturesLoaded.running) {
+          this.map.triggerRepaint();
+        }
+      };
+      img.onerror = () => {
+        console.error(`[NpcInstancedLayer] Failed to load sprite sheet: ${url}`);
+      };
+    };
+    
+    // Load all three sprite sheets
+    loadTexture(NpcInstancedLayer.SPRITE_SHEETS.idle, 'idle');
+    loadTexture(NpcInstancedLayer.SPRITE_SHEETS.walking, 'walking');
+    loadTexture(NpcInstancedLayer.SPRITE_SHEETS.running, 'running');
   }
 
   /**
@@ -237,7 +381,8 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
    */
   render(gl: WebGLRenderingContext, matrix: any): void {
     // Early exit if not ready to render
-    if (!this.textureLoaded || !this.positionsToRender || this.npcCount === 0) {
+    if (!this.texturesLoaded.idle || !this.texturesLoaded.walking || !this.texturesLoaded.running || 
+        !this.vertexData || this.npcCount === 0) {
       return;
     }
     const g = this.gl;
@@ -245,28 +390,50 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
     // Activate our shader program
     g.useProgram(this.program);
 
-    // Update GPU buffer with latest position data
+    // Update GPU buffer with latest vertex data
     // Uses dynamic buffer allocation: only reallocates if buffer is too small
-    g.bindBuffer(g.ARRAY_BUFFER, this.posBuffer);
-    const neededBytes = this.positionsToRender.byteLength;
+    g.bindBuffer(g.ARRAY_BUFFER, this.vertexBuffer);
+    const neededBytes = this.vertexData.byteLength;
     const currentSize = g.getBufferParameter(g.ARRAY_BUFFER, g.BUFFER_SIZE) ?? 0;
     if (neededBytes > currentSize) {
       // Buffer too small - reallocate with new size
       g.bufferData(g.ARRAY_BUFFER, neededBytes, g.DYNAMIC_DRAW);
     }
-    // Upload position data to GPU (only updates, doesn't reallocate if size is same)
-    g.bufferSubData(g.ARRAY_BUFFER, 0, this.positionsToRender);
+    // Upload vertex data to GPU (only updates, doesn't reallocate if size is same)
+    g.bufferSubData(g.ARRAY_BUFFER, 0, this.vertexData);
     
-    // Configure vertex attribute: positions are vec2 (2 floats per vertex)
-    g.vertexAttribPointer(this.aPosLocation, 2, g.FLOAT, false, 0, 0);
+    // Configure vertex attributes: 4 floats per NPC (x, y, frame, animType)
+    // Stride = 16 bytes (4 floats * 4 bytes each)
+    const stride = 16; // bytes
+    g.vertexAttribPointer(this.aPosLocation, 2, g.FLOAT, false, stride, 0); // Position: offset 0
+    g.vertexAttribPointer(this.aFrameLocation, 1, g.FLOAT, false, stride, 8); // Frame: offset 8 bytes (after x, y)
+    g.vertexAttribPointer(this.aAnimTypeLocation, 1, g.FLOAT, false, stride, 12); // AnimType: offset 12 bytes
     
     // Set viewport size uniform (needed for screen-to-clip-space conversion)
-    g.uniform2f(this.uViewportSizeLocation, g.canvas.width, g.canvas.height);
+    // IMPORTANT: map.project() returns CSS pixels, so we must use CSS pixel dimensions
+    // g.canvas.width/height are physical pixels (scaled by devicePixelRatio), which would cause incorrect positioning
+    const container = this.map.getContainer();
+    const cssWidth = container.clientWidth;
+    const cssHeight = container.clientHeight;
+    g.uniform2f(this.uViewportSizeLocation, cssWidth, cssHeight);
 
-    // Bind sprite texture to texture unit 0
+    // Set frame count uniforms
+    g.uniform1f(this.uFrameCountIdleLocation, NpcInstancedLayer.ANIMATION_FRAMES.idle);
+    g.uniform1f(this.uFrameCountWalkingLocation, NpcInstancedLayer.ANIMATION_FRAMES.walking);
+    g.uniform1f(this.uFrameCountRunningLocation, NpcInstancedLayer.ANIMATION_FRAMES.running);
+
+    // Bind sprite sheet textures to texture units
     g.activeTexture(g.TEXTURE0);
-    g.bindTexture(g.TEXTURE_2D, this.texture);
-    g.uniform1i(this.uTexLocation, 0); // Tell shader to use texture unit 0
+    g.bindTexture(g.TEXTURE_2D, this.textures.idle!);
+    g.uniform1i(this.uTexIdleLocation, 0);
+    
+    g.activeTexture(g.TEXTURE1);
+    g.bindTexture(g.TEXTURE_2D, this.textures.walking!);
+    g.uniform1i(this.uTexWalkingLocation, 1);
+    
+    g.activeTexture(g.TEXTURE2);
+    g.bindTexture(g.TEXTURE_2D, this.textures.running!);
+    g.uniform1i(this.uTexRunningLocation, 2);
 
     // Calculate point size based on zoom level and device pixel ratio
     // devicePixelRatio accounts for high-DPI displays (Retina, etc.)
@@ -278,11 +445,15 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
     g.enable(g.BLEND);
     g.blendFunc(g.SRC_ALPHA, g.ONE_MINUS_SRC_ALPHA); // Standard alpha blending
     
-    // Enable position attribute and draw all NPCs as point sprites
+    // Enable vertex attributes and draw all NPCs as point sprites
     // This single draw call renders ALL NPCs (GPU instancing via POINTS primitive)
     g.enableVertexAttribArray(this.aPosLocation);
+    g.enableVertexAttribArray(this.aFrameLocation);
+    g.enableVertexAttribArray(this.aAnimTypeLocation);
     g.drawArrays(g.POINTS, 0, this.npcCount); // Draw npcCount points in one call
     g.disableVertexAttribArray(this.aPosLocation);
+    g.disableVertexAttribArray(this.aFrameLocation);
+    g.disableVertexAttribArray(this.aAnimTypeLocation);
     g.disable(g.BLEND);
   }
 
@@ -299,8 +470,10 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
   onRemove(map: maplibregl.Map, gl: WebGLRenderingContext): void {
     const g = this.gl;
     // Clean up GPU resources (prevents memory leaks)
-    if (this.posBuffer) g.deleteBuffer(this.posBuffer);
+    if (this.vertexBuffer) g.deleteBuffer(this.vertexBuffer);
     if (this.program) g.deleteProgram(this.program);
-    if (this.texture) g.deleteTexture(this.texture);
+    if (this.textures.idle) g.deleteTexture(this.textures.idle);
+    if (this.textures.walking) g.deleteTexture(this.textures.walking);
+    if (this.textures.running) g.deleteTexture(this.textures.running);
   }
 }
