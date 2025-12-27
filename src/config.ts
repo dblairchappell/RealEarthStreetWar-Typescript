@@ -14,7 +14,7 @@ export const PLAYER_RENDER_PATH: 'dom' | 'canvas' = 'canvas';
 // NPC rendering path selection
 // - 'webgl': High-performance WebGL instanced rendering (best for Mercator projection)
 // - 'canvas': Canvas-based rendering (works with any projection, including Globe)
-export const NPC_RENDER_PATH: 'webgl' | 'canvas' = 'canvas';
+export const NPC_RENDER_PATH: 'webgl' | 'canvas' = 'webgl';
 
 // Map projection type: 'mercator' (default), 'globe', or 'vertical-perspective'
 // Note: MapLibre GL JS v5.6.1 only supports these three projections.
