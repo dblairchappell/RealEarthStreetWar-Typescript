@@ -280,6 +280,39 @@ export class GameWorld {
       initializeNpcSpeedMultiplier(eid);
       
       this.npcEntities.add(eid);
+      
+      // Push NPC out if spawned inside a building (iterative push-out for deep spawns)
+      if (this.buildingCollider) {
+        (async () => {
+          let currentLng = lng;
+          let currentLat = lat;
+          let attempts = 0;
+          const maxAttempts = 10; // Try up to 10 pushes (increased from 5)
+          
+          while (attempts < maxAttempts) {
+            const building = await this.buildingCollider!.checkCollision2D(currentLng, currentLat);
+            if (!building) {
+              // NPC is outside building - update position and done
+              Position.x[eid] = currentLng;
+              Position.y[eid] = currentLat;
+              break;
+            }
+            
+            // Push out further (with extra multiplier for spawn push-out)
+            const pushDir = this.buildingCollider!.findPushDirection(currentLng, currentLat, building);
+            // Multiply push distance by 1.5x for spawn push-out to be more aggressive
+            currentLng += pushDir.dx * 1.5;
+            currentLat += pushDir.dy * 1.5;
+            attempts++;
+          }
+          
+          // Final position update (even if still inside, at least we tried)
+          Position.x[eid] = currentLng;
+          Position.y[eid] = currentLat;
+        })().catch(() => {
+          // Ignore errors - collision system will handle it next frame
+        });
+      }
     }
     console.log(`[GameWorld] Spawned ${count} NPCs`);
   }

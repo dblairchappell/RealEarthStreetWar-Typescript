@@ -42,6 +42,13 @@ export const BUILDING_VELOCITY_DAMPING = 0.5;
 export const MIN_PUSH_DISTANCE_DEG = CHARACTER_RADIUS_DEG * 1.5;
 
 /**
+ * Additional buffer around building boundaries (in degrees).
+ * Makes buildings effectively larger for collision detection.
+ * This prevents entities from getting too close to building edges.
+ */
+export const BUILDING_BUFFER_DEG = 0.000005; // ~0.11 meters at equator
+
+/**
  * Simple point-in-polygon check using ray casting algorithm.
  * Faster than Turf.js booleanPointInPolygon.
  */
@@ -146,8 +153,9 @@ export class BuildingCollider {
         const projLat = p1[1] + t * segDy;
         const dist = Math.sqrt((projLng - lng) ** 2 + (projLat - lat) ** 2);
         
-        // Early exit: if distance to edge is less than collision radius, circle overlaps polygon
-        if (dist < CHARACTER_RADIUS_DEG) {
+        // Early exit: if distance to edge is less than effective radius (includes buffer), circle overlaps polygon
+        const effectiveRadius = CHARACTER_RADIUS_DEG + BUILDING_BUFFER_DEG;
+        if (dist < effectiveRadius) {
           return building;
         }
       }
@@ -194,6 +202,9 @@ export class BuildingCollider {
     const polygon = building.geometry.geometry;
     const coords = polygon.coordinates[0]; // First ring is exterior
 
+    // Check if entity is inside the building polygon
+    const isInside = pointInPolygon(lng, lat, coords);
+
     // Find closest point on building edge
     let minDist = Infinity;
     let closestPoint: [number, number] | null = null;
@@ -224,8 +235,14 @@ export class BuildingCollider {
 
     if (closestPoint) {
       // Calculate direction vector from entity to nearest edge point
-      const dx = closestPoint[0] - lng;
-      const dy = closestPoint[1] - lat;
+      let dx = closestPoint[0] - lng;
+      let dy = closestPoint[1] - lat;
+      
+      // If entity is OUTSIDE the building, reverse direction to push AWAY from building
+      if (!isInside) {
+        dx = -dx;
+        dy = -dy;
+      }
       
       // Normalize and scale by push distance
       // Push far enough so the collision circle no longer overlaps the building
@@ -358,15 +375,31 @@ export async function buildingCollisionPreventSystem(
       const altitude = Altitude ? Altitude.value[eid] : 0;
       
       // First, check if entity is already colliding with a building
-      // If so, zero out velocity to prevent further entry
+      // If so, push it out immediately instead of stopping movement
       const currentBuilding = altitude > 0 && Altitude
         ? await buildingCollider.checkCollision3D(currentLng, currentLat, altitude)
         : await buildingCollider.checkCollision2D(currentLng, currentLat);
       
       if (currentBuilding) {
-        // Entity is already inside or touching a building - stop movement
-        Velocity.x[eid] = 0;
-        Velocity.y[eid] = 0;
+        // Entity is already inside or touching a building - push it out
+        const pushDir = buildingCollider.findPushDirection(currentLng, currentLat, currentBuilding);
+        
+        // Push entity out immediately
+        Position.x[eid] += pushDir.dx;
+        Position.y[eid] += pushDir.dy;
+        
+        // Project velocity onto wall for sliding (so entity can escape along the wall)
+        const slide = buildingCollider.projectOntoWall(
+          velX,
+          velY,
+          pushDir.dx,
+          pushDir.dy
+        );
+        
+        // Update velocity to slide along wall (helps entity escape)
+        Velocity.x[eid] = slide.slideX;
+        Velocity.y[eid] = slide.slideY;
+        
         return;
       }
       
