@@ -39,7 +39,7 @@ import { defineQuery } from "bitecs";
 import { world } from "../ecs/world";
 import { Position, Rotation, Velocity } from "../ecs/world";
 import { NpcTag, CHARACTER_RADIUS_DEG } from "@shared/realearthstreetwar";
-import { SHOW_COLLISION_BOUNDS } from "../config";
+import { NPC_SPRITE_SIZE_MULTIPLIER, SHOW_COLLISION_BOUNDS } from "../config";
 import { calculateRotationFromStored } from "./utils/spriteUtils";
 
 /**
@@ -112,7 +112,7 @@ export default class NpcLayer implements Renderable, Updatable {
   private readonly runningSpeedMultiplier = 1.5; // Running is 1.5x walking speed
   
   // Base size multiplier (same as CharacterView for consistency)
-  private readonly npcBaseSize = 0.06;
+  private readonly npcBaseSize = NPC_SPRITE_SIZE_MULTIPLIER;
   
   // Storage for NPC speeds (from server snapshot) - used for animation scaling
   private npcSpeeds: Map<number, number> = new Map();

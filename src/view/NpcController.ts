@@ -61,9 +61,6 @@ export default class NpcController implements Renderable, Updatable {
   // WebGL rendering layer that actually draws the NPCs
   private npcLayer: NpcInstancedLayer;
   
-  // Sprite size constants (must match NpcInstancedLayer)
-  private static readonly BASE_SIZE_PX = 70;
-  
   // ECS query for finding all NPC entities
   // Finds entities that have NpcTag, Position, and Velocity components
   private query = defineQuery([NpcTag, Position, Velocity]);

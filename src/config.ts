@@ -29,6 +29,19 @@ export const MAP_PROJECTION: 'mercator' | 'globe' | 'vertical-perspective' = 'me
 // Toggle developer performance overlay (fps / frame time / CPU)
 export const SHOW_PERF_OVERLAY = true;
 
+// NPC sprite size multiplier (applies to both Canvas and WebGL paths)
+// Higher values = larger sprites, lower values = smaller sprites
+// Default: 0.06
+// 
+// Both Canvas and WebGL paths now use the same scaling formula:
+// - Reference zoom: 10
+// - Scale factor: 1.2
+// - Min size: 1px, Max size: 200px
+// - Formula: size = baseSize * multiplier * 2^((zoom - 10) / 1.2)
+// 
+// The multiplier works the same way for both paths, ensuring consistent visual size.
+export const NPC_SPRITE_SIZE_MULTIPLIER = 0.06;
+
 // Toggle collision bounds visualization (shows collision circles around NPCs)
 export const SHOW_COLLISION_BOUNDS = false; // Set to true to enable
 

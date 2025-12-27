@@ -37,7 +37,7 @@ import tzLookup from "tz-lookup";          // gives us the lat/lon → TZ functi
 // import osmtogeojson from 'osmtogeojson';
 import NpcInstancedLayer from "./view/NpcInstancedLayer";
 import NpcLayer from "./view/NpcLayer";
-import { NPC_RENDER_PATH, SHOW_PERF_OVERLAY } from "./config";
+import { NPC_RENDER_PATH, NPC_SPRITE_SIZE_MULTIPLIER, SHOW_PERF_OVERLAY } from "./config";
 import NpcController from "./view/NpcController";
 import { GameClient } from "./network/GameClient";
 import { SERVER_URL } from "./config";
@@ -259,7 +259,7 @@ map.on('load', () => {
          * WebGL instanced rendering path (fast, Mercator recommended).
          * Creates a custom MapLibre layer that renders NPCs using WebGL.
          */
-        const npcGlLayer = new NpcInstancedLayer();
+        const npcGlLayer = new NpcInstancedLayer(NPC_SPRITE_SIZE_MULTIPLIER);
         map.addLayer(npcGlLayer as any);
 
         /**

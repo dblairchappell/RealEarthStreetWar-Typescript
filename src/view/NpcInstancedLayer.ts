@@ -133,8 +133,23 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
   /** Map from entity ID to index in positionsToRender array */
   private entityIdToIndex: Map<number, number> = new Map();
 
-  // Base sprite size at reference zoom level (used for zoom-based scaling)
-  private static readonly BASE_SIZE_PX = 70;
+  // Size multiplier (can be set via config, same as Canvas path)
+  private readonly sizeMultiplier: number;
+  
+  // Reference zoom level and scale factor (same as Canvas path for consistency)
+  private static readonly REFERENCE_ZOOM = 10;
+  private static readonly SCALE_FACTOR = 1.2;
+  private static readonly MIN_SIZE = 1;
+  private static readonly MAX_SIZE = 200;
+
+  /**
+   * Constructor - initializes the layer with a size multiplier.
+   * 
+   * @param sizeMultiplier - Multiplier for sprite size (default: 1.0)
+   */
+  constructor(sizeMultiplier: number = 1.0) {
+    this.sizeMultiplier = sizeMultiplier;
+  }
 
   /**
    * Called by NpcController each frame to provide updated screen-space positions for NPCs.
@@ -176,22 +191,33 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
 
   /**
    * Calculates the point sprite size in pixels based on the current map zoom level.
-   * Uses exponential scaling to maintain consistent visual size as the user zooms.
+   * Uses the same formula as Canvas path for consistency (via shared utility function).
    * 
-   * The formula: size = BASE_SIZE * 2^((zoom - referenceZoom) / 1.4)
-   * - At zoom 22: size = BASE_SIZE (72px)
+   * Formula: size = baseSize * 2^((zoom - 10) / 1.2)
+   * - At zoom 10: size = baseSize * multiplier
    * - Zooming in: size increases exponentially
    * - Zooming out: size decreases exponentially
-   * - Clamped between 4px (min) and 72px (max) to prevent extreme sizes
+   * - Clamped between 1px (min) and 200px (max) to prevent extreme sizes
+   * 
+   * Uses same reference zoom (10), scale factor (1.2), and min/max (1/200) as Canvas path.
+   * The base size is calculated to match Canvas path visual size when using the same multiplier.
    * 
    * @param zoom - Current map zoom level (typically 0-22+)
    * @returns Point sprite size in pixels
    */
   private calculatePointSizePx(zoom: number): number {
-    const referenceZoom   = 22; // Zoom level where sprite is at BASE_SIZE_PX
-    const scale  = Math.pow(2, (zoom - referenceZoom) / 1.4); // Exponential scale factor
-    const size   = Math.max(4, Math.min(72, NpcInstancedLayer.BASE_SIZE_PX * scale)); // Clamp to reasonable range
-    return size;
+    // Use exact same formula as Canvas path: referenceZoom=10, scaleFactor=1.2, min=1, max=200
+    // Canvas uses: size = npcBaseSize * scale where npcBaseSize = NPC_SPRITE_SIZE_MULTIPLIER (0.06)
+    // At zoom 10: size = 0.06 * 1 = 0.06, clamped to 1px (CSS pixels)
+    // 
+    // For WebGL to match Canvas visual size, we use the same base multiplier (0.06)
+    // Since we're not multiplying by devicePixelRatio (Canvas handles it via transform),
+    // we can use the multiplier directly
+    const scale = Math.pow(2, (zoom - NpcInstancedLayer.REFERENCE_ZOOM) / NpcInstancedLayer.SCALE_FACTOR);
+    const size = this.sizeMultiplier * scale;
+    
+    // Clamp to same range as Canvas path
+    return Math.max(NpcInstancedLayer.MIN_SIZE, Math.min(NpcInstancedLayer.MAX_SIZE, size));
   }
 
   /**
@@ -456,10 +482,12 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
     g.bindTexture(g.TEXTURE_2D, this.textures.running!);
     g.uniform1i(this.uTexRunningLocation, 2);
 
-    // Calculate point size based on zoom level and device pixel ratio
-    // devicePixelRatio accounts for high-DPI displays (Retina, etc.)
+    // Calculate point size based on zoom level
+    // Use same calculation as Canvas path, then multiply by devicePixelRatio for WebGL physical pixels
+    // Canvas uses CSS pixels and handles dpr via transform, WebGL uses physical pixels directly
     const zoom = this.map.getZoom();
-    const sizePx = this.calculatePointSizePx(zoom) * (window.devicePixelRatio || 1);
+    const sizeCssPx = this.calculatePointSizePx(zoom); // Size in CSS pixels (matches Canvas)
+    const sizePx = sizeCssPx * (window.devicePixelRatio || 1); // Convert to physical pixels for WebGL
     g.uniform1f(this.uPointSizeLocation, sizePx);
 
     // Enable alpha blending for transparent sprites
