@@ -77,6 +77,7 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
   private aPosLocation = 0; // Attribute location for position data (vec2)
   private aFrameLocation!: number; // Attribute location for frame index (float)
   private aAnimTypeLocation!: number; // Attribute location for animation type (float)
+  private aRotationLocation!: number; // Attribute location for rotation angle (float, radians)
   private uTexIdleLocation!: WebGLUniformLocation; // Uniform for idle sprite sheet sampler
   private uTexWalkingLocation!: WebGLUniformLocation; // Uniform for walking sprite sheet sampler
   private uTexRunningLocation!: WebGLUniformLocation; // Uniform for running sprite sheet sampler
@@ -147,25 +148,26 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
   public setPositionsToRender(positions: Float32Array, count: number) {
     this.positionsToRender = positions;
     this.npcCount = count;
-    // Convert to vertex data format for compatibility (no animation data)
+    // Convert to vertex data format for compatibility (no animation data, no rotation)
     // This is a fallback for code that hasn't been updated yet
-    const vertexData = new Float32Array(count * 4);
+    const vertexData = new Float32Array(count * 5);
     for (let i = 0; i < count; i++) {
-      vertexData[i * 4] = positions[i * 2];     // x
-      vertexData[i * 4 + 1] = positions[i * 2 + 1]; // y
-      vertexData[i * 4 + 2] = 0; // frame = 0 (first frame)
-      vertexData[i * 4 + 3] = 0; // animType = 0 (idle)
+      vertexData[i * 5] = positions[i * 2];     // x
+      vertexData[i * 5 + 1] = positions[i * 2 + 1]; // y
+      vertexData[i * 5 + 2] = 0; // frame = 0 (first frame)
+      vertexData[i * 5 + 3] = 0; // animType = 0 (idle)
+      vertexData[i * 5 + 4] = 0; // rotation = 0 (no rotation)
     }
     this.vertexData = vertexData;
   }
 
   /**
    * Called by NpcController each frame to provide vertex data with animation information.
-   * The vertex data includes positions and animation state for sprite sheet rendering.
+   * The vertex data includes positions, animation state, and rotation for sprite sheet rendering.
    * 
-   * @param data - Float32Array with [x0, y0, frame0, animType0, x1, y1, frame1, animType1, ...]
-   *               Format: 4 floats per NPC (x, y, frameIndex, animType)
-   * @param count - Number of NPCs (data.length / 4)
+   * @param data - Float32Array with [x0, y0, frame0, animType0, rotation0, x1, y1, frame1, animType1, rotation1, ...]
+   *               Format: 5 floats per NPC (x, y, frameIndex, animType, rotation)
+   * @param count - Number of NPCs (data.length / 5)
    */
   public setVertexData(data: Float32Array, count: number): void {
     this.vertexData = data;
@@ -221,10 +223,12 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
     attribute vec2 a_pos;           // Screen coordinates (x, y) for this NPC
     attribute float a_frame;       // Frame index (0-30 for idle/walking, 0-22 for running)
     attribute float a_animType;    // Animation type (0=idle, 1=walking, 2=running)
+    attribute float a_rotation;    // Rotation angle in radians
     
-    // Pass animation data to fragment shader
+    // Pass animation data and rotation to fragment shader
     varying float v_frame;
     varying float v_animType;
+    varying float v_rotation;
     
     void main() {
       // Convert screen coordinates [0, viewportSize] to clip space [-1, 1]
@@ -233,9 +237,10 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
       gl_Position = vec4(clip_space, 0.0, 1.0); // Z=0 (on screen plane), W=1 (no perspective)
       gl_PointSize = u_pointSize; // Set size for point sprite rendering
       
-      // Pass animation data to fragment shader
+      // Pass animation data and rotation to fragment shader
       v_frame = a_frame;
       v_animType = a_animType;
+      v_rotation = a_rotation;
     }`;
 
     // Fragment shader: Samples sprite sheet texture based on animation type and frame
@@ -251,9 +256,23 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
     
     varying float v_frame;      // Frame index from vertex shader
     varying float v_animType;   // Animation type from vertex shader
+    varying float v_rotation;   // Rotation angle from vertex shader (radians)
     
     void main() {
       vec2 uv = gl_PointCoord.xy; // Base UV coordinates (0-1 range)
+      
+      // Rotate UV coordinates around center (0.5, 0.5) to rotate the sprite
+      // This simulates sprite rotation for WebGL point sprites
+      // Canvas rotate() rotates clockwise, but standard rotation matrix rotates counter-clockwise
+      // So we negate the rotation to match Canvas behavior
+      vec2 center = vec2(0.5, 0.5);
+      uv -= center; // Translate to origin
+      float cosR = cos(-v_rotation); // Negate rotation to match Canvas clockwise rotation
+      float sinR = sin(-v_rotation);
+      // Rotate: [cos -sin] [x]   = [x*cos - y*sin]
+      //         [sin  cos] [y]     [x*sin + y*cos]
+      uv = vec2(uv.x * cosR - uv.y * sinR, uv.x * sinR + uv.y * cosR);
+      uv += center; // Translate back
       
       // Select texture and frame count based on animation type
       vec4 color;
@@ -308,6 +327,7 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
     this.aPosLocation = this.gl.getAttribLocation(this.program, 'a_pos');
     this.aFrameLocation = this.gl.getAttribLocation(this.program, 'a_frame');
     this.aAnimTypeLocation = this.gl.getAttribLocation(this.program, 'a_animType');
+    this.aRotationLocation = this.gl.getAttribLocation(this.program, 'a_rotation');
     this.uTexIdleLocation = this.gl.getUniformLocation(this.program, 'u_texIdle')!;
     this.uTexWalkingLocation = this.gl.getUniformLocation(this.program, 'u_texWalking')!;
     this.uTexRunningLocation = this.gl.getUniformLocation(this.program, 'u_texRunning')!;
@@ -402,12 +422,13 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
     // Upload vertex data to GPU (only updates, doesn't reallocate if size is same)
     g.bufferSubData(g.ARRAY_BUFFER, 0, this.vertexData);
     
-    // Configure vertex attributes: 4 floats per NPC (x, y, frame, animType)
-    // Stride = 16 bytes (4 floats * 4 bytes each)
-    const stride = 16; // bytes
+    // Configure vertex attributes: 5 floats per NPC (x, y, frame, animType, rotation)
+    // Stride = 20 bytes (5 floats * 4 bytes each)
+    const stride = 20; // bytes
     g.vertexAttribPointer(this.aPosLocation, 2, g.FLOAT, false, stride, 0); // Position: offset 0
     g.vertexAttribPointer(this.aFrameLocation, 1, g.FLOAT, false, stride, 8); // Frame: offset 8 bytes (after x, y)
     g.vertexAttribPointer(this.aAnimTypeLocation, 1, g.FLOAT, false, stride, 12); // AnimType: offset 12 bytes
+    g.vertexAttribPointer(this.aRotationLocation, 1, g.FLOAT, false, stride, 16); // Rotation: offset 16 bytes
     
     // Set viewport size uniform (needed for screen-to-clip-space conversion)
     // IMPORTANT: map.project() returns CSS pixels, so we must use CSS pixel dimensions
@@ -450,10 +471,12 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
     g.enableVertexAttribArray(this.aPosLocation);
     g.enableVertexAttribArray(this.aFrameLocation);
     g.enableVertexAttribArray(this.aAnimTypeLocation);
+    g.enableVertexAttribArray(this.aRotationLocation);
     g.drawArrays(g.POINTS, 0, this.npcCount); // Draw npcCount points in one call
     g.disableVertexAttribArray(this.aPosLocation);
     g.disableVertexAttribArray(this.aFrameLocation);
     g.disableVertexAttribArray(this.aAnimTypeLocation);
+    g.disableVertexAttribArray(this.aRotationLocation);
     g.disable(g.BLEND);
   }
 

@@ -40,7 +40,7 @@
  */
 
 import { Renderable, Updatable } from "../loop/GameLoop";
-import { world, Position, Velocity } from '../ecs/world';
+import { world, Position, Velocity, Rotation } from '../ecs/world';
 import { NpcTag } from '@shared/realearthstreetwar';
 import { defineQuery } from "bitecs";
 import NpcInstancedLayer from "./NpcInstancedLayer";
@@ -255,11 +255,11 @@ export default class NpcController implements Renderable, Updatable {
       return;
     }
 
-    /* ---------------- Step 2: Project to Screen Coordinates ---------------- */
+    /* ---------------- Step 2: Project to Screen Coordinates and Calculate Rotation ---------------- */
     
-    // Build vertex buffer with animation data
-    // Format: [x, y, frameIndex, animType] per NPC (4 floats per NPC)
-    const vertexData = new Float32Array(count * 4);
+    // Build vertex buffer with animation data and rotation
+    // Format: [x, y, frameIndex, animType, rotation] per NPC (5 floats per NPC)
+    const vertexData = new Float32Array(count * 5);
     
     for (let i = 0; i < count; i++) {
       const eid = ents[i]; // Entity ID for this NPC
@@ -277,16 +277,39 @@ export default class NpcController implements Renderable, Updatable {
       const screenX = Math.round(screenPos.x);
       const screenY = Math.round(screenPos.y);
       
+      // Get velocity to determine animation type and rotation
+      const velocityX = Velocity.x[eid] || 0;
+      const velocityY = Velocity.y[eid] || 0;
+      const speed = Math.sqrt(velocityX * velocityX + velocityY * velocityY);
+      
+      // Calculate rotation (same logic as Canvas path)
+      let rotation: number;
+      if (speed > this.velocityThreshold) {
+        // Moving: calculate rotation from velocity
+        const baseRotation = -(Math.atan2(velocityY, velocityX) - Math.PI / 2);
+        // Account for camera bearing (same as player sprite does)
+        const cameraBearingRad = (this.map.getBearing() * Math.PI) / 180;
+        rotation = baseRotation - cameraBearingRad;
+      } else {
+        // Idle: use stored rotation
+        const rotationDeg = Rotation.angle[eid] || 0;
+        const baseRotation = -((rotationDeg * Math.PI) / 180 - Math.PI / 2);
+        // Account for camera bearing
+        const cameraBearingRad = (this.map.getBearing() * Math.PI) / 180;
+        rotation = baseRotation - cameraBearingRad;
+      }
+      
       // Get animation state for this NPC
       const animState = this.npcAnimationState.get(eid);
       const frame = animState ? animState.currentFrame : 0;
       const animType = animState ? animState.animType : 'idle';
       
-      // Store vertex data: [x, y, frameIndex, animType]
-      vertexData[i * 4] = screenX;
-      vertexData[i * 4 + 1] = screenY;
-      vertexData[i * 4 + 2] = frame;
-      vertexData[i * 4 + 3] = this.animTypeToFloat(animType);
+      // Store vertex data: [x, y, frameIndex, animType, rotation]
+      vertexData[i * 5] = screenX;
+      vertexData[i * 5 + 1] = screenY;
+      vertexData[i * 5 + 2] = frame;
+      vertexData[i * 5 + 3] = this.animTypeToFloat(animType);
+      vertexData[i * 5 + 4] = rotation;
     }
 
     /* ---------------- Step 4: Send Data to Rendering Layer ---------------- */
