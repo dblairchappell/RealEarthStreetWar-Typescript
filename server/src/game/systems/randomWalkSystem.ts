@@ -47,12 +47,18 @@ export function randomWalkSystem(world: IWorld): void {
     changeCounter[eid] = (changeCounter[eid] || 0) - 1;
     if (changeCounter[eid] <= 0) {
       changeCounter[eid] = Math.floor(Math.random() * CHANGE_TIMER) + CHANGE_TIMER;
-      const angleRad = Math.random() * Math.PI * 2;
-      Rotation.angle[eid] = angleRad * 180 / Math.PI;
       
-      // Use pre-calculated speed (no multiplication needed)
-      Velocity.x[eid] = Math.cos(angleRad) * (npcSpeed[eid] || BASE_SPEED);
-      Velocity.y[eid] = Math.sin(angleRad) * (npcSpeed[eid] || BASE_SPEED);
+      // Generate angle in game coordinates (0° = north, 90° = east)
+      const gameAngleDeg = Math.random() * 360;
+      Rotation.angle[eid] = gameAngleDeg; // Store directly in game coordinates
+      
+      // Convert to radians (still in game coordinates)
+      const radians = (gameAngleDeg * Math.PI) / 180;
+      
+      // Use same formula as player: sin for lat/y, cos for lng/x
+      // This converts from game coordinates (0° = north) to movement direction
+      Velocity.x[eid] = Math.cos(radians) * (npcSpeed[eid] || BASE_SPEED);
+      Velocity.y[eid] = Math.sin(radians) * (npcSpeed[eid] || BASE_SPEED);
     }
   }
 }

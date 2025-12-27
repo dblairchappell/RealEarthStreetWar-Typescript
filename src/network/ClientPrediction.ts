@@ -125,25 +125,25 @@ export class ClientPrediction {
       let deltaLng = 0;
       
       if (input.forward) {
-        deltaLat += Math.cos(radians) * step;
-        deltaLng += Math.sin(radians) * step;
+        deltaLat += Math.sin(radians) * step;
+        deltaLng += Math.cos(radians) * step;
       }
       
       if (input.backward) {
-        deltaLat -= Math.cos(radians) * step;
-        deltaLng -= Math.sin(radians) * step;
+        deltaLat -= Math.sin(radians) * step;
+        deltaLng -= Math.cos(radians) * step;
       }
       
       if (input.left) {
-        const strafeRadians = radians - Math.PI / 2;
-        deltaLat += Math.cos(strafeRadians) * step;
-        deltaLng += Math.sin(strafeRadians) * step;
+        const strafeRadians = radians + Math.PI / 2;
+        deltaLat += Math.sin(strafeRadians) * step;
+        deltaLng += Math.cos(strafeRadians) * step;
       }
       
       if (input.right) {
-        const strafeRadians = radians + Math.PI / 2;
-        deltaLat += Math.cos(strafeRadians) * step;
-        deltaLng += Math.sin(strafeRadians) * step;
+        const strafeRadians = radians - Math.PI / 2;
+        deltaLat += Math.sin(strafeRadians) * step;
+        deltaLng += Math.cos(strafeRadians) * step;
       }
       
       const latRadians = (Position.y[this.playerEid] * Math.PI) / 180;
