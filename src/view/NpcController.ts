@@ -45,7 +45,9 @@ import { NpcTag } from '@shared/realearthstreetwar';
 import { defineQuery } from "bitecs";
 import NpcInstancedLayer from "./NpcInstancedLayer";
 import maplibregl from "maplibre-gl";
-import { calculateRotationFromStored } from "./utils/spriteUtils";
+import { calculateRotationFromStored, calculateSpriteSize } from "./utils/spriteUtils";
+import { isEntityVisible, calculateSpritePaddingDegrees } from "./utils/viewportCulling";
+import { NPC_SPRITE_SIZE_MULTIPLIER } from "../config";
 
 /**
  * Controller that manages NPC position data and coordinates with the rendering layer.
@@ -104,6 +106,13 @@ export default class NpcController implements Renderable, Updatable {
   private npcSpeeds: Map<number, number> = new Map();
   private readonly baseSpeed = 0.000000225; // Same as BASE_SPEED on server
   
+  /** Base size multiplier for sprite size calculation */
+  private readonly npcBaseSize = NPC_SPRITE_SIZE_MULTIPLIER;
+  
+  /** Cached viewport bounds for culling (updated on camera move) */
+  private cachedBounds: { getWest(): number; getEast(): number; getSouth(): number; getNorth(): number } | null = null;
+  private cachedPaddingDegrees: number = 0;
+  
   /**
    * Constructs a new NpcController.
    * 
@@ -113,6 +122,25 @@ export default class NpcController implements Renderable, Updatable {
   constructor(map: maplibregl.Map, npcLayer: NpcInstancedLayer) {
     this.map = map;
     this.npcLayer = npcLayer;
+    
+    // Listen for camera changes to update viewport bounds for culling
+    this.map.on('move', () => this.updateViewportBounds());
+    this.map.on('rotate', () => this.updateViewportBounds());
+    this.map.on('pitch', () => this.updateViewportBounds());
+    this.map.on('zoom', () => this.updateViewportBounds());
+    
+    // Initialize viewport bounds
+    this.updateViewportBounds();
+  }
+  
+  /**
+   * Update cached viewport bounds for culling
+   */
+  private updateViewportBounds(): void {
+    this.cachedBounds = this.map.getBounds();
+    const zoom = this.map.getZoom();
+    const spriteSize = calculateSpriteSize(this.npcBaseSize, zoom);
+    this.cachedPaddingDegrees = calculateSpritePaddingDegrees(this.map, spriteSize, zoom);
   }
 
   /**
@@ -237,6 +265,7 @@ export default class NpcController implements Renderable, Updatable {
    * Renderable implementation – called each frame by GameLoop.
    * 
    * Reads NPC positions directly from ECS (like Canvas path) and projects to screen coordinates.
+   * Applies viewport culling to skip off-screen NPCs before building vertex buffer.
    * No interpolation - matches Canvas behavior for consistency.
    * 
    * @param alpha - Interpolation factor (unused - reading directly from ECS)
@@ -244,31 +273,62 @@ export default class NpcController implements Renderable, Updatable {
   render(alpha: number): void {
     /* ---------------- Step 1: Get NPC Positions from ECS ---------------- */
     
+    // Update viewport bounds if not cached (shouldn't happen, but safety check)
+    if (!this.cachedBounds) {
+      this.updateViewportBounds();
+    }
+    
     // Query ECS world directly for NPC positions (same as Canvas path)
     const ents = this.query(world);
-    const count = ents.length;
+    const totalCount = ents.length;
 
     // Early exit if no NPCs to render
-    if (count === 0) {
-      this.npcLayer.setPositionsToRender(new Float32Array(), 0);
+    if (totalCount === 0) {
+      this.npcLayer.setVertexData(new Float32Array(), 0);
       this.map.triggerRepaint();
       return;
     }
 
-    /* ---------------- Step 2: Project to Screen Coordinates and Calculate Rotation ---------------- */
+    /* ---------------- Step 2: Cull Off-Screen NPCs ---------------- */
     
-    // Build vertex buffer with animation data and rotation
+    // First pass: collect visible NPC entity IDs
+    const visibleNPCs: number[] = [];
+    for (let i = 0; i < totalCount; i++) {
+      const eid = ents[i];
+      const lng = Position.x[eid];
+      const lat = Position.y[eid];
+      
+      // CULL: Only include NPCs that are visible in the viewport
+      if (this.cachedBounds && !isEntityVisible(lng, lat, this.cachedBounds, this.cachedPaddingDegrees)) {
+        continue;
+      }
+      
+      visibleNPCs.push(eid);
+    }
+    
+    const visibleCount = visibleNPCs.length;
+    
+    // Early exit if no visible NPCs
+    if (visibleCount === 0) {
+      this.npcLayer.setVertexData(new Float32Array(), 0);
+      this.map.triggerRepaint();
+      return;
+    }
+
+    /* ---------------- Step 3: Project to Screen Coordinates and Calculate Rotation ---------------- */
+    
+    // Build vertex buffer with animation data and rotation (only for visible NPCs)
     // Format: [x, y, frameIndex, animType, rotation] per NPC (5 floats per NPC)
-    const vertexData = new Float32Array(count * 5);
+    const vertexData = new Float32Array(visibleCount * 5);
     
-    for (let i = 0; i < count; i++) {
-      const eid = ents[i]; // Entity ID for this NPC
+    for (let i = 0; i < visibleCount; i++) {
+      const eid = visibleNPCs[i]; // Entity ID for this visible NPC
       
       // Read position directly from ECS (no interpolation, like Canvas path)
       const lng = Position.x[eid];
       const lat = Position.y[eid];
       
-      // Project lat/lng to screen coordinates
+      // Project lat/lng to screen coordinates (only for visible NPCs)
       // map.project() handles projection math (Mercator, globe, etc.)
       const screenPos = this.map.project({ lng, lat });
       
@@ -304,8 +364,8 @@ export default class NpcController implements Renderable, Updatable {
     /* ---------------- Step 4: Send Data to Rendering Layer ---------------- */
     
     // Send vertex data (positions + animation data) to WebGL rendering layer
-    // NpcInstancedLayer will render all NPCs in a single GPU draw call
-    this.npcLayer.setVertexData(vertexData, count);
+    // NpcInstancedLayer will render all visible NPCs in a single GPU draw call
+    this.npcLayer.setVertexData(vertexData, visibleCount);
 
     /* ---------------- Step 5: Trigger Map Repaint ---------------- */
     
