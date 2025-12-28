@@ -41,6 +41,7 @@ import { NpcTag } from "@shared/realearthstreetwar";
 import { NPC_SPRITE_SIZE_MULTIPLIER } from "../config";
 import { calculateSpriteSize, calculateRotationFromStored } from "./utils/spriteUtils";
 import { SPRITE_ANIMATIONS, VELOCITY_THRESHOLD, BASE_NPC_SPEED } from "./utils/spriteAnimations";
+import { isEntityVisible, calculateSpritePaddingDegrees } from "./utils/viewportCulling";
 
 interface NpcDomElement {
   container: HTMLElement;
@@ -107,6 +108,10 @@ export default class NpcDomLayer implements Renderable, Updatable {
   /** Current camera pitch (for 3D effect) */
   private cameraPitch = 0;
   
+  /** Cached viewport bounds for culling (updated on camera move) */
+  private cachedBounds: { getWest(): number; getEast(): number; getSouth(): number; getNorth(): number } | null = null;
+  private cachedPaddingDegrees: number = 0;
+  
   /**
    * Constructor - sets up the DOM container.
    * 
@@ -136,12 +141,25 @@ export default class NpcDomLayer implements Renderable, Updatable {
     
     // Listen for map events
     this.map.on('resize', () => this.handleMapResize());
-    this.map.on('move', () => this.updateCameraState());
-    this.map.on('rotate', () => this.updateCameraState());
-    this.map.on('pitch', () => this.updateCameraState());
+    this.map.on('move', () => {
+      this.updateCameraState();
+      this.updateViewportBounds();
+    });
+    this.map.on('rotate', () => {
+      this.updateCameraState();
+      this.updateViewportBounds();
+    });
+    this.map.on('pitch', () => {
+      this.updateCameraState();
+      this.updateViewportBounds();
+    });
+    this.map.on('zoom', () => {
+      this.updateViewportBounds();
+    });
     
-    // Update camera state initially
+    // Update camera state and viewport bounds initially
     this.updateCameraState();
+    this.updateViewportBounds();
     
     // Load all sprite images asynchronously
     this.loadSprites();
@@ -153,6 +171,16 @@ export default class NpcDomLayer implements Renderable, Updatable {
   private updateCameraState(): void {
     this.cameraBearing = this.map.getBearing();
     this.cameraPitch = this.map.getPitch();
+  }
+  
+  /**
+   * Update cached viewport bounds for culling
+   */
+  private updateViewportBounds(): void {
+    this.cachedBounds = this.map.getBounds();
+    const zoom = this.map.getZoom();
+    const spriteSize = calculateSpriteSize(this.npcBaseSize, zoom);
+    this.cachedPaddingDegrees = calculateSpritePaddingDegrees(this.map, spriteSize, zoom);
   }
   
   /**
@@ -312,11 +340,16 @@ export default class NpcDomLayer implements Renderable, Updatable {
    * Updatable implementation – called each frame by GameLoop.
    * 
    * Advances sprite animation frames using an accumulator pattern.
-   * Also manages DOM element lifecycle (create/remove).
+   * Also manages DOM element lifecycle (create/remove) and viewport culling.
    * 
    * @param deltaMs - Time elapsed since last update (milliseconds)
    */
   public update(deltaMs: number): void {
+    // Update viewport bounds if not cached (shouldn't happen, but safety check)
+    if (!this.cachedBounds) {
+      this.updateViewportBounds();
+    }
+    
     // Query ECS for current NPCs
     const ents = this.query(world);
     const existingEids = new Set(ents);
@@ -328,17 +361,52 @@ export default class NpcDomLayer implements Renderable, Updatable {
       }
     }
     
-    // Create DOM elements for new NPCs
+    // Create DOM elements for new NPCs (only if visible)
     for (let i = 0; i < ents.length; i++) {
       const eid = ents[i];
+      const lng = Position.x[eid];
+      const lat = Position.y[eid];
+      
+      // CULL: Check if NPC is visible before creating DOM element
+      const isVisible = this.cachedBounds ? 
+        isEntityVisible(lng, lat, this.cachedBounds, this.cachedPaddingDegrees) : true;
+      
       if (!this.npcElements.has(eid)) {
-        this.npcElements.set(eid, this.createNpcElement(eid));
+        if (isVisible) {
+          // Only create DOM element if visible
+          this.npcElements.set(eid, this.createNpcElement(eid));
+        }
+        // Skip animation updates for off-screen NPCs (no DOM element yet)
+        continue;
+      }
+      
+      // Update visibility of existing DOM elements
+      const element = this.npcElements.get(eid);
+      if (element) {
+        if (isVisible) {
+          // Show element if it was hidden
+          if (element.container.style.display === 'none') {
+            element.container.style.display = '';
+          }
+        } else {
+          // Hide element if off-screen (but keep DOM element for reuse)
+          element.container.style.display = 'none';
+          // Skip animation updates for hidden NPCs
+          continue;
+        }
       }
     }
     
-    // Update animation frames for each NPC
+    // Update animation frames for visible NPCs only
     for (let i = 0; i < ents.length; i++) {
       const eid = ents[i];
+      const element = this.npcElements.get(eid);
+      
+      // Skip if no DOM element (not created because off-screen)
+      if (!element) continue;
+      
+      // Skip if element is hidden (off-screen)
+      if (element.container.style.display === 'none') continue;
       
       // Get velocity to determine animation type
       const velocityX = Velocity.x[eid] || 0;
@@ -363,10 +431,7 @@ export default class NpcDomLayer implements Renderable, Updatable {
         animState.accumulator = 0;
         
         // Update sprite image when animation type changes
-        const element = this.npcElements.get(eid);
-        if (element) {
-          this.updateSpriteImage(element, animType);
-        }
+        this.updateSpriteImage(element, animType);
       }
       
       // Get base frame rate for this animation type
@@ -389,21 +454,24 @@ export default class NpcDomLayer implements Renderable, Updatable {
       }
       
       // Update sprite frame
-      const element = this.npcElements.get(eid);
-      if (element) {
-        this.updateSpriteFrame(element, animType, animState.currentFrame);
-      }
+      this.updateSpriteFrame(element, animType, animState.currentFrame);
     }
   }
   
   /**
    * Renderable implementation – called each frame by GameLoop.
    * 
-   * Updates positions, rotations, and sizes for all NPC DOM elements.
+   * Updates positions, rotations, and sizes for all visible NPC DOM elements.
+   * Skips rendering for off-screen entities (culled in update()).
    * 
    * @param alpha - Interpolation factor (currently unused)
    */
   public render(alpha: number): void {
+    // Update viewport bounds if not cached (shouldn't happen, but safety check)
+    if (!this.cachedBounds) {
+      this.updateViewportBounds();
+    }
+    
     // Get current zoom for size calculation
     const zoom = this.map.getZoom();
     const spriteSize = calculateSpriteSize(this.npcBaseSize, zoom);
@@ -414,10 +482,22 @@ export default class NpcDomLayer implements Renderable, Updatable {
     for (let i = 0; i < ents.length; i++) {
       const eid = ents[i];
       const element = this.npcElements.get(eid);
-      if (!element) continue; // Skip if element not created yet
+      
+      // Skip if element not created yet (off-screen NPC)
+      if (!element) continue;
+      
+      // Skip if element is hidden (off-screen NPC)
+      if (element.container.style.display === 'none') continue;
       
       const lng = Position.x[eid];
       const lat = Position.y[eid];
+      
+      // CULL: Double-check visibility (in case bounds changed since update())
+      // This is a safety check - main culling happens in update()
+      if (this.cachedBounds && !isEntityVisible(lng, lat, this.cachedBounds, this.cachedPaddingDegrees)) {
+        element.container.style.display = 'none';
+        continue;
+      }
       
       // Get velocity to determine animation type
       const velocityX = Velocity.x[eid] || 0;
