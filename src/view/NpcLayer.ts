@@ -41,6 +41,7 @@ import { Position, Rotation, Velocity } from "../ecs/world";
 import { NpcTag, CHARACTER_RADIUS_DEG } from "@shared/realearthstreetwar";
 import { NPC_SPRITE_SIZE_MULTIPLIER, SHOW_COLLISION_BOUNDS } from "../config";
 import { calculateRotationFromStored } from "./utils/spriteUtils";
+import { isEntityVisible, calculateSpritePaddingDegrees } from "./utils/viewportCulling";
 
 /**
  * Canvas-based NPC rendering layer.
@@ -118,6 +119,10 @@ export default class NpcLayer implements Renderable, Updatable {
   private npcSpeeds: Map<number, number> = new Map();
   private readonly baseSpeed = 0.000000225; // Same as BASE_SPEED on server
   
+  /** Cached viewport bounds for culling (updated on camera move) */
+  private cachedBounds: { getWest(): number; getEast(): number; getSouth(): number; getNorth(): number } | null = null;
+  private cachedPaddingDegrees: number = 0;
+  
   /**
    * Update NPC speed for animation scaling
    * Called by NetworkStateManager when NPC data is received
@@ -173,8 +178,27 @@ export default class NpcLayer implements Renderable, Updatable {
     // Listen for map resize events to keep canvas in sync
     this.map.on('resize', () => this.resize());
     
+    // Listen for camera changes to update viewport bounds for culling
+    this.map.on('move', () => this.updateViewportBounds());
+    this.map.on('rotate', () => this.updateViewportBounds());
+    this.map.on('pitch', () => this.updateViewportBounds());
+    this.map.on('zoom', () => this.updateViewportBounds());
+    
+    // Initialize viewport bounds
+    this.updateViewportBounds();
+    
     // Load all sprite images asynchronously
     this.loadSprites();
+  }
+  
+  /**
+   * Update cached viewport bounds for culling
+   */
+  private updateViewportBounds(): void {
+    this.cachedBounds = this.map.getBounds();
+    const zoom = this.map.getZoom();
+    const spriteSize = this.calculateSpriteSize(zoom);
+    this.cachedPaddingDegrees = calculateSpritePaddingDegrees(this.map, spriteSize, zoom);
   }
   
   /**
@@ -463,6 +487,11 @@ export default class NpcLayer implements Renderable, Updatable {
     const { clientWidth, clientHeight } = this.map.getContainer();
     ctx.clearRect(0, 0, clientWidth, clientHeight);
     
+    // Update viewport bounds if not cached (shouldn't happen, but safety check)
+    if (!this.cachedBounds) {
+      this.updateViewportBounds();
+    }
+    
     // Get current zoom for size calculation
     const zoom = this.map.getZoom();
     const spriteSize = this.calculateSpriteSize(zoom);
@@ -477,6 +506,11 @@ export default class NpcLayer implements Renderable, Updatable {
         const lng = Position.x[eid];
         const lat = Position.y[eid];
         
+        // CULL: Skip entities outside viewport before doing any expensive operations
+        if (this.cachedBounds && !isEntityVisible(lng, lat, this.cachedBounds, this.cachedPaddingDegrees)) {
+          continue;
+        }
+        
         // Get velocity to determine animation type
         const velocityX = Velocity.x[eid] || 0;
         const velocityY = Velocity.y[eid] || 0;
@@ -489,7 +523,7 @@ export default class NpcLayer implements Renderable, Updatable {
         const rotationDeg = Rotation.angle[eid] || 0;
         const rotation = calculateRotationFromStored(rotationDeg, this.map.getBearing());
         
-        // Project lat/lng to screen coordinates
+        // Project lat/lng to screen coordinates (only for visible NPCs)
         const p = this.map.project({ lng, lat });
         
         // Draw sprite (skip rendering if sprite not loaded)
