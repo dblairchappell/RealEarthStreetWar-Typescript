@@ -39,6 +39,17 @@ export function getNpcSpeed(eid: number): number {
   return npcSpeed[eid] || BASE_SPEED;
 }
 
+/**
+ * Clean up NPC data when entity is removed
+ * This prevents memory leaks from accumulating in sparse arrays
+ * 
+ * @param eid - Entity ID to clean up
+ */
+export function cleanupNpcData(eid: number): void {
+  delete changeCounter[eid];
+  delete npcSpeed[eid];
+}
+
 export function randomWalkSystem(world: IWorld): void {
   const ents = npcQuery(world);
   for (let i = 0; i < ents.length; i++) {

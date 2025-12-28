@@ -7,7 +7,7 @@
 
 import { addComponent, addEntity, createWorld, defineQuery, IWorld, removeComponent } from 'bitecs';
 import { Position, Rotation, Velocity, PlayerTag, NpcTag, SpriteRef, entityCollisionSystem, SpatialGrid, GameState, GameStateConstants, calculateDistanceMeters, BuildingCollider, buildingCollisionSystem, buildingCollisionPreventSystem } from '@shared/realearthstreetwar';
-import { randomWalkSystem, initializeNpcSpeedMultiplier, getNpcSpeed } from './systems/randomWalkSystem';
+import { randomWalkSystem, initializeNpcSpeedMultiplier, getNpcSpeed, cleanupNpcData } from './systems/randomWalkSystem';
 import { movementSystem } from './systems/movementSystem';
 import { GameStateSnapshot, PlayerSnapshot, NpcSnapshot } from '../network/types';
 import { PlayerManager } from '../players/PlayerManager';
@@ -247,6 +247,9 @@ export class GameWorld {
     removeComponent(this.world, Velocity, eid);
     removeComponent(this.world, NpcTag, eid);
     removeComponent(this.world, SpriteRef, eid);
+    
+    // Clean up random walk system data (prevents memory leak)
+    cleanupNpcData(eid);
     
     // Remove from tracking set
     this.npcEntities.delete(eid);
