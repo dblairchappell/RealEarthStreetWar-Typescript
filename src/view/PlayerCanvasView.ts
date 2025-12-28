@@ -1,5 +1,5 @@
 /**
- * PlayerLayer - Canvas-Based Player Rendering Layer
+ * PlayerCanvasView - Canvas-Based Player Rendering Layer
  * 
  * This class provides a Canvas 2D rendering layer for the player character.
  * It's used when PLAYER_RENDER_PATH = 'canvas' in config.ts. This rendering path
@@ -14,16 +14,16 @@
  * - Supports sprite animations (idle, walking, running) driven by input state
  * - Always displays green outline to indicate player possession
  * 
- * Comparison with CharacterView (DOM path):
+ * Comparison with PlayerDomView (DOM path):
  * 
- * | Feature              | CharacterView (DOM) | PlayerLayer (Canvas) |
- * |---------------------|---------------------|----------------------|
- * | Technology          | DOM + CSS           | Canvas 2D            |
- * | Performance         | Good (1 sprite)     | Good (1 sprite)      |
- * | Projection Support  | Any                 | Any                  |
- * | Visual Effects      | CSS transforms      | Canvas API           |
- * | Consistency         | Different from NPCs | Same as NPCs         |
- * | Code Reuse          | Low                 | High (shared utils)  |
+ * | Feature              | PlayerDomView (DOM) | PlayerCanvasView (Canvas) |
+ * |---------------------|---------------------|----------------------------|
+ * | Technology          | DOM + CSS           | Canvas 2D                  |
+ * | Performance         | Good (1 sprite)     | Good (1 sprite)            |
+ * | Projection Support  | Any                 | Any                        |
+ * | Visual Effects      | CSS transforms      | Canvas API                 |
+ * | Consistency         | Different from NPCs | Same as NPCs               |
+ * | Code Reuse          | Low                 | High (shared utils)        |
  * 
  * Usage:
  * 
@@ -48,7 +48,7 @@ import { drawSprite, drawSpriteOutline, loadSpriteImages, SpriteImages } from ".
  * Supports sprite animations (idle, walking, running) driven by input state.
  * Always displays green outline to indicate player possession.
  */
-export default class PlayerLayer implements Renderable, Updatable {
+export default class PlayerCanvasView implements Renderable, Updatable {
   /** HTML5 Canvas element for drawing player */
   private canvas: HTMLCanvasElement;
   /** 2D rendering context for the canvas */
@@ -95,7 +95,7 @@ export default class PlayerLayer implements Renderable, Updatable {
     running: false
   };
   
-  /** Base size multiplier (same as CharacterView for consistency) */
+  /** Base size multiplier (same as PlayerDomView for consistency) */
   private readonly playerBaseSize = 0.06;
   
   /**
@@ -144,7 +144,7 @@ export default class PlayerLayer implements Renderable, Updatable {
       this.spritesLoaded.walking = images.walking !== null;
       this.spritesLoaded.running = images.running !== null;
     }).catch((error) => {
-      console.error('[PlayerLayer] Failed to load sprites:', error);
+      console.error('[PlayerCanvasView] Failed to load sprites:', error);
     });
   }
   
@@ -185,7 +185,7 @@ export default class PlayerLayer implements Renderable, Updatable {
   
   /**
    * Update player position and rotation explicitly
-   * Alternative to reading from ECS (for compatibility with CharacterView interface)
+   * Alternative to reading from ECS (for compatibility with PlayerDomView interface)
    */
   public updatePlayerPosition(coords: { lng: number; lat: number }, rotation: number): void {
     this.playerPosition = coords;
@@ -318,12 +318,12 @@ export default class PlayerLayer implements Renderable, Updatable {
     if (!this.spritesLoaded[animType] || !this.spriteImages[animType]) {
       return; // Skip rendering if sprite not loaded
     }
-    
     // Draw sprite
+    
     drawSprite(this.ctx, this.spriteImages, {
       x: screenPos.x,
       y: screenPos.y,
-      rotation,
+      rotation: -rotation + Math.PI / 2,
       size: spriteSize,
       animType: this.animationState.animType,
       frame: this.animationState.currentFrame,

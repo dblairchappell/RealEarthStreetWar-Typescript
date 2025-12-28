@@ -72,7 +72,7 @@ export default class NpcController implements Renderable, Updatable {
   private selectedNpcEid: number | null = null;
 
   // Animation definitions: frame counts and playback rates
-  // Same as NpcLayer and CharacterView for consistency
+  // Same as NpcLayer and PlayerDomView for consistency
   private readonly animations = {
     idle: {
       frames: 31,

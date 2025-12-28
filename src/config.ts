@@ -2,29 +2,12 @@
 // -----------------------------------------------------------------
 export const GTA1_STYLE_TOP_DOWN = true;   // ← flip to false for 3-D mode
 
-// Player rendering path selection
-// - 'dom': DOM-based rendering with CSS transforms (current implementation)
-//   - Pros: Simple, CSS effects, easy debugging
-//   - Cons: Different from NPC rendering, less consistent
-// - 'canvas': Canvas-based rendering (consistent with NPC rendering)
-//   - Pros: Unified rendering path, easier to maintain, consistent visuals
-//   - Cons: Slightly more complex, no CSS effects
-// - 'webgl': WebGL-based rendering (same pipeline as NPCs, best performance)
-//   - Pros: Same rendering pipeline as NPCs, eliminates sync issues, best performance
-//   - Cons: Requires Mercator projection, more complex
-export const PLAYER_RENDER_PATH: 'dom' | 'canvas' | 'webgl' = 'webgl';
+// 'dom': DOM-based rendering with CSS transforms (works with any projection, including Globe)
+// 'canvas': Canvas-based rendering (works with any projection, including Globe)
+// 'webgl': WebGL-based rendering (best performance) (best for Mercator projection)
+export const PLAYER_RENDER_PATH: 'dom' | 'canvas' | 'webgl' = 'dom';
+export const NPC_RENDER_PATH: 'dom' | 'canvas' | 'webgl' = 'dom';
 
-// NPC rendering path selection
-// - 'webgl': High-performance WebGL instanced rendering (best for Mercator projection)
-// - 'canvas': Canvas-based rendering (works with any projection, including Globe)
-export const NPC_RENDER_PATH: 'webgl' | 'canvas' = 'webgl';
-
-// Map projection type: 'mercator' (default), 'globe', or 'vertical-perspective'
-// Note: MapLibre GL JS v5.6.1 only supports these three projections.
-// - 'mercator': Default flat map, consistent movement, best performance
-// - 'globe': 3D sphere view, accurate sizes
-// - 'vertical-perspective': 3D perspective view (experimental)
-// 
 // Note: WebGL rendering path works best with 'mercator' projection.
 // Canvas rendering path works with any projection.
 export const MAP_PROJECTION: 'mercator' | 'globe' | 'vertical-perspective' = 'mercator';

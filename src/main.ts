@@ -37,6 +37,7 @@ import tzLookup from "tz-lookup";          // gives us the lat/lon → TZ functi
 // import osmtogeojson from 'osmtogeojson';
 import NpcInstancedLayer from "./view/NpcInstancedLayer";
 import NpcLayer from "./view/NpcLayer";
+import NpcDomLayer from "./view/NpcDomLayer";
 import { NPC_RENDER_PATH, NPC_SPRITE_SIZE_MULTIPLIER, SHOW_PERF_OVERLAY } from "./config";
 import NpcController from "./view/NpcController";
 import { GameClient } from "./network/GameClient";
@@ -228,21 +229,21 @@ map.on('load', () => {
     loop.add(hud);
 
     /**
-     * Register PlayerLayer for canvas rendering path (if used).
-     * PlayerLayer implements Updatable and Renderable, so it needs game loop registration.
-     * CharacterView (DOM path) is updated through MapView.update(), so no separate registration needed.
-     * PlayerController (WebGL path) also needs game loop registration.
+     * Register PlayerCanvasView for canvas rendering path (if used).
+     * PlayerCanvasView implements Updatable and Renderable, so it needs game loop registration.
+     * PlayerDomView (DOM path) is updated through MapView.update(), so no separate registration needed.
+     * PlayerWebglView (WebGL path) also needs game loop registration.
      */
-    const playerLayer = view.getPlayerLayer();
-    if (playerLayer) {
-        loop.add(playerLayer); // Register as Updatable for animation frame advancement
-        loop.addRenderable(playerLayer); // Register as Renderable for rendering
+    const playerCanvasView = view.getPlayerCanvasView();
+    if (playerCanvasView) {
+        loop.add(playerCanvasView); // Register as Updatable for animation frame advancement
+        loop.addRenderable(playerCanvasView); // Register as Renderable for rendering
     }
     
-    const playerController = view.getPlayerController();
-    if (playerController) {
-        loop.add(playerController); // Register as Updatable for animation frame advancement
-        loop.addRenderable(playerController); // Register as Renderable for rendering
+    const playerWebglView = view.getPlayerWebglView();
+    if (playerWebglView) {
+        loop.add(playerWebglView); // Register as Updatable for animation frame advancement
+        loop.addRenderable(playerWebglView); // Register as Renderable for rendering
     }
 
     /**
@@ -259,6 +260,11 @@ map.on('load', () => {
      * Canvas path (NPC_RENDER_PATH = 'canvas'):
      * - Falls back to Canvas overlay (NpcLayer)
      * - Uses map.project() for coordinate conversion
+     * - Works with any projection (Globe, Mercator, etc.)
+     * 
+     * DOM path (NPC_RENDER_PATH = 'dom'):
+     * - Uses DOM elements with CSS transforms (NpcDomLayer)
+     * - Similar to PlayerDomView for player rendering
      * - Works with any projection (Globe, Mercator, etc.)
      */
     if (NPC_RENDER_PATH === 'webgl') {
@@ -285,7 +291,7 @@ map.on('load', () => {
         // Wire up WebGL path for speed updates
         controller.getNetworkStateManager().setNpcController(npcController);
 
-    } else {
+    } else if (NPC_RENDER_PATH === 'canvas') {
         /**
          * Canvas overlay path (works with any projection).
          * Uses map.project() to convert lat/lng to screen coordinates.
@@ -300,6 +306,22 @@ map.on('load', () => {
         
         // Wire up Canvas path for speed updates
         controller.getNetworkStateManager().setNpcLayer(npcCanvasLayer);
+        
+    } else if (NPC_RENDER_PATH === 'dom') {
+        /**
+         * DOM overlay path (works with any projection).
+         * Uses DOM elements with CSS transforms, similar to PlayerDomView.
+         * Works with any projection (Globe, Mercator, etc.)
+         */
+        const npcDomLayer = new NpcDomLayer(map);
+        loop.add(npcDomLayer); // Register as Updatable for animation frame advancement
+        loop.addRenderable(npcDomLayer); // Register as Renderable for rendering
+        
+        // Store reference for selection feedback
+        view.setNpcRenderingLayers(npcDomLayer, null);
+        
+        // Wire up DOM path for speed updates
+        controller.getNetworkStateManager().setNpcLayer(npcDomLayer);
     }
 
     /**

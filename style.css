@@ -157,6 +157,13 @@ body {
     transition: box-shadow 0.2s ease;
 }
 
+/* NPC selection outline (red border for selected NPCs) */
+.npc-selected {
+    outline: 3px solid rgba(220, 53, 69, 0.9);
+    outline-offset: -3px;
+    box-shadow: 0 0 8px rgba(220, 53, 69, 0.8);
+}
+
 .possessed-body .character-sprite-slice {
     /* Ensure sprite slices inherit the glow effect */
     filter: drop-shadow(0 0 2px rgba(40, 167, 69, 0.6));

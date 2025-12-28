@@ -1,7 +1,7 @@
 /**
- * CharacterView - Player Character Rendering and Animation System
+ * PlayerDomView - Player Character Rendering and Animation System (DOM Path)
  * 
- * CharacterView handles all aspects of the player character's visual representation,
+ * PlayerDomView handles all aspects of the player character's visual representation,
  * including sprite rendering, animation, positioning, and camera-relative transformations.
  * It maintains separation of concerns from MapView by encapsulating all character-specific
  * rendering logic.
@@ -57,7 +57,7 @@ import { Updatable } from "../loop/GameLoop";
  * Manages the visual representation of the player character.
  * Handles sprite rendering, animation, positioning, and camera-relative transformations.
  */
-export default class CharacterView implements Updatable {
+export default class PlayerDomView implements Updatable {
   // Map instance reference (needed for coordinate projection)
   private map: any;
   
@@ -112,7 +112,7 @@ export default class CharacterView implements Updatable {
   };
 
   /**
-   * Constructs a new CharacterView instance.
+   * Constructs a new PlayerDomView instance.
    * 
    * @param map - MapLibre map instance for coordinate projection
    */
@@ -367,7 +367,7 @@ export default class CharacterView implements Updatable {
     //   Math.abs(coords.lng - oldPos.lng) > 0.000001 ||
     //   Math.abs(coords.lat - oldPos.lat) > 0.000001
     // )) {
-    //   console.log('[CharacterView] Position updated:', {
+    //   console.log('[PlayerDomView] Position updated:', {
     //     coords: { lng: coords.lng.toFixed(8), lat: coords.lat.toFixed(8) },
     //     screen: { x: newScreen.x.toFixed(2), y: newScreen.y.toFixed(2) },
     //     screenDelta: oldScreen ? { 

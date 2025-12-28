@@ -197,7 +197,7 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
   }
 
   /**
-   * Called by PlayerController each frame to provide player vertex data.
+   * Called by PlayerWebglView each frame to provide player vertex data.
    * Player is rendered separately with green outline.
    * 
    * @param data - Float32Array with [x, y, frameIndex, animType, rotation] (5 floats)

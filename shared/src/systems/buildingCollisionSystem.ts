@@ -27,7 +27,7 @@ import type { Feature, Polygon } from 'geojson';
  * Character collision radius in degrees (same as entity collision system).
  * Used to create a buffer around entities for building collision detection.
  */
-export const CHARACTER_RADIUS_DEG = 0.0000028;
+export const CHARACTER_RADIUS_DEG = 0.0000002;
 
 /**
  * Velocity damping when colliding with buildings (0.0 to 1.0).
@@ -39,7 +39,7 @@ export const BUILDING_VELOCITY_DAMPING = 0.5;
  * Minimum push distance when resolving building collisions (in degrees).
  * Ensures entities are pushed far enough to avoid immediate re-collision.
  */
-export const MIN_PUSH_DISTANCE_DEG = CHARACTER_RADIUS_DEG * 1.5;
+export const MIN_PUSH_DISTANCE_DEG = CHARACTER_RADIUS_DEG * 1.0;
 
 /**
  * Additional buffer around building boundaries (in degrees).
@@ -336,6 +336,21 @@ export class BuildingCollider {
 }
 
 /**
+ * Helper function to check collision (2D or 3D) based on altitude
+ */
+function checkCollision(
+  buildingCollider: BuildingCollider,
+  lng: number,
+  lat: number,
+  altitude: number,
+  hasAltitude: boolean
+): Promise<BuildingFeature | null> {
+  return hasAltitude && altitude > 0
+    ? buildingCollider.checkCollision3D(lng, lat, altitude)
+    : buildingCollider.checkCollision2D(lng, lat);
+}
+
+/**
  * Pre-movement building collision check.
  * Checks intended positions (current + velocity) and adjusts velocity to prevent
  * movement into buildings. This prevents entities from entering buildings before
@@ -373,85 +388,98 @@ export async function buildingCollisionPreventSystem(
       }
       
       const altitude = Altitude ? Altitude.value[eid] : 0;
+      const hasAltitude = !!Altitude;
       
       // First, check if entity is already colliding with a building
       // If so, push it out immediately instead of stopping movement
-      const currentBuilding = altitude > 0 && Altitude
-        ? await buildingCollider.checkCollision3D(currentLng, currentLat, altitude)
-        : await buildingCollider.checkCollision2D(currentLng, currentLat);
+      const currentBuilding = await checkCollision(
+        buildingCollider,
+        currentLng,
+        currentLat,
+        altitude,
+        hasAltitude
+      );
       
-      if (currentBuilding) {
+      //if (currentBuilding) {
         // Entity is already inside or touching a building - push it out
-        const pushDir = buildingCollider.findPushDirection(currentLng, currentLat, currentBuilding);
+        //const pushDir = buildingCollider.findPushDirection(currentLng, currentLat, currentBuilding);
         
         // Push entity out immediately
-        Position.x[eid] += pushDir.dx;
-        Position.y[eid] += pushDir.dy;
+        //Position.x[eid] += pushDir.dx;
+        //Position.y[eid] += pushDir.dy;
         
         // Project velocity onto wall for sliding (so entity can escape along the wall)
-        const slide = buildingCollider.projectOntoWall(
-          velX,
-          velY,
-          pushDir.dx,
-          pushDir.dy
-        );
+        // const slide = buildingCollider.projectOntoWall(
+        //   velX,
+        //   velY,
+        //   pushDir.dx,
+        //   pushDir.dy
+        // );
         
-        // Update velocity to slide along wall (helps entity escape)
-        Velocity.x[eid] = slide.slideX;
-        Velocity.y[eid] = slide.slideY;
+        // Update velocity to slide along wall with damping (helps entity escape)
+        //Velocity.x[eid] = slide.slideX * BUILDING_VELOCITY_DAMPING;
+        //Velocity.y[eid] = slide.slideY * BUILDING_VELOCITY_DAMPING;
         
-        return;
-      }
+       // return;
+      //}
       
       // Calculate intended position after movement
-      const intendedLng = currentLng + velX;
-      const intendedLat = currentLat + velY;
+      // const intendedLng = currentLng + velX;
+      // const intendedLat = currentLat + velY;
 
       // Check collision at intended position (2D or 3D based on Altitude component)
-      const intendedBuilding = altitude > 0 && Altitude
-        ? await buildingCollider.checkCollision3D(intendedLng, intendedLat, altitude)
-        : await buildingCollider.checkCollision2D(intendedLng, intendedLat);
+      // const intendedBuilding = await checkCollision(
+      //   buildingCollider,
+      //   intendedLng,
+      //   intendedLat,
+      //   altitude,
+      //   hasAltitude
+      // );
       
-      if (intendedBuilding) {
-        // Movement would cause collision - project velocity onto wall for sliding
-        const pushDir = buildingCollider.findPushDirection(intendedLng, intendedLat, intendedBuilding);
+      // if (intendedBuilding) {
+      //   // Movement would cause collision - project velocity onto wall for sliding
+      //   const pushDir = buildingCollider.findPushDirection(intendedLng, intendedLat, intendedBuilding);
         
-        // Project velocity onto wall for sliding
-        const slide = buildingCollider.projectOntoWall(
-          velX,
-          velY,
-          pushDir.dx,
-          pushDir.dy
-        );
+      //   // Project velocity onto wall for sliding
+      //   const slide = buildingCollider.projectOntoWall(
+      //     velX,
+      //     velY,
+      //     pushDir.dx,
+      //     pushDir.dy
+      //   );
         
-        // Check if sliding would still cause collision
-        // If sliding velocity is very small or would still collide, zero it out
-        const slideSpeed = Math.sqrt(slide.slideX * slide.slideX + slide.slideY * slide.slideY);
-        const originalSpeed = Math.sqrt(velX * velX + velY * velY);
+      //   // Check if sliding would still cause collision
+      //   // If sliding velocity is very small or would still collide, zero it out
+      //   const slideSpeed = Math.sqrt(slide.slideX * slide.slideX + slide.slideY * slide.slideY);
+      //   const originalSpeed = Math.sqrt(velX * velX + velY * velY);
         
-        // If sliding speed is too small (< 10% of original), or if sliding would still collide, stop movement
-        if (slideSpeed < originalSpeed * 0.1) {
-          Velocity.x[eid] = 0;
-          Velocity.y[eid] = 0;
-        } else {
-          // Check if sliding movement would still cause collision
-          const slideLng = currentLng + slide.slideX;
-          const slideLat = currentLat + slide.slideY;
-          const slideBuilding = altitude > 0 && Altitude
-            ? await buildingCollider.checkCollision3D(slideLng, slideLat, altitude)
-            : await buildingCollider.checkCollision2D(slideLng, slideLat);
+      //   // If sliding speed is too small (< 10% of original), or if sliding would still collide, stop movement
+      //   if (slideSpeed < originalSpeed * 0.1) {
+      //     Velocity.x[eid] = 0;
+      //     Velocity.y[eid] = 0;
+      //   } else {
+      //     // Check if sliding movement would still cause collision
+      //     const slideLng = currentLng + slide.slideX;
+      //     const slideLat = currentLat + slide.slideY;
+      //     const slideBuilding = await checkCollision(
+      //       buildingCollider,
+      //       slideLng,
+      //       slideLat,
+      //       altitude,
+      //       hasAltitude
+      //     );
           
-          if (slideBuilding) {
-            // Sliding would still cause collision - stop movement completely
-            Velocity.x[eid] = 0;
-            Velocity.y[eid] = 0;
-          } else {
-            // Safe to slide - update velocity
-            Velocity.x[eid] = slide.slideX;
-            Velocity.y[eid] = slide.slideY;
-          }
-        }
-      }
+      //     if (slideBuilding) {
+      //       // Sliding would still cause collision - stop movement completely
+      //       Velocity.x[eid] = 0;
+      //       Velocity.y[eid] = 0;
+      //     } else {
+      //       // Safe to slide - update velocity with damping
+      //       Velocity.x[eid] = slide.slideX * BUILDING_VELOCITY_DAMPING;
+      //       Velocity.y[eid] = slide.slideY * BUILDING_VELOCITY_DAMPING;
+      //     }
+      //   }
+      // }
     }));
   }
 }
@@ -488,11 +516,16 @@ export async function buildingCollisionSystem(
       const lng = Position.x[eid];
       const lat = Position.y[eid];
       const altitude = Altitude ? Altitude.value[eid] : 0;
+      const hasAltitude = !!Altitude;
 
       // Check collision (2D or 3D based on Altitude component)
-      const building = altitude > 0 && Altitude
-        ? await buildingCollider.checkCollision3D(lng, lat, altitude)
-        : await buildingCollider.checkCollision2D(lng, lat);
+      const building = await checkCollision(
+        buildingCollider,
+        lng,
+        lat,
+        altitude,
+        hasAltitude
+      );
       
       if (building) {
         // Find direction to push entity out (normal to wall)
@@ -506,9 +539,9 @@ export async function buildingCollisionSystem(
           pushDir.dy
         );
         
-        // Update velocity to slide along wall
-        Velocity.x[eid] = slide.slideX;
-        Velocity.y[eid] = slide.slideY;
+        // Update velocity to slide along wall with damping
+        //Velocity.x[eid] = slide.slideX * BUILDING_VELOCITY_DAMPING;
+        //Velocity.y[eid] = slide.slideY * BUILDING_VELOCITY_DAMPING;
         
         // Push out completely to prevent overlap (push distance already accounts for collision radius)
         Position.x[eid] += pushDir.dx;

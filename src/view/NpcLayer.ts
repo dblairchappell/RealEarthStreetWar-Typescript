@@ -62,7 +62,7 @@ export default class NpcLayer implements Renderable, Updatable {
   private selectedNpcEid: number | null = null;
   
   // Animation definitions: sprite sheet URLs, frame counts, and playback rates
-  // Same as CharacterView for consistency
+  // Same as PlayerDomView for consistency
   private animations = {
     idle: {
       url: 'sprites/brian/brian_idling_31x1.png',
@@ -111,7 +111,7 @@ export default class NpcLayer implements Renderable, Updatable {
   private readonly velocityThreshold = 0.0000001; // Small threshold to detect movement
   private readonly runningSpeedMultiplier = 1.5; // Running is 1.5x walking speed
   
-  // Base size multiplier (same as CharacterView for consistency)
+  // Base size multiplier (same as PlayerDomView for consistency)
   private readonly npcBaseSize = NPC_SPRITE_SIZE_MULTIPLIER;
   
   // Storage for NPC speeds (from server snapshot) - used for animation scaling
@@ -326,7 +326,7 @@ export default class NpcLayer implements Renderable, Updatable {
    * @returns Sprite size in pixels
    */
   private calculateSpriteSize(zoom: number): number {
-    const scale = Math.pow(2, (zoom - 10) / 1.2); // Same formula as CharacterView
+    const scale = Math.pow(2, (zoom - 10) / 1.2); // Same formula as PlayerDomView
     return Math.max(1, Math.min(200, this.npcBaseSize * scale));
   }
 

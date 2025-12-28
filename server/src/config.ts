@@ -6,7 +6,7 @@
 
 export const ServerConfig = {
   /** Number of NPCs to spawn automatically at server startup */
-  NPC_COUNT: 300,
+  NPC_COUNT: 500,
   
   /** Default spawn location (NYC area) */
   DEFAULT_SPAWN_CENTER: {
@@ -15,7 +15,7 @@ export const ServerConfig = {
   },
   
   /** Spawn radius in degrees (0.001 is approximately 111 meters at equator) */
-  NPC_SPAWN_RADIUS: 0.0005,
+  NPC_SPAWN_RADIUS: 0.0002,
   
   /** Server port */
   PORT: process.env.PORT ? parseInt(process.env.PORT, 10) : 8080,

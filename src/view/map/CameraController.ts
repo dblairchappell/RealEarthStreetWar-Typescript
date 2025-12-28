@@ -1,5 +1,5 @@
 // view/map/CameraController.ts
-import CharacterView from "../CharacterView";
+import PlayerDomView from "../PlayerDomView";
 import { Updatable } from "../../loop/GameLoop";
 
 /*
@@ -10,7 +10,7 @@ import { Updatable } from "../../loop/GameLoop";
 
 export class CameraController implements Updatable {
   /* ---------------- constructor & state ---------------- */
-  constructor(private map: any, private characterView: CharacterView | null = null) {}
+  constructor(private map: any, private characterView: PlayerDomView | null = null) {}
 
   /* player position to follow */
   private playerPosition: { lng: number; lat: number } | null = null;

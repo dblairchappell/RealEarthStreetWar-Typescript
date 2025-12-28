@@ -1,7 +1,7 @@
 /**
- * PlayerController - Player Position Management and Rendering Coordination for WebGL
+ * PlayerWebglView - Player Position Management and Rendering Coordination for WebGL
  * 
- * PlayerController acts as the bridge between the game simulation and WebGL rendering
+ * PlayerWebglView acts as the bridge between the game simulation and WebGL rendering
  * for the player character. It handles position reading, coordinate projection,
  * animation state management, and prepares data for efficient GPU rendering.
  * 
@@ -44,7 +44,7 @@ import { InputState } from "@shared/realearthstreetwar";
  * 
  * Uses stored rotation from ECS (Rotation.angle) - consistent with NPCs and Canvas path.
  */
-export default class PlayerController implements Renderable, Updatable {
+export default class PlayerWebglView implements Renderable, Updatable {
   // Map instance for coordinate projection
   private map: maplibregl.Map;
   
@@ -73,7 +73,7 @@ export default class PlayerController implements Renderable, Updatable {
   };
 
   // Animation definitions: frame counts and playback rates
-  // Same as NpcController and CharacterView for consistency
+  // Same as NpcController and PlayerDomView for consistency
   private readonly animations = {
     idle: {
       frames: 31,
@@ -90,7 +90,7 @@ export default class PlayerController implements Renderable, Updatable {
   };
 
   /**
-   * Constructs a new PlayerController.
+   * Constructs a new PlayerWebglView.
    * 
    * @param map - MapLibre map instance for coordinate projection
    * @param npcLayer - WebGL rendering layer that will draw the player
