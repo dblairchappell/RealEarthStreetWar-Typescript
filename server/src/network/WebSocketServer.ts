@@ -100,13 +100,23 @@ export class WebSocketServer {
     };
     ws.send(JSON.stringify(welcomeMessage));
     
-    // Create player entity in game world
-    this.gameWorld.createPlayer(
-      player.id,
-      -74.05682, // Default starting position (NYC)
-      40.69337,
-      180
-    );
+    // Check if there's an existing player entity to reuse (for browser refresh/reconnection)
+    // For single-player: reuse the first player entity if it exists
+    const existingPlayerEntries = Array.from(this.gameWorld.getPlayerEntities().entries());
+    if (existingPlayerEntries.length > 0) {
+      // Reuse existing player entity (preserves position across browser refresh)
+      const [oldPlayerId, existingEid] = existingPlayerEntries[0];
+      this.gameWorld.updatePlayerMapping(player.id, existingEid);
+      console.log(`[WebSocketServer] Reusing existing player entity ${existingEid} (was ${oldPlayerId}, now ${player.id})`);
+    } else {
+      // Create new player entity at default spawn location
+      this.gameWorld.createPlayer(
+        player.id,
+        -74.05682, // Default starting position (NYC)
+        40.69337,
+        180
+      );
+    }
     
     // Send immediate state snapshot so client gets current game state
     const snapshot = this.gameWorld.createSnapshot();
@@ -193,13 +203,14 @@ export class WebSocketServer {
    * Handle client disconnect
    */
   private handleDisconnect(playerId: string): void {
-    // Remove player entity from game world
-    this.gameWorld.removePlayer(playerId);
+    // DON'T remove player entity from game world - keep it for reconnection
+    // This preserves the player's position when they refresh the browser
+    // The entity will be reused when they reconnect with a new player ID
     
     // Remove from player manager
     this.playerManager.removePlayer(playerId);
     
-    // Notify other players
+    // Notify other players (if multiplayer)
     const leaveMessage: ServerMessage = {
       type: 'player_left',
       playerId,

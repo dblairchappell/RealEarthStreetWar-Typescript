@@ -125,6 +125,8 @@ export class GameWorld {
 
   /**
    * Remove a player entity
+   * Note: This is kept for potential future use, but currently not called
+   * on disconnect to preserve player position across browser refreshes
    */
   removePlayer(playerId: string): void {
     const eid = this.playerEntities.get(playerId);
@@ -134,6 +136,32 @@ export class GameWorld {
       this.playerEntities.delete(playerId);
       console.log(`[GameWorld] Removed player entity ${eid} for player ${playerId}`);
     }
+  }
+
+  /**
+   * Get all player entities (for reconnection logic)
+   * Returns the map of playerId -> entityId
+   */
+  getPlayerEntities(): Map<string, number> {
+    return this.playerEntities;
+  }
+
+  /**
+   * Update player entity mapping (for reconnection)
+   * Reuses existing entity instead of creating a new one
+   */
+  updatePlayerMapping(playerId: string, eid: number): void {
+    // Remove old mapping if it exists (for the old player ID)
+    for (const [pid, existingEid] of this.playerEntities.entries()) {
+      if (existingEid === eid && pid !== playerId) {
+        this.playerEntities.delete(pid);
+        break;
+      }
+    }
+    
+    // Set new mapping
+    this.playerEntities.set(playerId, eid);
+    console.log(`[GameWorld] Updated player mapping: ${playerId} -> entity ${eid}`);
   }
 
   /**
