@@ -10,7 +10,7 @@ export const NPC_RENDER_PATH: 'dom' | 'canvas' | 'webgl' = 'webgl';
 
 // Note: WebGL rendering path works best with 'mercator' projection.
 // Canvas rendering path works with any projection.
-export const MAP_PROJECTION: 'mercator' | 'globe' | 'vertical-perspective' = 'mercator';
+export const MAP_PROJECTION: 'mercator' | 'globe' | 'vertical-perspective' = 'globe';
 
 // Toggle developer performance overlay (fps / frame time / CPU)
 export const SHOW_PERF_OVERLAY = true;
@@ -34,6 +34,11 @@ export const SHOW_COLLISION_BOUNDS = false; // Set to true to enable
 // Toggle building layer visibility
 export const SHOW_BUILDINGS = true; // Set to false to hide building footprints (outlines)
 export const SHOW_BUILDINGS_3D = true; // Set to false to hide 3D building extrusions
+
+// Toggle 3D terrain visibility
+// Note: Terrain is only visible when pitch > 0 (i.e., when GTA1_STYLE_TOP_DOWN = false)
+export const SHOW_TERRAIN = true; // Set to false to disable 3D terrain
+export const TERRAIN_EXAGGERATION = 1; // Terrain height exaggeration (1 = realistic, higher = more dramatic)
 
 // Network configuration
 // Vite uses import.meta.env instead of process.env in the browser

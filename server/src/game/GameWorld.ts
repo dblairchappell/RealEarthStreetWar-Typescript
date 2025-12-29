@@ -525,7 +525,9 @@ export class GameWorld {
           this.buildingCollider,
           Position,
           Velocity,
-          undefined // Altitude component - undefined means 2D collision (ground level)
+          undefined, // Altitude component - undefined means 2D collision (ground level)
+          Rotation, // Rotation component - allows NPCs to change direction when colliding
+          NpcTag // NpcTag component - allows distinguishing NPCs from players
         );
       } catch (error) {
         console.error('[GameWorld] Error in building collision prevent system:', error);
@@ -550,7 +552,9 @@ export class GameWorld {
           this.buildingCollider,
           Position,
           Velocity,
-          undefined // Altitude component - undefined means 2D collision (ground level)
+          undefined, // Altitude component - undefined means 2D collision (ground level)
+          Rotation, // Rotation component - allows NPCs to change direction when colliding
+          NpcTag // NpcTag component - allows distinguishing NPCs from players
         );
       } catch (error) {
         console.error('[GameWorld] Error in building collision system:', error);

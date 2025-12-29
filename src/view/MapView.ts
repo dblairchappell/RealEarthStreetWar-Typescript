@@ -45,7 +45,7 @@ import PlayerWebglView from "./PlayerWebglView";
 import InputManager from "../input/InputManager";
 import { IInputService } from "../input/IInputService";
 import { InputState } from "@shared/realearthstreetwar";
-import { GTA1_STYLE_TOP_DOWN, MAP_PROJECTION, SHOW_BUILDINGS, SHOW_BUILDINGS_3D, PLAYER_RENDER_PATH } from "../config";
+import { GTA1_STYLE_TOP_DOWN, MAP_PROJECTION, SHOW_BUILDINGS, SHOW_BUILDINGS_3D, PLAYER_RENDER_PATH, SHOW_TERRAIN, TERRAIN_EXAGGERATION } from "../config";
 import { MarkerLayer, CameraController, FeatureQuery } from './map';
 import { Position, Rotation } from "../ecs/world";
 import { Renderable, Updatable } from "../loop/GameLoop";
@@ -151,7 +151,7 @@ export default class MapView implements Updatable, Renderable {
       pitchWithRotate: GTA1_STYLE_TOP_DOWN ? false : true, // Change pitch when rotating (disabled in top-down)
       touchZoomRotate: GTA1_STYLE_TOP_DOWN ? false : true, // Allow touch gestures for zoom/rotate (disabled in top-down)
       keyboard: false, // Disable built-in keyboard navigation to prevent conflicts with game controls
-      maxPitch: 90, // Maximum camera pitch angle (90 = looking straight down)
+      maxPitch: 60, // Maximum camera pitch angle (90 = looking straight down)
       projection: projectionConfig // Set projection at initialization (required for proper reprojection)
     } as any);
 
@@ -233,6 +233,63 @@ export default class MapView implements Updatable, Renderable {
           console.log('[MapView] 3D building extrusions hidden');
         } else {
           console.log('[MapView] Hidden 3D building layer for orthographic view');
+        }
+      }
+      
+      // Setup 3D terrain if enabled (only works when pitch > 0, so skip in top-down mode)
+      if (SHOW_TERRAIN && !GTA1_STYLE_TOP_DOWN) {
+        try {
+          // Add terrain DEM source
+          if (!this.map.getSource('terrainSource')) {
+            this.map.addSource('terrainSource', {
+              type: 'raster-dem',
+              url: 'https://demotiles.maplibre.org/terrain-tiles/tiles.json',
+              tileSize: 256
+            });
+          }
+          
+          // Add hillshade DEM source (separate source improves render quality)
+          if (!this.map.getSource('hillshadeSource')) {
+            this.map.addSource('hillshadeSource', {
+              type: 'raster-dem',
+              url: 'https://demotiles.maplibre.org/terrain-tiles/tiles.json',
+              tileSize: 256
+            });
+          }
+          
+          // Add hillshade layer (for shadows/depth) - insert before other layers
+          if (!this.map.getLayer('hills')) {
+            this.map.addLayer({
+              id: 'hills',
+              type: 'hillshade',
+              source: 'hillshadeSource',
+              layout: {
+                visibility: 'visible'
+              },
+              paint: {
+                'hillshade-shadow-color': '#473B24'
+              }
+            }, 'background'); // Insert before background layer
+          }
+          
+          // Configure terrain using MapLibre API
+          this.map.setTerrain({
+            source: 'terrainSource',
+            exaggeration: TERRAIN_EXAGGERATION
+          });
+          
+          console.log(`[MapView] 3D terrain enabled with exaggeration: ${TERRAIN_EXAGGERATION}`);
+        } catch (error) {
+          console.warn('[MapView] Failed to enable 3D terrain:', error);
+        }
+      } else if (SHOW_TERRAIN && GTA1_STYLE_TOP_DOWN) {
+        console.log('[MapView] Terrain disabled (requires pitch > 0, but top-down mode is enabled)');
+      } else if (!SHOW_TERRAIN) {
+        // Ensure terrain is disabled if flag is false
+        try {
+          this.map.setTerrain(null);
+        } catch (error) {
+          // Ignore errors if terrain wasn't enabled
         }
       }
       

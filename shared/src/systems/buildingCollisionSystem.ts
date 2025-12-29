@@ -39,7 +39,7 @@ export const BUILDING_VELOCITY_DAMPING = 0.5;
  * Minimum push distance when resolving building collisions (in degrees).
  * Ensures entities are pushed far enough to avoid immediate re-collision.
  */
-export const MIN_PUSH_DISTANCE_DEG = CHARACTER_RADIUS_DEG * 1.0;
+export const MIN_PUSH_DISTANCE_DEG = CHARACTER_RADIUS_DEG * 0.1;
 
 /**
  * Additional buffer around building boundaries (in degrees).
@@ -47,6 +47,12 @@ export const MIN_PUSH_DISTANCE_DEG = CHARACTER_RADIUS_DEG * 1.0;
  * This prevents entities from getting too close to building edges.
  */
 export const BUILDING_BUFFER_DEG = 0.000005; // ~0.11 meters at equator
+
+/**
+ * Base NPC speed constant (matches server-side BASE_SPEED).
+ * Used when calculating new direction after collision.
+ */
+const BASE_NPC_SPEED = 0.000000225;
 
 /**
  * Simple point-in-polygon check using ray casting algorithm.
@@ -351,6 +357,76 @@ function checkCollision(
 }
 
 /**
+ * Helper function to change NPC direction away from a building.
+ * Calculates a new direction based on the push direction (away from building)
+ * with random variation for natural movement.
+ * 
+ * @param eid - Entity ID
+ * @param pushDir - Push direction vector (dx, dy) away from building
+ * @param originalSpeed - Original speed before collision (to preserve NPC speed)
+ * @param Velocity - Velocity component to update
+ * @param Rotation - Optional rotation component to update
+ */
+function changeDirectionAwayFromBuilding(
+  eid: number,
+  pushDir: { dx: number; dy: number },
+  originalSpeed: number,
+  Velocity: { x: { [key: number]: number }; y: { [key: number]: number } },
+  Rotation?: { angle: { [key: number]: number } }
+): void {
+  // Normalize push direction to get angle away from building
+  const pushLen = Math.sqrt(pushDir.dx * pushDir.dx + pushDir.dy * pushDir.dy);
+  
+  if (pushLen > 0) {
+    // Calculate angle away from building
+    // pushDir is a direction vector: (dx, dy) where dx is lng (east-west), dy is lat (north-south)
+    // We want to calculate the game angle where 0° = north
+    // 
+    // In game coordinates: 0° = north, 90° = east
+    // atan2(dx, dy) gives: 0° when (dx=0, dy=1) = north, 90° when (dx=1, dy=0) = east
+    const gameAngleRad = Math.atan2(pushDir.dx, pushDir.dy);
+    
+    // Add randomness (±60 degrees) for natural variation
+    const randomOffset = (Math.random() - 0.5) * (Math.PI / 1.5); // ±60 degrees
+    const finalGameAngleRad = gameAngleRad + randomOffset;
+    
+    // Convert to degrees for storage
+    let gameAngleDeg = (finalGameAngleRad * 180) / Math.PI;
+    if (gameAngleDeg < 0) gameAngleDeg += 360;
+    
+    // Use original speed if available, otherwise use base NPC speed
+    const speed = originalSpeed > 0 ? originalSpeed : BASE_NPC_SPEED;
+    
+    // Set velocity using same formula as randomWalkSystem
+    // gameAngleDeg is in game coordinates (0° = north), convert to radians
+    const radians = (gameAngleDeg * Math.PI) / 180;
+    Velocity.x[eid] = Math.cos(radians) * speed;
+    Velocity.y[eid] = Math.sin(radians) * speed;
+    
+    // Set rotation to match velocity direction (matching randomWalkSystem)
+    if (Rotation) {
+      Rotation.angle[eid] = gameAngleDeg;
+    }
+  } else {
+    // Fallback: random direction if push direction is invalid
+    const randomAngle = Math.random() * Math.PI * 2;
+    const speed = originalSpeed > 0 ? originalSpeed : BASE_NPC_SPEED;
+    Velocity.x[eid] = Math.cos(randomAngle) * speed;
+    Velocity.y[eid] = Math.sin(randomAngle) * speed;
+    
+    if (Rotation) {
+      // Calculate rotation from velocity direction (matching randomWalkSystem logic)
+      const velX = Velocity.x[eid];
+      const velY = Velocity.y[eid];
+      const gameAngleRad = Math.atan2(velX, velY);
+      let gameAngleDeg = (gameAngleRad * 180) / Math.PI;
+      if (gameAngleDeg < 0) gameAngleDeg += 360;
+      Rotation.angle[eid] = gameAngleDeg;
+    }
+  }
+}
+
+/**
  * Pre-movement building collision check.
  * Checks intended positions (current + velocity) and adjusts velocity to prevent
  * movement into buildings. This prevents entities from entering buildings before
@@ -361,13 +437,17 @@ function checkCollision(
  * @param Position - Position component from ECS world
  * @param Velocity - Velocity component from ECS world (will be modified to prevent collisions)
  * @param Altitude - Optional altitude component for 3D collision (if null, uses 2D)
+ * @param Rotation - Optional rotation component (if provided, will update rotation when changing direction)
+ * @param NpcTag - Optional NpcTag component (if provided, only NPCs will change direction; players will slide)
  */
 export async function buildingCollisionPreventSystem(
   entities: number[],
   buildingCollider: BuildingCollider,
   Position: { x: { [key: number]: number }; y: { [key: number]: number } },
   Velocity: { x: { [key: number]: number }; y: { [key: number]: number } },
-  Altitude?: { value: { [key: number]: number } }
+  Altitude?: { value: { [key: number]: number } },
+  Rotation?: { angle: { [key: number]: number } },
+  NpcTag?: any // Marker component - check with NpcTag[eid] !== undefined
 ): Promise<void> {
   // Process entities in batches to avoid blocking
   const batchSize = 10;
@@ -381,17 +461,13 @@ export async function buildingCollisionPreventSystem(
       const currentLat = Position.y[eid];
       const velX = Velocity.x[eid];
       const velY = Velocity.y[eid];
-      
-      // Check if entity would move (skip if velocity is zero)
-      if (velX === 0 && velY === 0) {
-        return;
-      }
+      const currentSpeed = Math.sqrt(velX * velX + velY * velY);
       
       const altitude = Altitude ? Altitude.value[eid] : 0;
       const hasAltitude = !!Altitude;
       
       // First, check if entity is already colliding with a building
-      // If so, push it out immediately instead of stopping movement
+      // If so, push it out and change direction if velocity is zero or too low
       const currentBuilding = await checkCollision(
         buildingCollider,
         currentLng,
@@ -400,86 +476,164 @@ export async function buildingCollisionPreventSystem(
         hasAltitude
       );
       
-      //if (currentBuilding) {
+      if (currentBuilding) {
         // Entity is already inside or touching a building - push it out
-        //const pushDir = buildingCollider.findPushDirection(currentLng, currentLat, currentBuilding);
+        const pushDir = buildingCollider.findPushDirection(currentLng, currentLat, currentBuilding);
         
         // Push entity out immediately
-        //Position.x[eid] += pushDir.dx;
-        //Position.y[eid] += pushDir.dy;
+        Position.x[eid] += pushDir.dx;
+        Position.y[eid] += pushDir.dy;
+        
+        // Check if entity is an NPC
+        const isNpc = NpcTag ? NpcTag[eid] !== undefined : false;
+        
+        // If velocity is zero or very low, change direction away from building (NPCs only)
+        if (currentSpeed < 0.00000001) {
+          if (isNpc && Rotation) {
+            // NPC is stuck - give it a new direction away from building
+            changeDirectionAwayFromBuilding(eid, pushDir, BASE_NPC_SPEED, Velocity, Rotation);
+          }
+          // Players with zero velocity will remain stopped (handled by player movement system)
+          return;
+        }
         
         // Project velocity onto wall for sliding (so entity can escape along the wall)
-        // const slide = buildingCollider.projectOntoWall(
-        //   velX,
-        //   velY,
-        //   pushDir.dx,
-        //   pushDir.dy
-        // );
+        const slide = buildingCollider.projectOntoWall(
+          velX,
+          velY,
+          pushDir.dx,
+          pushDir.dy
+        );
         
-        // Update velocity to slide along wall with damping (helps entity escape)
-        //Velocity.x[eid] = slide.slideX * BUILDING_VELOCITY_DAMPING;
-        //Velocity.y[eid] = slide.slideY * BUILDING_VELOCITY_DAMPING;
+        const slideSpeed = Math.sqrt(slide.slideX * slide.slideX + slide.slideY * slide.slideY);
+        const dampedSlideSpeed = slideSpeed * BUILDING_VELOCITY_DAMPING;
+        const MIN_MOVEMENT_SPEED = BASE_NPC_SPEED //* 0.7; // Minimum speed to consider valid movement (increased threshold)
         
-       // return;
-      //}
+        // NPCs: Change direction if sliding speed is too low
+        // Players: Always slide (original behavior)
+        if (isNpc && Rotation && (dampedSlideSpeed < currentSpeed * 0.3 || dampedSlideSpeed < MIN_MOVEMENT_SPEED)) {
+          // NPC sliding too slowly - change direction away from building
+          changeDirectionAwayFromBuilding(eid, pushDir, currentSpeed > 0 ? currentSpeed : BASE_NPC_SPEED, Velocity, Rotation);
+        } else {
+          // Update velocity to slide along wall with damping (for both players and NPCs)
+          Velocity.x[eid] = slide.slideX * BUILDING_VELOCITY_DAMPING;
+          Velocity.y[eid] = slide.slideY * BUILDING_VELOCITY_DAMPING;
+        }
+        
+        return;
+      }
+      
+      // If velocity is zero, check for nearby buildings (NPCs only)
+      // This handles NPCs that got stuck but aren't currently colliding
+      if (velX === 0 && velY === 0) {
+        const isNpc = NpcTag ? NpcTag[eid] !== undefined : false;
+        if (isNpc && Rotation) {
+          // Check if NPC is very close to a building (might be stuck)
+          const nearbyCheckRadius = CHARACTER_RADIUS_DEG * 5;
+          const nearbyBuilding = await checkCollision(
+            buildingCollider,
+            currentLng + nearbyCheckRadius,
+            currentLat,
+            altitude,
+            hasAltitude
+          ) || await checkCollision(
+            buildingCollider,
+            currentLng - nearbyCheckRadius,
+            currentLat,
+            altitude,
+            hasAltitude
+          ) || await checkCollision(
+            buildingCollider,
+            currentLng,
+            currentLat + nearbyCheckRadius,
+            altitude,
+            hasAltitude
+          ) || await checkCollision(
+            buildingCollider,
+            currentLng,
+            currentLat - nearbyCheckRadius,
+            altitude,
+            hasAltitude
+          );
+          
+          if (nearbyBuilding) {
+            // Found nearby building - change direction away from it
+            const pushDir = buildingCollider.findPushDirection(currentLng, currentLat, nearbyBuilding);
+            changeDirectionAwayFromBuilding(eid, pushDir, BASE_NPC_SPEED, Velocity, Rotation);
+            return;
+          }
+        }
+        return;
+      }
       
       // Calculate intended position after movement
-      // const intendedLng = currentLng + velX;
-      // const intendedLat = currentLat + velY;
+      const intendedLng = currentLng + velX;
+      const intendedLat = currentLat + velY;
 
       // Check collision at intended position (2D or 3D based on Altitude component)
-      // const intendedBuilding = await checkCollision(
-      //   buildingCollider,
-      //   intendedLng,
-      //   intendedLat,
-      //   altitude,
-      //   hasAltitude
-      // );
+      const intendedBuilding = await checkCollision(
+        buildingCollider,
+        intendedLng,
+        intendedLat,
+        altitude,
+        hasAltitude
+      );
       
-      // if (intendedBuilding) {
-      //   // Movement would cause collision - project velocity onto wall for sliding
-      //   const pushDir = buildingCollider.findPushDirection(intendedLng, intendedLat, intendedBuilding);
+      if (intendedBuilding) {
+        // Movement would cause collision - project velocity onto wall for sliding
+        const pushDir = buildingCollider.findPushDirection(intendedLng, intendedLat, intendedBuilding);
         
-      //   // Project velocity onto wall for sliding
-      //   const slide = buildingCollider.projectOntoWall(
-      //     velX,
-      //     velY,
-      //     pushDir.dx,
-      //     pushDir.dy
-      //   );
+        // Project velocity onto wall for sliding
+        const slide = buildingCollider.projectOntoWall(
+          velX,
+          velY,
+          pushDir.dx,
+          pushDir.dy
+        );
         
-      //   // Check if sliding would still cause collision
-      //   // If sliding velocity is very small or would still collide, zero it out
-      //   const slideSpeed = Math.sqrt(slide.slideX * slide.slideX + slide.slideY * slide.slideY);
-      //   const originalSpeed = Math.sqrt(velX * velX + velY * velY);
+        // Check if sliding would still cause collision
+        // NPCs: Change direction if sliding speed is too small
+        // Players: Always slide (original behavior)
+        const slideSpeed = Math.sqrt(slide.slideX * slide.slideX + slide.slideY * slide.slideY);
+        const originalSpeed = Math.sqrt(velX * velX + velY * velY);
+        const MIN_MOVEMENT_SPEED = BASE_NPC_SPEED * 0.4; // Minimum speed to consider valid movement (increased threshold)
+        const isNpc = NpcTag ? NpcTag[eid] !== undefined : false;
         
-      //   // If sliding speed is too small (< 10% of original), or if sliding would still collide, stop movement
-      //   if (slideSpeed < originalSpeed * 0.1) {
-      //     Velocity.x[eid] = 0;
-      //     Velocity.y[eid] = 0;
-      //   } else {
-      //     // Check if sliding movement would still cause collision
-      //     const slideLng = currentLng + slide.slideX;
-      //     const slideLat = currentLat + slide.slideY;
-      //     const slideBuilding = await checkCollision(
-      //       buildingCollider,
-      //       slideLng,
-      //       slideLat,
-      //       altitude,
-      //       hasAltitude
-      //     );
+        // NPCs: Change direction if sliding speed is too small
+        // Players: Always try to slide
+        if (isNpc && Rotation && (slideSpeed < originalSpeed * 0.3 || slideSpeed < MIN_MOVEMENT_SPEED)) {
+          // NPC sliding too slowly - change direction away from building
+          changeDirectionAwayFromBuilding(eid, pushDir, originalSpeed > 0 ? originalSpeed : BASE_NPC_SPEED, Velocity, Rotation);
+        } else {
+          // Check if sliding movement would still cause collision
+          const slideLng = currentLng + slide.slideX;
+          const slideLat = currentLat + slide.slideY;
+          const slideBuilding = await checkCollision(
+            buildingCollider,
+            slideLng,
+            slideLat,
+            altitude,
+            hasAltitude
+          );
           
-      //     if (slideBuilding) {
-      //       // Sliding would still cause collision - stop movement completely
-      //       Velocity.x[eid] = 0;
-      //       Velocity.y[eid] = 0;
-      //     } else {
-      //       // Safe to slide - update velocity with damping
-      //       Velocity.x[eid] = slide.slideX * BUILDING_VELOCITY_DAMPING;
-      //       Velocity.y[eid] = slide.slideY * BUILDING_VELOCITY_DAMPING;
-      //     }
-      //   }
-      // }
+          if (slideBuilding) {
+            // Sliding would still cause collision
+            if (isNpc && Rotation) {
+              // NPC: Change direction away from building
+              const slidePushDir = buildingCollider.findPushDirection(slideLng, slideLat, slideBuilding);
+              changeDirectionAwayFromBuilding(eid, slidePushDir, originalSpeed, Velocity, Rotation);
+            } else {
+              // Player: Stop movement (handled by player movement system)
+              Velocity.x[eid] = 0;
+              Velocity.y[eid] = 0;
+            }
+          } else {
+            // Safe to slide - update velocity with damping (for both players and NPCs)
+            Velocity.x[eid] = slide.slideX * BUILDING_VELOCITY_DAMPING;
+            Velocity.y[eid] = slide.slideY * BUILDING_VELOCITY_DAMPING;
+          }
+        }
+      }
     }));
   }
 }
@@ -497,13 +651,17 @@ export async function buildingCollisionPreventSystem(
  * @param Position - Position component from ECS world
  * @param Velocity - Velocity component from ECS world
  * @param Altitude - Optional altitude component for 3D collision (if null, uses 2D)
+ * @param Rotation - Optional rotation component (if provided, will update rotation when changing direction)
+ * @param NpcTag - Optional NpcTag component (if provided, only NPCs will change direction; players will slide)
  */
 export async function buildingCollisionSystem(
   entities: number[],
   buildingCollider: BuildingCollider,
   Position: { x: { [key: number]: number }; y: { [key: number]: number } },
   Velocity: { x: { [key: number]: number }; y: { [key: number]: number } },
-  Altitude?: { value: { [key: number]: number } }
+  Altitude?: { value: { [key: number]: number } },
+  Rotation?: { angle: { [key: number]: number } },
+  NpcTag?: any // Marker component - check with NpcTag[eid] !== undefined
 ): Promise<void> {
   // Process entities in batches to avoid blocking
   const batchSize = 10;
@@ -518,6 +676,11 @@ export async function buildingCollisionSystem(
       const altitude = Altitude ? Altitude.value[eid] : 0;
       const hasAltitude = !!Altitude;
 
+      // Get current velocity first
+      const velX = Velocity.x[eid];
+      const velY = Velocity.y[eid];
+      const currentSpeed = Math.sqrt(velX * velX + velY * velY);
+      
       // Check collision (2D or 3D based on Altitude component)
       const building = await checkCollision(
         buildingCollider,
@@ -531,21 +694,73 @@ export async function buildingCollisionSystem(
         // Find direction to push entity out (normal to wall)
         const pushDir = buildingCollider.findPushDirection(lng, lat, building);
         
+        // Check if entity is an NPC
+        const isNpc = NpcTag ? NpcTag[eid] !== undefined : false;
+        
+        // If velocity is zero or very low, change direction immediately (NPCs only)
+        if (currentSpeed < 0.00000001) {
+          if (isNpc && Rotation) {
+            // NPC is stuck - give it a new direction away from building
+            changeDirectionAwayFromBuilding(eid, pushDir, BASE_NPC_SPEED, Velocity, Rotation);
+          }
+          // Players with zero velocity will remain stopped (handled by player movement system)
+          return;
+        }
+        
         // Project velocity onto wall for sliding
         const slide = buildingCollider.projectOntoWall(
-          Velocity.x[eid],
-          Velocity.y[eid],
+          velX,
+          velY,
           pushDir.dx,
           pushDir.dy
         );
         
-        // Update velocity to slide along wall with damping
-        //Velocity.x[eid] = slide.slideX * BUILDING_VELOCITY_DAMPING;
-        //Velocity.y[eid] = slide.slideY * BUILDING_VELOCITY_DAMPING;
+        // Apply damping and check if sliding speed is too low
+        const slideSpeed = Math.sqrt(slide.slideX * slide.slideX + slide.slideY * slide.slideY);
+        const dampedSlideSpeed = slideSpeed * BUILDING_VELOCITY_DAMPING;
+        const MIN_MOVEMENT_SPEED = BASE_NPC_SPEED * 0.4; // Minimum speed to consider valid movement (increased threshold)
         
-        // Push out completely to prevent overlap (push distance already accounts for collision radius)
-        Position.x[eid] += pushDir.dx;
-        Position.y[eid] += pushDir.dy;
+        // NPCs: Change direction if sliding speed after damping is too low
+        // Players: Always slide (original behavior)
+        if (isNpc && Rotation && (dampedSlideSpeed < currentSpeed * 0.3 || dampedSlideSpeed < MIN_MOVEMENT_SPEED)) {
+          // NPC sliding too slowly - change direction away from building
+          changeDirectionAwayFromBuilding(eid, pushDir, currentSpeed > 0 ? currentSpeed : BASE_NPC_SPEED, Velocity, Rotation);
+        } else {
+          // Update velocity to slide along wall with damping (for both players and NPCs)
+          Velocity.x[eid] = slide.slideX * BUILDING_VELOCITY_DAMPING;
+          Velocity.y[eid] = slide.slideY * BUILDING_VELOCITY_DAMPING;
+        }
+      } else if (currentSpeed < 0.00000001) {
+        // NPC is stuck but not colliding - might be right next to building
+        // Only check for NPCs, not players
+        const isNpc = NpcTag ? NpcTag[eid] !== undefined : false;
+        if (isNpc && Rotation) {
+          // Check a few nearby positions to see if there's a building close by
+          const checkRadius = CHARACTER_RADIUS_DEG * 3;
+          const checkPositions = [
+            [lng + checkRadius, lat],
+            [lng - checkRadius, lat],
+            [lng, lat + checkRadius],
+            [lng, lat - checkRadius],
+          ];
+          
+          for (const [checkLng, checkLat] of checkPositions) {
+            const nearbyBuilding = await checkCollision(
+              buildingCollider,
+              checkLng,
+              checkLat,
+              altitude,
+              hasAltitude
+            );
+            
+            if (nearbyBuilding) {
+              // Found a nearby building - change direction away from it
+              const pushDir = buildingCollider.findPushDirection(lng, lat, nearbyBuilding);
+              changeDirectionAwayFromBuilding(eid, pushDir, BASE_NPC_SPEED, Velocity, Rotation);
+              break;
+            }
+          }
+        }
       }
     }));
   }
