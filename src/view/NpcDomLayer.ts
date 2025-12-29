@@ -118,6 +118,15 @@ export default class NpcDomLayer implements Renderable, Updatable {
   /** Array of elements to remove (batched) */
   private elementsToRemove: HTMLElement[] = [];
   
+  /** Cached ECS query results to avoid redundant queries per frame */
+  private cachedEntities: number[] = [];
+  
+  /** Frame counter to track when cache was last updated */
+  private lastQueryFrame = -1;
+  
+  /** Current frame counter (incremented each update cycle) */
+  private currentFrame = 0;
+  
   /**
    * Constructor - sets up the DOM container.
    * 
@@ -381,6 +390,7 @@ export default class NpcDomLayer implements Renderable, Updatable {
    * Advances sprite animation frames using an accumulator pattern.
    * Also manages DOM element lifecycle (create/remove) and viewport culling.
    * Batches DOM operations for better performance.
+   * Caches ECS query results to avoid redundant queries.
    * 
    * @param deltaMs - Time elapsed since last update (milliseconds)
    */
@@ -390,8 +400,15 @@ export default class NpcDomLayer implements Renderable, Updatable {
       this.updateViewportBounds();
     }
     
-    // Query ECS for current NPCs
-    const ents = this.query(world);
+    // Increment frame counter
+    this.currentFrame++;
+    
+    // Query ECS for current NPCs and cache results
+    // This cache will be reused in render() to avoid redundant queries
+    this.cachedEntities = this.query(world);
+    this.lastQueryFrame = this.currentFrame;
+    
+    const ents = this.cachedEntities;
     const existingEids = new Set(ents);
     
     // Remove DOM elements for NPCs that no longer exist (queued for batch removal)
@@ -509,6 +526,7 @@ export default class NpcDomLayer implements Renderable, Updatable {
    * Updates positions, rotations, and sizes for all visible NPC DOM elements.
    * Skips rendering for off-screen entities (culled in update()).
    * Batches classList operations for better performance.
+   * Reuses cached ECS query results from update() to avoid redundant queries.
    * 
    * @param alpha - Interpolation factor (currently unused)
    */
@@ -522,8 +540,12 @@ export default class NpcDomLayer implements Renderable, Updatable {
     const zoom = this.map.getZoom();
     const spriteSize = calculateSpriteSize(this.npcBaseSize, zoom);
     
-    // Query ECS world directly for NPC positions
-    const ents = this.query(world);
+    // Reuse cached ECS query results from update() to avoid redundant queries
+    // This reduces CPU overhead by querying the ECS world only once per frame
+    // Safety check: if cache is stale (render called before update or in different frame), query directly
+    const ents = (this.lastQueryFrame === this.currentFrame) 
+      ? this.cachedEntities 
+      : this.query(world);
     
     // Batch classList operations: collect elements that need class changes
     const elementsToSelect: HTMLElement[] = [];
