@@ -9,12 +9,12 @@
  * - **Position Retrieval**: Gets player position from ECS world
  * - **Coordinate Projection**: Converts lat/lng coordinates to screen space for rendering
  * - **Animation State**: Tracks animation frames and types for sprite sheet animations
- * - **Rendering Coordination**: Sends pre-calculated screen positions and animation data to NpcInstancedLayer
+ * - **Rendering Coordination**: Sends pre-calculated screen positions and animation data to NpcWebglLayer
  * 
  * **Architecture:**
  * - Implements `Renderable` interface, called each frame by GameLoop
  * - Implements `Updatable` interface, called each frame to advance animation frames
- * - Works with `NpcInstancedLayer` which performs the actual WebGL rendering
+ * - Works with `NpcWebglLayer` which performs the actual WebGL rendering
  * - Reads player position from ECS components directly
  * 
  * **Performance:**
@@ -31,7 +31,7 @@
 import { Renderable, Updatable } from "../loop/GameLoop";
 import { world, Position, Rotation, Velocity, PlayerTag } from '../ecs/world';
 import { defineQuery } from "bitecs";
-import NpcInstancedLayer from "./NpcInstancedLayer";
+import NpcWebglLayer from "./NpcWebglLayer";
 import maplibregl from "maplibre-gl";
 import { calculateRotationFromStored } from "./utils/spriteUtils";
 import { determineAnimationFromInput, advanceAnimationFrame, createAnimationState, updateAnimationType, AnimationState } from "./utils/animationSystem";
@@ -49,7 +49,7 @@ export default class PlayerWebglView implements Renderable, Updatable {
   private map: maplibregl.Map;
   
   // WebGL rendering layer that actually draws the player
-  private npcLayer: NpcInstancedLayer;
+  private npcLayer: NpcWebglLayer;
   
   // ECS query for finding player entity
   // Finds entities that have PlayerTag, Position, and Rotation components
@@ -73,7 +73,7 @@ export default class PlayerWebglView implements Renderable, Updatable {
   };
 
   // Animation definitions: frame counts and playback rates
-  // Same as NpcController and PlayerDomView for consistency
+  // Same as NpcWebglController and PlayerDomView for consistency
   private readonly animations = {
     idle: {
       frames: 31,
@@ -95,7 +95,7 @@ export default class PlayerWebglView implements Renderable, Updatable {
    * @param map - MapLibre map instance for coordinate projection
    * @param npcLayer - WebGL rendering layer that will draw the player
    */
-  constructor(map: maplibregl.Map, npcLayer: NpcInstancedLayer) {
+  constructor(map: maplibregl.Map, npcLayer: NpcWebglLayer) {
     this.map = map;
     this.npcLayer = npcLayer;
   }
@@ -202,7 +202,7 @@ export default class PlayerWebglView implements Renderable, Updatable {
     this.npcLayer.setPlayerVertexData(vertexData);
     
     // Trigger map repaint to ensure player is rendered
-    // Note: NpcController also triggers repaint, but this ensures player data is included
+    // Note: NpcWebglController also triggers repaint, but this ensures player data is included
     this.map.triggerRepaint();
   }
 }

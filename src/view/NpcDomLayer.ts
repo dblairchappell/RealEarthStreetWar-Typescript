@@ -18,7 +18,7 @@
  * 
  * Comparison with other rendering paths:
  * 
- * | Feature              | NpcInstancedLayer | NpcLayer        | NpcDomLayer     |
+ * | Feature              | NpcWebglLayer     | NpcCanvasLayer  | NpcDomLayer     |
  * |---------------------|-------------------|-----------------|-----------------|
  * | Technology          | WebGL (GPU)       | Canvas 2D (CPU) | DOM + CSS       |
  * | Performance         | Fast              | Slower          | Moderate        |

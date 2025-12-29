@@ -1,5 +1,5 @@
 /**
- * NpcInstancedLayer - High-Performance WebGL-Based NPC Rendering Layer
+ * NpcWebglLayer - High-Performance WebGL-Based NPC Rendering Layer
  * 
  * This class implements a custom MapLibre GL layer that renders NPCs using WebGL point sprites
  * for optimal performance. It's designed to handle hundreds or thousands of NPCs efficiently
@@ -7,7 +7,7 @@
  * 
  * **Key Features:**
  * - **WebGL Point Sprites**: Uses `gl.POINTS` to render multiple NPCs in a single draw call
- * - **Pre-calculated Positions**: Receives screen-space positions from `NpcController`, avoiding
+ * - **Pre-calculated Positions**: Receives screen-space positions from `NpcWebglController`, avoiding
  *   per-frame coordinate projection overhead
  * - **Sprite Sheet Animation**: Supports animated sprites (idle/walking/running) with per-NPC frame selection
  * - **Zoom-Based Scaling**: Dynamically adjusts sprite size based on map zoom level
@@ -16,12 +16,12 @@
  * **Architecture:**
  * - Implements MapLibre's `CustomLayerInterface` to integrate with the map rendering pipeline
  * - Uses custom vertex and fragment shaders to render sprites as textured points
- * - Receives position data via `setPositionsToRender()` from `NpcController` each frame
+ * - Receives position data via `setPositionsToRender()` from `NpcWebglController` each frame
  * - Renders all NPCs in a single `drawArrays()` call for maximum efficiency
  * 
- * **Comparison with NpcLayer:**
- * - `NpcLayer`: Canvas-based fallback for globe projection, slower but more flexible
- * - `NpcInstancedLayer`: WebGL-based, much faster, but requires Mercator projection
+ * **Comparison with NpcCanvasLayer:**
+ * - `NpcCanvasLayer`: Canvas-based fallback for globe projection, slower but more flexible
+ * - `NpcWebglLayer`: WebGL-based, much faster, but requires Mercator projection
  * 
  * **Performance:**
  * - Can render 1000+ NPCs at 60fps on modern hardware
@@ -30,7 +30,7 @@
  * 
  * **Usage:**
  * This layer is automatically used when `NPC_RENDER_PATH = 'webgl'` in config.ts.
- * The `NpcController` handles coordinate projection and calls `setPositionsToRender()` each frame.
+ * The `NpcWebglController` handles coordinate projection and calls `setPositionsToRender()` each frame.
  * Works best with Mercator projection, but can be used with other projections.
  */
 
@@ -59,9 +59,9 @@ function compileShader(gl: WebGLRenderingContext, type: number, source: string):
  * Custom MapLibre layer for rendering NPCs using WebGL point sprites.
  * This is the high-performance rendering path used in Mercator projection mode.
  */
-export default class NpcInstancedLayer implements maplibregl.CustomLayerInterface {
+export default class NpcWebglLayer implements maplibregl.CustomLayerInterface {
   // MapLibre layer interface properties
-  id = 'npc-instanced-layer';
+  id = 'npc-webgl-layer';
   type: 'custom' = 'custom';
   renderingMode: '2d' | '3d' = '3d'; // '3d' allows proper depth testing and integration with map
 
@@ -120,7 +120,7 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
     running: 23
   };
 
-  // Vertex data received from NpcController (updated each frame)
+  // Vertex data received from NpcWebglController (updated each frame)
   // Format: Float32Array with [x0, y0, frame0, animType0, rotation0, x1, y1, frame1, animType1, rotation1, ...]
   // 5 floats per NPC: x, y, frameIndex, animType, rotation
   private vertexData: Float32Array | null = null;
@@ -159,7 +159,7 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
   }
 
   /**
-   * Called by NpcController each frame to provide updated screen-space positions for NPCs.
+   * Called by NpcWebglController each frame to provide updated screen-space positions for NPCs.
    * The positions are pre-calculated by projecting lat/lng coordinates to screen space,
    * avoiding per-frame projection overhead in the render loop.
    * 
@@ -184,7 +184,7 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
   }
 
   /**
-   * Called by NpcController each frame to provide vertex data with animation information.
+   * Called by NpcWebglController each frame to provide vertex data with animation information.
    * The vertex data includes positions, animation state, and rotation for sprite sheet rendering.
    * 
    * @param data - Float32Array with [x0, y0, frame0, animType0, rotation0, x1, y1, frame1, animType1, rotation1, ...]
@@ -231,11 +231,11 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
     // For WebGL to match Canvas visual size, we use the same base multiplier (0.06)
     // Since we're not multiplying by devicePixelRatio (Canvas handles it via transform),
     // we can use the multiplier directly
-    const scale = Math.pow(2, (zoom - NpcInstancedLayer.REFERENCE_ZOOM) / NpcInstancedLayer.SCALE_FACTOR);
+    const scale = Math.pow(2, (zoom - NpcWebglLayer.REFERENCE_ZOOM) / NpcWebglLayer.SCALE_FACTOR);
     const size = this.sizeMultiplier * scale;
     
     // Clamp to same range as Canvas path
-    return Math.max(NpcInstancedLayer.MIN_SIZE, Math.min(NpcInstancedLayer.MAX_SIZE, size));
+    return Math.max(NpcWebglLayer.MIN_SIZE, Math.min(NpcWebglLayer.MAX_SIZE, size));
   }
 
   /**
@@ -258,7 +258,7 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
     this.loadSpriteSheets();
 
     // Vertex shader: Converts screen-space coordinates to clip space
-    // Uses screen coordinates (pre-calculated by NpcController) for simplicity
+    // Uses screen coordinates (pre-calculated by NpcWebglController) for simplicity
     // Also passes animation data to fragment shader
     const vertSrc = `
     precision highp float;
@@ -431,14 +431,14 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
         }
       };
       img.onerror = () => {
-        console.error(`[NpcInstancedLayer] Failed to load sprite sheet: ${url}`);
+        console.error(`[NpcWebglLayer] Failed to load sprite sheet: ${url}`);
       };
     };
     
     // Load all three sprite sheets
-    loadTexture(NpcInstancedLayer.SPRITE_SHEETS.idle, 'idle');
-    loadTexture(NpcInstancedLayer.SPRITE_SHEETS.walking, 'walking');
-    loadTexture(NpcInstancedLayer.SPRITE_SHEETS.running, 'running');
+    loadTexture(NpcWebglLayer.SPRITE_SHEETS.idle, 'idle');
+    loadTexture(NpcWebglLayer.SPRITE_SHEETS.walking, 'walking');
+    loadTexture(NpcWebglLayer.SPRITE_SHEETS.running, 'running');
   }
 
   /**
@@ -447,7 +447,7 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
    * 
    * Rendering process:
    * 1. Early exit if texture not loaded or no NPCs to render
-   * 2. Update GPU buffer with latest screen positions (from NpcController)
+   * 2. Update GPU buffer with latest screen positions (from NpcWebglController)
    * 3. Set up shader uniforms (viewport size, point size, texture)
    * 4. Enable blending for transparency
    * 5. Draw all NPCs as point sprites in one drawArrays() call
@@ -477,9 +477,9 @@ export default class NpcInstancedLayer implements maplibregl.CustomLayerInterfac
     g.uniform2f(this.uViewportSizeLocation, cssWidth, cssHeight);
 
     // Set frame count uniforms
-    g.uniform1f(this.uFrameCountIdleLocation, NpcInstancedLayer.ANIMATION_FRAMES.idle);
-    g.uniform1f(this.uFrameCountWalkingLocation, NpcInstancedLayer.ANIMATION_FRAMES.walking);
-    g.uniform1f(this.uFrameCountRunningLocation, NpcInstancedLayer.ANIMATION_FRAMES.running);
+    g.uniform1f(this.uFrameCountIdleLocation, NpcWebglLayer.ANIMATION_FRAMES.idle);
+    g.uniform1f(this.uFrameCountWalkingLocation, NpcWebglLayer.ANIMATION_FRAMES.walking);
+    g.uniform1f(this.uFrameCountRunningLocation, NpcWebglLayer.ANIMATION_FRAMES.running);
 
     // Bind sprite sheet textures to texture units
     g.activeTexture(g.TEXTURE0);

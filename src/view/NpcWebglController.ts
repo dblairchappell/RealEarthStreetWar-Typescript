@@ -1,8 +1,8 @@
 /**
- * NpcController - NPC Position Management and Rendering Coordination
+ * NpcWebglController - NPC Position Management and Rendering Coordination
  * 
- * NpcController acts as the bridge between the game simulation and rendering
- * and the WebGL rendering layer (NpcInstancedLayer). It handles position interpolation,
+ * NpcWebglController acts as the bridge between the game simulation and rendering
+ * and the WebGL rendering layer (NpcWebglLayer). It handles position interpolation,
  * coordinate projection, and prepares data for efficient GPU rendering.
  * 
  * **Key Responsibilities:**
@@ -11,16 +11,16 @@
  * - **Interpolation**: Smoothly interpolates between fixed-timestep positions using alpha
  * - **Coordinate Projection**: Converts lat/lng coordinates to screen space for rendering
  * - **Animation State**: Tracks animation frames and types per NPC for sprite sheet animations
- * - **Rendering Coordination**: Sends pre-calculated screen positions and animation data to NpcInstancedLayer
+ * - **Rendering Coordination**: Sends pre-calculated screen positions and animation data to NpcWebglLayer
  * 
  * **Architecture:**
  * - Implements `Renderable` interface, called each frame by GameLoop with interpolation alpha
  * - Implements `Updatable` interface, called each frame to advance animation frames
- * - Works with `NpcInstancedLayer` which performs the actual WebGL rendering
+ * - Works with `NpcWebglLayer` which performs the actual WebGL rendering
  * - Queries ECS world directly for NPC positions and velocities
  * 
  * **Interpolation Strategy:**
- * Unlike NpcLayer (which interpolates in screen space), NpcController interpolates in
+ * Unlike NpcCanvasLayer (which interpolates in screen space), NpcWebglController interpolates in
  * lat/lng space before projecting. This provides smoother movement, especially when
  * zooming or when NPCs are near map edges where projection distortion is significant.
  * 
@@ -30,9 +30,9 @@
  * - Minimizes per-frame allocations
  * - Single projection call per NPC (done once per frame)
  * 
- * **Comparison with NpcLayer:**
- * - `NpcLayer`: Canvas-based fallback, simpler, interpolates in screen space
- * - `NpcController`: WebGL-optimized, pre-calculates positions, interpolates in lat/lng space
+ * **Comparison with NpcCanvasLayer:**
+ * - `NpcCanvasLayer`: Canvas-based fallback, simpler, interpolates in screen space
+ * - `NpcWebglController`: WebGL-optimized, pre-calculates positions, interpolates in lat/lng space
  * 
  * **Usage:**
  * Created by MapView and registered with GameLoop as a Renderable. Automatically
@@ -43,7 +43,7 @@ import { Renderable, Updatable } from "../loop/GameLoop";
 import { world, Position, Velocity, Rotation } from '../ecs/world';
 import { NpcTag } from '@shared/realearthstreetwar';
 import { defineQuery } from "bitecs";
-import NpcInstancedLayer from "./NpcInstancedLayer";
+import NpcWebglLayer from "./NpcWebglLayer";
 import maplibregl from "maplibre-gl";
 import { calculateRotationFromStored, calculateSpriteSize } from "./utils/spriteUtils";
 import { isEntityVisible, calculateSpritePaddingDegrees } from "./utils/viewportCulling";
@@ -56,12 +56,12 @@ import { NPC_SPRITE_SIZE_MULTIPLIER } from "../config";
  * 
  * Uses stored rotation from ECS (Rotation.angle) - consistent with player and Canvas path.
  */
-export default class NpcController implements Renderable, Updatable {
+export default class NpcWebglController implements Renderable, Updatable {
   // Map instance for coordinate projection
   private map: maplibregl.Map;
   
   // WebGL rendering layer that actually draws the NPCs
-  private npcLayer: NpcInstancedLayer;
+  private npcLayer: NpcWebglLayer;
   
   // ECS query for finding all NPC entities
   // Finds entities that have NpcTag, Position, and Velocity components
@@ -74,7 +74,7 @@ export default class NpcController implements Renderable, Updatable {
   private selectedNpcEid: number | null = null;
 
   // Animation definitions: frame counts and playback rates
-  // Same as NpcLayer and PlayerDomView for consistency
+  // Same as NpcCanvasLayer and PlayerDomView for consistency
   private readonly animations = {
     idle: {
       frames: 31,
@@ -114,12 +114,12 @@ export default class NpcController implements Renderable, Updatable {
   private cachedPaddingDegrees: number = 0;
   
   /**
-   * Constructs a new NpcController.
+   * Constructs a new NpcWebglController.
    * 
    * @param map - MapLibre map instance for coordinate projection
    * @param npcLayer - WebGL rendering layer that will draw the NPCs
    */
-  constructor(map: maplibregl.Map, npcLayer: NpcInstancedLayer) {
+  constructor(map: maplibregl.Map, npcLayer: NpcWebglLayer) {
     this.map = map;
     this.npcLayer = npcLayer;
     
@@ -364,7 +364,7 @@ export default class NpcController implements Renderable, Updatable {
     /* ---------------- Step 4: Send Data to Rendering Layer ---------------- */
     
     // Send vertex data (positions + animation data) to WebGL rendering layer
-    // NpcInstancedLayer will render all visible NPCs in a single GPU draw call
+    // NpcWebglLayer will render all visible NPCs in a single GPU draw call
     this.npcLayer.setVertexData(vertexData, visibleCount);
 
     /* ---------------- Step 5: Trigger Map Repaint ---------------- */

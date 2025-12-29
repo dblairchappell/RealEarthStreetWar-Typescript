@@ -1,10 +1,10 @@
 /**
- * NpcLayer - Canvas-Based NPC Rendering Layer
+ * NpcCanvasLayer - Canvas-Based NPC Rendering Layer
  * 
  * This class provides a Canvas 2D rendering layer for NPCs. It's used when
  * NPC_RENDER_PATH = 'canvas' in config.ts. This rendering path works with any
  * map projection (Globe, Mercator, etc.), making it more flexible than the
- * WebGL-based NpcInstancedLayer which works best with Mercator projection.
+ * WebGL-based NpcWebglLayer which works best with Mercator projection.
  * 
  * Architecture:
  * 
@@ -15,9 +15,9 @@
  * - Queries ECS world directly for NPC positions
  * - Skips rendering if sprite fails to load
  * 
- * Comparison with NpcInstancedLayer:
+ * Comparison with NpcWebglLayer:
  * 
- * | Feature              | NpcInstancedLayer | NpcLayer        |
+ * | Feature              | NpcWebglLayer | NpcCanvasLayer        |
  * |---------------------|-------------------|-----------------|
  * | Technology          | WebGL (GPU)       | Canvas 2D (CPU) |
  * | Performance         | Fast              | Slower          |
@@ -51,7 +51,7 @@ import { isEntityVisible, calculateSpritePaddingDegrees } from "./utils/viewport
  * Supports sprite animations (idle, walking, running) similar to player character.
  * Skips rendering if sprite fails to load.
  */
-export default class NpcLayer implements Renderable, Updatable {
+export default class NpcCanvasLayer implements Renderable, Updatable {
   /** HTML5 Canvas element for drawing NPCs */
   private canvas: HTMLCanvasElement;
   /** 2D rendering context for the canvas */
@@ -213,7 +213,7 @@ export default class NpcLayer implements Renderable, Updatable {
       this.spritesLoaded.idle = true;
     };
     idleImg.onerror = () => {
-      console.warn('[NpcLayer] Failed to load idle sprite:', this.animations.idle.url);
+      console.warn('[NpcCanvasLayer] Failed to load idle sprite:', this.animations.idle.url);
     };
     idleImg.src = this.animations.idle.url;
     
@@ -224,7 +224,7 @@ export default class NpcLayer implements Renderable, Updatable {
       this.spritesLoaded.walking = true;
     };
     walkingImg.onerror = () => {
-      console.warn('[NpcLayer] Failed to load walking sprite:', this.animations.walking.url);
+      console.warn('[NpcCanvasLayer] Failed to load walking sprite:', this.animations.walking.url);
     };
     walkingImg.src = this.animations.walking.url;
     
@@ -235,7 +235,7 @@ export default class NpcLayer implements Renderable, Updatable {
       this.spritesLoaded.running = true;
     };
     runningImg.onerror = () => {
-      console.warn('[NpcLayer] Failed to load running sprite:', this.animations.running.url);
+      console.warn('[NpcCanvasLayer] Failed to load running sprite:', this.animations.running.url);
     };
     runningImg.src = this.animations.running.url;
   }
@@ -671,7 +671,7 @@ export default class NpcLayer implements Renderable, Updatable {
     this.selectedNpcEid = eid;
     
     if (changed) {
-      console.log('[NpcLayer] Selection changed:', eid);
+      console.log('[NpcCanvasLayer] Selection changed:', eid);
       // Trigger a repaint to show the selection outline immediately
       // The render() method will be called by the game loop, but triggering repaint ensures immediate update
       if (this.map) {

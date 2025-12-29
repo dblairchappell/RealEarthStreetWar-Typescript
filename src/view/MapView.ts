@@ -70,7 +70,7 @@ export default class MapView implements Updatable, Renderable {
   private playerCanvasView: PlayerCanvasView | null = null; // Renders and animates the player character sprite (Canvas path)
   private playerWebglView: PlayerWebglView | null = null; // Manages player rendering for WebGL path
   private entityClickHandler: EntityClickHandler | null = null; // Handles clicking on entities
-  private npcLayer: any = null; // NPC rendering layer (NpcLayer or NpcInstancedLayer)
+  private npcLayer: any = null; // NPC rendering layer (NpcCanvasLayer or NpcWebglLayer)
   private npcController: any = null; // NPC controller (for WebGL path)
   
   // Player state tracking

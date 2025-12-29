@@ -28,8 +28,8 @@ export class NetworkStateManager {
   private playerQuery = defineQuery([PlayerTag, Position, Rotation]);
   private npcQuery = defineQuery([NpcTag, Position, Rotation, Velocity]);
   private onPlayerEntityCreated?: (eid: number, playerData: PlayerSnapshot) => void;
-  private npcLayer: any = null; // Reference to NpcLayer for speed updates (Canvas path)
-  private npcController: any = null; // Reference to NpcController for speed updates (WebGL path)
+  private npcLayer: any = null; // Reference to NpcCanvasLayer for speed updates (Canvas path)
+  private npcController: any = null; // Reference to NpcWebglController for speed updates (WebGL path)
 
   constructor(gameState: GameState) {
     this.gameState = gameState;
@@ -50,14 +50,14 @@ export class NetworkStateManager {
   }
   
   /**
-   * Set reference to NpcLayer for speed updates (Canvas rendering path)
+   * Set reference to NpcCanvasLayer for speed updates (Canvas rendering path)
    */
   setNpcLayer(npcLayer: any): void {
     this.npcLayer = npcLayer;
   }
 
   /**
-   * Set reference to NpcController for speed updates (WebGL rendering path)
+   * Set reference to NpcWebglController for speed updates (WebGL rendering path)
    */
   setNpcController(npcController: any): void {
     this.npcController = npcController;

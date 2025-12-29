@@ -35,11 +35,11 @@ import PerfOverlay from "./debug/PerfOverlay";
 import tzLookup from "tz-lookup";          // gives us the lat/lon → TZ function
 // (Optional) If other code needs osmtogeojson globally later you can import it:
 // import osmtogeojson from 'osmtogeojson';
-import NpcInstancedLayer from "./view/NpcInstancedLayer";
-import NpcLayer from "./view/NpcLayer";
+import NpcWebglLayer from "./view/NpcWebglLayer";
+import NpcCanvasLayer from "./view/NpcCanvasLayer";
 import NpcDomLayer from "./view/NpcDomLayer";
 import { NPC_RENDER_PATH, NPC_SPRITE_SIZE_MULTIPLIER, SHOW_PERF_OVERLAY } from "./config";
-import NpcController from "./view/NpcController";
+import NpcWebglController from "./view/NpcWebglController";
 import { GameClient } from "./network/GameClient";
 import { SERVER_URL } from "./config";
 import { EntityInfo } from "./view/EntityClickHandler";
@@ -253,12 +253,12 @@ map.on('load', () => {
      * Rendering layers are always initialized to display NPCs when they arrive.
      * 
      * WebGL path (NPC_RENDER_PATH = 'webgl'):
-     * - Uses fast WebGL instanced rendering (NpcInstancedLayer)
-     * - NpcController handles interpolation and data management
+     * - Uses fast WebGL instanced rendering (NpcWebglLayer)
+     * - NpcWebglController handles interpolation and data management
      * - Works best with Mercator projection
      * 
      * Canvas path (NPC_RENDER_PATH = 'canvas'):
-     * - Falls back to Canvas overlay (NpcLayer)
+     * - Falls back to Canvas overlay (NpcCanvasLayer)
      * - Uses map.project() for coordinate conversion
      * - Works with any projection (Globe, Mercator, etc.)
      * 
@@ -272,7 +272,7 @@ map.on('load', () => {
          * WebGL instanced rendering path (fast, Mercator recommended).
          * Creates a custom MapLibre layer that renders NPCs using WebGL.
          */
-        const npcGlLayer = new NpcInstancedLayer(NPC_SPRITE_SIZE_MULTIPLIER);
+        const npcGlLayer = new NpcWebglLayer(NPC_SPRITE_SIZE_MULTIPLIER);
         map.addLayer(npcGlLayer as any);
 
         /**
@@ -281,7 +281,7 @@ map.on('load', () => {
          * screen coordinates to the rendering layer.
          * Also manages animation state for sprite sheet animations.
          */
-        const npcController = new NpcController(map, npcGlLayer);
+        const npcController = new NpcWebglController(map, npcGlLayer);
         loop.add(npcController); // Register as Updatable for animation frame advancement
         loop.addRenderable(npcController); // Register as Renderable for rendering
         
@@ -297,7 +297,7 @@ map.on('load', () => {
          * Uses map.project() to convert lat/lng to screen coordinates.
          * Slower than WebGL but more flexible.
          */
-        const npcCanvasLayer = new NpcLayer(map);
+        const npcCanvasLayer = new NpcCanvasLayer(map);
         loop.add(npcCanvasLayer); // Register as Updatable for animation frame advancement
         loop.addRenderable(npcCanvasLayer); // Register as Renderable for rendering
         

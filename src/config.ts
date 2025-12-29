@@ -5,8 +5,8 @@ export const GTA1_STYLE_TOP_DOWN = true;   // ← flip to false for 3-D mode
 // 'dom': DOM-based rendering with CSS transforms (works with any projection, including Globe)
 // 'canvas': Canvas-based rendering (works with any projection, including Globe)
 // 'webgl': WebGL-based rendering (best performance) (best for Mercator projection)
-export const PLAYER_RENDER_PATH: 'dom' | 'canvas' | 'webgl' = 'dom';
-export const NPC_RENDER_PATH: 'dom' | 'canvas' | 'webgl' = 'dom';
+export const PLAYER_RENDER_PATH: 'dom' | 'canvas' | 'webgl' = 'webgl';
+export const NPC_RENDER_PATH: 'dom' | 'canvas' | 'webgl' = 'webgl';
 
 // Note: WebGL rendering path works best with 'mercator' projection.
 // Canvas rendering path works with any projection.
