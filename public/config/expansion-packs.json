@@ -1,0 +1,59 @@
+{
+  "version": "1.0",
+  "current_region": "new-jersey",
+  "regions": {
+    "new-jersey": {
+      "name": "New Jersey",
+      "description": "Complete New Jersey map data including buildings, roads, and terrain",
+      "pmtiles_file": "nj-complete.pmtiles",
+      "file_size_mb": 116,
+      "bounds": [-75.83509, 38.55502, -73.67898, 41.35807],
+      "center": [-74.5, 40.0],
+      "zoom_range": [0, 14],
+      "status": "active",
+      "created": "2024-12-29",
+      "features": [
+        "buildings",
+        "roads",
+        "water",
+        "landcover",
+        "boundaries",
+        "places",
+        "transportation",
+        "poi"
+      ]
+    }
+  },
+  "planned_regions": {
+    "new-york-city": {
+      "name": "New York City",
+      "description": "Manhattan, Brooklyn, Queens, Bronx, Staten Island",
+      "estimated_size_mb": 200,
+      "status": "planned"
+    },
+    "philadelphia": {
+      "name": "Philadelphia Metro",
+      "description": "Philadelphia and surrounding counties",
+      "estimated_size_mb": 150,
+      "status": "planned"
+    },
+    "boston": {
+      "name": "Greater Boston",
+      "description": "Boston metropolitan area",
+      "estimated_size_mb": 120,
+      "status": "planned"
+    }
+  },
+  "generation_info": {
+    "tool": "Planetiler",
+    "version": "0.9.2-SNAPSHOT",
+    "profile": "OpenMapTiles",
+    "data_sources": [
+      "OpenStreetMap",
+      "Natural Earth",
+      "OSM Lake Centerlines",
+      "OSM Water Polygons"
+    ],
+    "generation_command": "docker run --rm -it -v ${PWD}:/data ghcr.io/onthegomap/planetiler:latest --download=true --osm-path=/data/new-jersey-latest.osm.pbf --output=/data/nj-complete.pmtiles --output-format=pmtiles"
+  }
+} 

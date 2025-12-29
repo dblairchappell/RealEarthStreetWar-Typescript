@@ -1,6 +1,9 @@
 # Dependencies
 /node_modules
 
+/client/node_modules
+/server/node_modules
+
 # Environment variables
 .env
 .env.local
@@ -15,10 +18,17 @@
 # IDE and OS files
 .DS_Store
 .vscode/
+.cursor/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# PMTiles data files
-/map_data
-/blender_files
+# PMTiles data files (source files - public/ contains served copies)
+assets/maps
+assets/blender
+
+# Public directory contains copies of assets for Vite to serve
+# Uncomment if you want to ignore public/ (not recommended - needed for builds):
+# /public
+
+/public/assets/maps

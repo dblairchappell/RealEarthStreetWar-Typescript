@@ -1,0 +1,37 @@
+{
+  "name": "realearthstreetwar-client",
+  "version": "1.0.0",
+  "description": "Client application for RealEarthStreetWar game",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "typecheck": "tsc --noEmit --watch",
+    "test": "playwright test",
+    "perf": "node scripts/perf.js",
+    "create-basemap": "pmtiles extract --maxzoom=7 \"https://build.protomaps.com/20240722.pmtiles\" \"../assets/maps/tiles/protomaps-basemap.pmtiles\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/luxon": "^3.6.2",
+    "@types/node": "^24.0.7",
+    "@types/tz-lookup": "^6.1.2",
+    "@playwright/test": "^1.43.0",
+    "puppeteer": "^22.5.0",
+    "pmtiles": "^4.3.0",
+    "typescript": "^5.8.3",
+    "vite": "^5.4.19"
+  },
+  "dependencies": {
+    "@shared/realearthstreetwar": "*",
+    "@turf/turf": "^7.2.0",
+    "luxon": "^3.7.1",
+    "maplibre-gl": "^5.6.1",
+    "osmtogeojson": "^3.0.0-beta.5",
+    "tz-lookup": "^6.1.25",
+    "bitecs": "^0.3.40"
+  }
+}
+

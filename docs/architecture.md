@@ -346,7 +346,7 @@ The game uses a sprite sheet animation system:
 
 - **Animation States**: idle, walking, running
 - **Frame Timing**: Uses accumulator pattern for consistent frame rates
-- **Sprite Sheets**: Located in `sprites/brian/` directory
+- **Sprite Sheets**: Located in `assets/sprites/brian/` directory
 - **Animation Switching**: Automatically based on movement state
 - **Pseudo-3D**: Multiple sprite slices stacked for depth (when not top-down)
 
@@ -364,8 +364,8 @@ Projection is configured via `MAP_PROJECTION` in `src/config.ts`.
 
 The game uses **PMTiles** protocol for offline map tiles:
 - Single-file format for efficient tile storage
-- Map style: `offline-map-style.json`
-- Tile data: `map_data/tiles/nj-complete.pmtiles`
+- Map style: `config/offline-map-style.json`
+- Tile data: `assets/maps/tiles/nj-complete.pmtiles`
 - Protocol registered with MapLibre GL JS
 
 ## 🎯 Design Principles

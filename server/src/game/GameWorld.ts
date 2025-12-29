@@ -60,9 +60,9 @@ export class GameWorld {
       
       // Try multiple possible paths - server might run from root or server directory
       const possiblePaths = [
-        path.join(process.cwd(), 'map_data', 'tiles', 'nj-complete.pmtiles'),
-        path.join(process.cwd(), '..', 'map_data', 'tiles', 'nj-complete.pmtiles'),
-        path.resolve(__dirname, '..', '..', '..', 'map_data', 'tiles', 'nj-complete.pmtiles'),
+        path.join(process.cwd(), 'assets', 'maps', 'tiles', 'nj-complete.pmtiles'),
+        path.join(process.cwd(), '..', 'assets', 'maps', 'tiles', 'nj-complete.pmtiles'),
+        path.resolve(__dirname, '..', '..', '..', 'assets', 'maps', 'tiles', 'nj-complete.pmtiles'),
       ];
       
       let pmtilesPath: string | null = null;
