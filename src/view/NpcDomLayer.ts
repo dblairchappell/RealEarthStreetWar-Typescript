@@ -112,6 +112,12 @@ export default class NpcDomLayer implements Renderable, Updatable {
   private cachedBounds: { getWest(): number; getEast(): number; getSouth(): number; getNorth(): number } | null = null;
   private cachedPaddingDegrees: number = 0;
   
+  /** DocumentFragment for batching DOM element creation */
+  private pendingElementsFragment: DocumentFragment | null = null;
+  
+  /** Array of elements to remove (batched) */
+  private elementsToRemove: HTMLElement[] = [];
+  
   /**
    * Constructor - sets up the DOM container.
    * 
@@ -250,6 +256,7 @@ export default class NpcDomLayer implements Renderable, Updatable {
   
   /**
    * Creates a DOM element structure for an NPC.
+   * Elements are added to a DocumentFragment for batched DOM insertion.
    * 
    * @param eid - Entity ID
    * @returns NpcDomElement structure
@@ -277,7 +284,12 @@ export default class NpcDomLayer implements Renderable, Updatable {
     // backgroundSize will be set when sprite image is loaded
     
     container.appendChild(spriteSlice);
-    this.rootContainer.appendChild(container);
+    
+    // Add to DocumentFragment for batched DOM insertion
+    if (!this.pendingElementsFragment) {
+      this.pendingElementsFragment = document.createDocumentFragment();
+    }
+    this.pendingElementsFragment.appendChild(container);
     
     return {
       container,
@@ -287,17 +299,44 @@ export default class NpcDomLayer implements Renderable, Updatable {
   }
   
   /**
+   * Flushes pending DOM element insertions by appending the DocumentFragment.
+   * This batches all element creation into a single DOM operation.
+   */
+  private flushPendingElements(): void {
+    if (this.pendingElementsFragment && this.pendingElementsFragment.childNodes.length > 0) {
+      this.rootContainer.appendChild(this.pendingElementsFragment);
+      this.pendingElementsFragment = null;
+    }
+  }
+  
+  /**
    * Removes DOM element for an NPC.
+   * Elements are queued for batched removal.
    * 
    * @param eid - Entity ID
    */
   private removeNpcElement(eid: number): void {
     const element = this.npcElements.get(eid);
     if (element) {
-      element.container.remove();
+      // Queue for batched removal instead of removing immediately
+      this.elementsToRemove.push(element.container);
       this.npcElements.delete(eid);
       this.npcAnimationState.delete(eid);
       this.npcSpeeds.delete(eid);
+    }
+  }
+  
+  /**
+   * Flushes pending DOM element removals by removing all queued elements.
+   * This batches all element removal into a single DOM operation.
+   */
+  private flushRemovedElements(): void {
+    if (this.elementsToRemove.length > 0) {
+      // Batch remove all elements
+      for (const element of this.elementsToRemove) {
+        element.remove();
+      }
+      this.elementsToRemove = [];
     }
   }
   
@@ -341,6 +380,7 @@ export default class NpcDomLayer implements Renderable, Updatable {
    * 
    * Advances sprite animation frames using an accumulator pattern.
    * Also manages DOM element lifecycle (create/remove) and viewport culling.
+   * Batches DOM operations for better performance.
    * 
    * @param deltaMs - Time elapsed since last update (milliseconds)
    */
@@ -354,7 +394,7 @@ export default class NpcDomLayer implements Renderable, Updatable {
     const ents = this.query(world);
     const existingEids = new Set(ents);
     
-    // Remove DOM elements for NPCs that no longer exist
+    // Remove DOM elements for NPCs that no longer exist (queued for batch removal)
     for (const eid of this.npcElements.keys()) {
       if (!existingEids.has(eid)) {
         this.removeNpcElement(eid);
@@ -362,6 +402,7 @@ export default class NpcDomLayer implements Renderable, Updatable {
     }
     
     // Create DOM elements for new NPCs (only if visible)
+    // Elements are added to DocumentFragment for batch insertion
     for (let i = 0; i < ents.length; i++) {
       const eid = ents[i];
       const lng = Position.x[eid];
@@ -373,7 +414,7 @@ export default class NpcDomLayer implements Renderable, Updatable {
       
       if (!this.npcElements.has(eid)) {
         if (isVisible) {
-          // Only create DOM element if visible
+          // Only create DOM element if visible (added to fragment for batch insertion)
           this.npcElements.set(eid, this.createNpcElement(eid));
         }
         // Skip animation updates for off-screen NPCs (no DOM element yet)
@@ -396,6 +437,10 @@ export default class NpcDomLayer implements Renderable, Updatable {
         }
       }
     }
+    
+    // Flush batched DOM operations: insert new elements and remove old ones
+    this.flushPendingElements();
+    this.flushRemovedElements();
     
     // Update animation frames for visible NPCs only
     for (let i = 0; i < ents.length; i++) {
@@ -463,6 +508,7 @@ export default class NpcDomLayer implements Renderable, Updatable {
    * 
    * Updates positions, rotations, and sizes for all visible NPC DOM elements.
    * Skips rendering for off-screen entities (culled in update()).
+   * Batches classList operations for better performance.
    * 
    * @param alpha - Interpolation factor (currently unused)
    */
@@ -478,6 +524,10 @@ export default class NpcDomLayer implements Renderable, Updatable {
     
     // Query ECS world directly for NPC positions
     const ents = this.query(world);
+    
+    // Batch classList operations: collect elements that need class changes
+    const elementsToSelect: HTMLElement[] = [];
+    const elementsToDeselect: HTMLElement[] = [];
     
     for (let i = 0; i < ents.length; i++) {
       const eid = ents[i];
@@ -526,19 +576,14 @@ export default class NpcDomLayer implements Renderable, Updatable {
       const scaleY = Math.cos(pitchRad);
       
       // Apply CSS transform: center, position, rotate, and scale
-      element.container.style.transform = `
-        translate(-50%, -50%) 
-        translate(${p.x}px, ${p.y}px) 
-        rotateX(${this.cameraPitch}deg) 
-        rotateZ(${rotationDegrees}deg)
-        scaleY(${scaleY})
-      `;
+      // Use translate3d for GPU acceleration
+      element.container.style.transform = `translate(-50%,-50%)translate3d(${p.x}px,${p.y}px,0)rotateX(${this.cameraPitch}deg)rotateZ(${rotationDegrees}deg)scaleY(${scaleY})`;
       
-      // Update selection outline (red border for selected NPC)
+      // Queue classList operations for batching
       if (this.selectedNpcEid === eid) {
-        element.container.classList.add('npc-selected');
+        elementsToSelect.push(element.container);
       } else {
-        element.container.classList.remove('npc-selected');
+        elementsToDeselect.push(element.container);
       }
       
       // Ensure sprite image is set (handles initial load and animation changes)
@@ -546,6 +591,15 @@ export default class NpcDomLayer implements Renderable, Updatable {
       if (animState && this.spritesLoaded[animState.animType]) {
         this.updateSpriteImage(element, animState.animType);
       }
+    }
+    
+    // Batch classList operations: apply all selections and deselections
+    // This reduces DOM reflows compared to individual classList operations
+    for (const element of elementsToSelect) {
+      element.classList.add('npc-selected');
+    }
+    for (const element of elementsToDeselect) {
+      element.classList.remove('npc-selected');
     }
   }
   
@@ -566,6 +620,7 @@ export default class NpcDomLayer implements Renderable, Updatable {
   
   /**
    * Set the selected NPC entity ID (for red outline)
+   * Batches classList operations for better performance.
    */
   public setSelectedNpc(eid: number | null): void {
     const changed = this.selectedNpcEid !== eid;
@@ -573,13 +628,24 @@ export default class NpcDomLayer implements Renderable, Updatable {
     
     if (changed) {
       console.log('[NpcDomLayer] Selection changed:', eid);
-      // Update selection classes immediately
+      // Batch classList operations: collect elements first, then update
+      const elementsToSelect: HTMLElement[] = [];
+      const elementsToDeselect: HTMLElement[] = [];
+      
       for (const [npcEid, element] of this.npcElements.entries()) {
         if (npcEid === eid) {
-          element.container.classList.add('npc-selected');
+          elementsToSelect.push(element.container);
         } else {
-          element.container.classList.remove('npc-selected');
+          elementsToDeselect.push(element.container);
         }
+      }
+      
+      // Apply all class changes in batch
+      for (const element of elementsToSelect) {
+        element.classList.add('npc-selected');
+      }
+      for (const element of elementsToDeselect) {
+        element.classList.remove('npc-selected');
       }
     }
   }
