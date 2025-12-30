@@ -254,6 +254,10 @@ export default class NpcWebglLayer implements maplibregl.CustomLayerInterface {
     this.map = map;
     this.gl = gl;
 
+    // Check maximum texture size
+    const maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+    console.log(`[NpcWebglLayer] Maximum texture size: ${maxTextureSize}x${maxTextureSize}`);
+
     // Load all sprite sheet textures asynchronously
     this.loadSpriteSheets();
 
@@ -407,12 +411,61 @@ export default class NpcWebglLayer implements maplibregl.CustomLayerInterface {
   private loadSpriteSheets(): void {
     const loadTexture = (url: string, type: 'idle' | 'walking' | 'running') => {
       const img = new Image();
+      // Note: crossOrigin not needed for same-origin requests (Vite dev server)
+      // Setting it can sometimes cause issues with same-origin loading
       img.src = url.startsWith('/') ? url : '/' + url;
       img.onload = () => {
+        const maxTextureSize = this.gl.getParameter(this.gl.MAX_TEXTURE_SIZE);
+        console.log(`[NpcWebglLayer] Loading ${type} sprite: ${url}, size: ${img.width}x${img.height}, max: ${maxTextureSize}`);
+        
+        // Check if texture dimensions exceed maximum
+        if (img.width > maxTextureSize || img.height > maxTextureSize) {
+          console.error(`[NpcWebglLayer] Texture ${type} (${img.width}x${img.height}) exceeds maximum size (${maxTextureSize}x${maxTextureSize})`);
+          this.texturesLoaded[type] = false;
+          return;
+        }
+        
         // Create WebGL texture from loaded image
-        const texture = this.gl.createTexture()!;
+        const texture = this.gl.createTexture();
+        if (!texture) {
+          console.error(`[NpcWebglLayer] Failed to create texture for ${type}`);
+          this.texturesLoaded[type] = false;
+          return;
+        }
+        
         this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
-        this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, img);
+        
+        // Check for WebGL errors
+        const error = this.gl.getError();
+        if (error !== this.gl.NO_ERROR) {
+          console.error(`[NpcWebglLayer] WebGL error before texImage2D for ${type}:`, error);
+        }
+        
+        // Upload texture - use RGBA format
+        try {
+          this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, img);
+        } catch (e) {
+          console.error(`[NpcWebglLayer] Exception uploading texture for ${type}:`, e);
+          this.gl.bindTexture(this.gl.TEXTURE_2D, null);
+          this.texturesLoaded[type] = false;
+          return;
+        }
+        
+        // Check for WebGL errors after upload
+        const errorAfter = this.gl.getError();
+        if (errorAfter !== this.gl.NO_ERROR) {
+          const errorNames: { [key: number]: string } = {
+            1280: 'GL_INVALID_ENUM',
+            1281: 'GL_INVALID_VALUE',
+            1282: 'GL_INVALID_OPERATION',
+            1285: 'GL_OUT_OF_MEMORY'
+          };
+          console.error(`[NpcWebglLayer] WebGL error after texImage2D for ${type}: ${errorAfter} (${errorNames[errorAfter] || 'UNKNOWN'})`);
+          // Don't mark as loaded if there's an error
+          this.gl.bindTexture(this.gl.TEXTURE_2D, null);
+          this.texturesLoaded[type] = false;
+          return;
+        }
         
         // Use NEAREST filtering to preserve pixel art style (no blurring)
         this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
@@ -422,16 +475,22 @@ export default class NpcWebglLayer implements maplibregl.CustomLayerInterface {
         this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
         this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
         
+        // Unbind texture to avoid accidental modification
+        this.gl.bindTexture(this.gl.TEXTURE_2D, null);
+        
         this.textures[type] = texture;
         this.texturesLoaded[type] = true;
+        console.log(`[NpcWebglLayer] Successfully loaded ${type} texture`);
         
         // Trigger repaint when all textures are loaded
         if (this.texturesLoaded.idle && this.texturesLoaded.walking && this.texturesLoaded.running) {
+          console.log('[NpcWebglLayer] All textures loaded, triggering repaint');
           this.map.triggerRepaint();
         }
       };
       img.onerror = () => {
         console.error(`[NpcWebglLayer] Failed to load sprite sheet: ${url}`);
+        this.texturesLoaded[type] = false; // Mark as failed
       };
     };
     
@@ -482,16 +541,26 @@ export default class NpcWebglLayer implements maplibregl.CustomLayerInterface {
     g.uniform1f(this.uFrameCountRunningLocation, NpcWebglLayer.ANIMATION_FRAMES.running);
 
     // Bind sprite sheet textures to texture units
+    // Verify textures exist before binding
+    if (!this.textures.idle || !this.textures.walking || !this.textures.running) {
+      console.warn('[NpcWebglLayer] Some textures are null:', {
+        idle: !!this.textures.idle,
+        walking: !!this.textures.walking,
+        running: !!this.textures.running
+      });
+      return;
+    }
+    
     g.activeTexture(g.TEXTURE0);
-    g.bindTexture(g.TEXTURE_2D, this.textures.idle!);
+    g.bindTexture(g.TEXTURE_2D, this.textures.idle);
     g.uniform1i(this.uTexIdleLocation, 0);
     
     g.activeTexture(g.TEXTURE1);
-    g.bindTexture(g.TEXTURE_2D, this.textures.walking!);
+    g.bindTexture(g.TEXTURE_2D, this.textures.walking);
     g.uniform1i(this.uTexWalkingLocation, 1);
     
     g.activeTexture(g.TEXTURE2);
-    g.bindTexture(g.TEXTURE_2D, this.textures.running!);
+    g.bindTexture(g.TEXTURE_2D, this.textures.running);
     g.uniform1i(this.uTexRunningLocation, 2);
 
     // Calculate point size based on zoom level

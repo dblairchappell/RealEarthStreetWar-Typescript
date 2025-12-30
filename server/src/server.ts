@@ -9,9 +9,11 @@ import { GameWorld } from './game/GameWorld';
 import { ServerGameLoop } from './game/GameLoop';
 import { WebSocketServer } from './network/WebSocketServer';
 import { ServerConfig } from './config';
+import { ServerMessage } from './network/types';
 import { watch, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+
 
 const PORT = ServerConfig.PORT;
 

@@ -24,6 +24,7 @@
  * 1. Create systems → 2. Wire callbacks → 3. Wait for map → 4. Initialize game → 5. Start loop
  */
 
+import 'maplibre-gl/dist/maplibre-gl.css';
 import { GameState, InputState } from "@shared/realearthstreetwar";
 import MapView from "./view/MapView";
 import GameController from "./controller/GameController";

@@ -8,6 +8,10 @@
     "shared",
     "server"
   ],
+  "overrides": {
+    "@xmldom/xmldom": "^0.8.10",
+    "minimist": "^1.2.8"
+  },
   "scripts": {
     "dev": "npm run dev --workspace=client",
     "build": "npm run build --workspace=client",
