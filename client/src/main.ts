@@ -180,11 +180,12 @@ map.on('load', () => {
     
     /**
      * Set up entity click handler with callbacks from controller.
-     * This enables clicking on occupant or NPCs to show info panels.
+     * This enables clicking on occupant, NPCs, or buildings to show info panels.
      */
     view.setupEntityClickHandler(
       (eid: number, info: EntityInfo) => controller.handleOccupantClicked(eid, info),
       (eid: number, info: EntityInfo, distanceMeters: number) => controller.handleNpcClicked(eid, info, distanceMeters),
+      (info: import('./view/EntityClickHandler').BuildingInfo) => controller.handleBuildingClicked(info),
       () => controller.handleEmptyClick()
     );
 

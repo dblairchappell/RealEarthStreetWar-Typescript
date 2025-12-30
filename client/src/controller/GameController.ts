@@ -5,7 +5,7 @@ import { FixedUpdatable } from "../loop/GameLoop";
 import { NetworkStateManager } from "../network/NetworkStateManager";
 import { ClientPrediction } from "../network/ClientPrediction";
 import { Position, Rotation } from "../ecs/world";
-import { EntityInfo } from "../view/EntityClickHandler";
+import { EntityInfo, BuildingInfo } from "../view/EntityClickHandler";
 import HUDView from "../view/HUDView";
 import { GameClient } from "../network/GameClient";
 
@@ -164,6 +164,9 @@ export default class GameController implements FixedUpdatable {
   public handleNpcClicked(eid: number, info: EntityInfo, distanceMeters: number): void {
     console.log('[GameController] NPC clicked (client eid):', eid, info, `Distance: ${distanceMeters.toFixed(2)}m`);
     
+    // Clear building selection when NPC is clicked
+    this.view.setSelectedBuilding(null);
+    
     // Set selected NPC for visual feedback (red outline)
     console.log('[GameController] Setting selected NPC to:', eid);
     this.view.setSelectedNpc(eid);
@@ -190,6 +193,24 @@ export default class GameController implements FixedUpdatable {
   }
 
   /**
+   * Handle building clicked - show building info panel
+   * Called by EntityClickHandler when building is clicked
+   */
+  public handleBuildingClicked(info: BuildingInfo): void {
+    console.log('[GameController] Building clicked:', info);
+    
+    // Clear NPC selection (remove red outline)
+    this.view.setSelectedNpc(null);
+    
+    // Set building selection (add visual indicator)
+    this.view.setSelectedBuilding(info);
+    
+    if (this.hud) {
+      this.hud.showBuildingPanel(info);
+    }
+  }
+
+  /**
    * Handle empty click - dismiss any open panels
    * Called by EntityClickHandler when clicking on empty map
    */
@@ -198,6 +219,9 @@ export default class GameController implements FixedUpdatable {
     
     // Clear selected NPC visual feedback
     this.view.setSelectedNpc(null);
+    
+    // Clear selected building visual feedback
+    this.view.setSelectedBuilding(null);
     
     if (this.hud) {
       this.hud.hideEntityPanel();

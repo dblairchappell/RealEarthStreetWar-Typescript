@@ -3,7 +3,7 @@
 import { formatInTimeZone } from "../utils/time";
 import { Updatable } from "../loop/GameLoop";
 import tzLookup from "tz-lookup";
-import { EntityInfo } from "./EntityClickHandler";
+import { EntityInfo, BuildingInfo } from "./EntityClickHandler";
 import { Position } from "../ecs/world";
 import { calculateDistanceMeters, GameStateConstants } from "@shared/realearthstreetwar";
 
@@ -19,6 +19,7 @@ export default class HUDView implements Updatable {
   private entityInfoPanel: HTMLElement | null;
   private occupantPanel: HTMLElement | null;
   private npcPanel: HTMLElement | null;
+  private buildingPanel: HTMLElement | null;
   
     // Occupant panel elements
     private occupantIdEl: HTMLElement | null;
@@ -31,6 +32,12 @@ export default class HUDView implements Updatable {
   private npcPositionEl: HTMLElement | null;
   private npcDistanceEl: HTMLElement | null;
   private possessBtn: HTMLButtonElement | null;
+  
+  // Building panel elements
+  private buildingNameEl: HTMLElement | null;
+  private buildingTypeEl: HTMLElement | null;
+  private buildingHeightEl: HTMLElement | null;
+  private buildingCoordinatesEl: HTMLElement | null;
 
   private mapInstance: any = null; // Will be set by setMapInstance
   private gameState: any = null; // Will be set by setGameState
@@ -59,6 +66,7 @@ export default class HUDView implements Updatable {
     this.entityInfoPanel = document.getElementById('entity-info-panel');
     this.occupantPanel = document.getElementById('occupant-panel');
     this.npcPanel = document.getElementById('npc-panel');
+    this.buildingPanel = document.getElementById('building-panel');
     
     // Query occupant panel elements
     this.occupantIdEl = document.getElementById('occupant-id');
@@ -71,6 +79,12 @@ export default class HUDView implements Updatable {
     this.npcPositionEl = document.getElementById('npc-position');
     this.npcDistanceEl = document.getElementById('npc-distance');
     this.possessBtn = document.getElementById('possess-btn') as HTMLButtonElement | null;
+    
+    // Query building panel elements
+    this.buildingNameEl = document.getElementById('building-name');
+    this.buildingTypeEl = document.getElementById('building-type');
+    this.buildingHeightEl = document.getElementById('building-height');
+    this.buildingCoordinatesEl = document.getElementById('building-coordinates');
     
     // Set up button event listeners
     this.setupEventListeners();
@@ -210,10 +224,11 @@ export default class HUDView implements Updatable {
    * Show occupant info panel with entity details
    */
   public showOccupantPanel(entityId: number, info: EntityInfo, currentCommand?: string): void {
-    if (!this.entityInfoPanel || !this.occupantPanel || !this.npcPanel) return;
+    if (!this.entityInfoPanel || !this.occupantPanel || !this.npcPanel || !this.buildingPanel) return;
     
-    // Hide NPC panel
+    // Hide other panels
     this.npcPanel.classList.add('hidden');
+    this.buildingPanel.classList.add('hidden');
     
     // Show occupant panel
     this.occupantPanel.classList.remove('hidden');
@@ -264,10 +279,11 @@ export default class HUDView implements Updatable {
    * @param inRange - Whether NPC is in range
    */
   public showNpcPanel(entityId: number, info: EntityInfo, distanceMeters: number, inRange: boolean): void {
-    if (!this.entityInfoPanel || !this.occupantPanel || !this.npcPanel) return;
+    if (!this.entityInfoPanel || !this.occupantPanel || !this.npcPanel || !this.buildingPanel) return;
     
-    // Hide occupant panel
+    // Hide other panels
     this.occupantPanel.classList.add('hidden');
+    this.buildingPanel.classList.add('hidden');
     
     // Show NPC panel
     this.npcPanel.classList.remove('hidden');
@@ -355,6 +371,43 @@ export default class HUDView implements Updatable {
   }
 
   /**
+   * Show building info panel with building details
+   * @param info - Building info with name, type, height, and coordinates
+   */
+  public showBuildingPanel(info: BuildingInfo): void {
+    if (!this.entityInfoPanel || !this.occupantPanel || !this.npcPanel || !this.buildingPanel) return;
+    
+    // Hide other panels
+    this.occupantPanel.classList.add('hidden');
+    this.npcPanel.classList.add('hidden');
+    
+    // Show building panel
+    this.buildingPanel.classList.remove('hidden');
+    this.entityInfoPanel.classList.remove('hidden');
+    
+    // Update building info
+    if (this.buildingNameEl) {
+      this.buildingNameEl.textContent = info.name || 'Unknown';
+    }
+    
+    if (this.buildingTypeEl) {
+      this.buildingTypeEl.textContent = info.buildingType || 'Unknown';
+    }
+    
+    if (this.buildingHeightEl) {
+      if (info.height !== undefined) {
+        this.buildingHeightEl.textContent = `${info.height.toFixed(1)} m`;
+      } else {
+        this.buildingHeightEl.textContent = 'Unknown';
+      }
+    }
+    
+    if (this.buildingCoordinatesEl) {
+      this.buildingCoordinatesEl.textContent = `${info.centerLat.toFixed(6)}, ${info.centerLng.toFixed(6)}`;
+    }
+  }
+
+  /**
    * Hide entity info panel
    */
   public hideEntityPanel(): void {
@@ -366,6 +419,9 @@ export default class HUDView implements Updatable {
     }
     if (this.npcPanel) {
       this.npcPanel.classList.add('hidden');
+    }
+    if (this.buildingPanel) {
+      this.buildingPanel.classList.add('hidden');
     }
     
     // Clear selected NPC tracking

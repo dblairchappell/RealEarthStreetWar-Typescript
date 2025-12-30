@@ -8,11 +8,13 @@
 import { defineQuery } from 'bitecs';
 import { world, Position, Rotation, PlayerTag, NpcTag } from '../ecs/world';
 import { calculateDistanceDeg, calculateDistanceMeters } from '@shared/realearthstreetwar';
+import { FeatureQuery } from './map/FeatureQuery';
 
 export interface EntityClickResult {
-  type: 'occupant' | 'npc' | 'none';
+  type: 'occupant' | 'npc' | 'building' | 'none';
   entityId: number | null;
   distance?: number; // Distance in meters (for NPCs)
+  building?: BuildingInfo; // Building data (for buildings)
 }
 
 export interface EntityInfo {
@@ -22,6 +24,16 @@ export interface EntityInfo {
   rotation: number;
 }
 
+export interface BuildingInfo {
+  name?: string;
+  buildingType?: string;
+  height?: number;
+  centerLat: number;
+  centerLng: number;
+  properties: Record<string, any>;
+  geometry?: any; // Full GeoJSON geometry from the building feature
+}
+
 export class EntityClickHandler {
   private playerQuery = defineQuery([PlayerTag, Position, Rotation]);
   private npcQuery = defineQuery([NpcTag, Position, Rotation]);
@@ -29,9 +41,11 @@ export class EntityClickHandler {
 
   constructor(
     private map: any,
+    private featureQuery: FeatureQuery | null,
     private getCurrentOccupantEid: () => number | null,
     private onOccupantClicked: (eid: number, info: EntityInfo) => void,
     private onNpcClicked: (eid: number, info: EntityInfo, distanceMeters: number) => void,
+    private onBuildingClicked: (info: BuildingInfo) => void,
     private onEmptyClick: () => void
   ) {
     this.setupClickHandler();
@@ -54,6 +68,8 @@ export class EntityClickHandler {
         if (info && result.distance !== undefined) {
           this.onNpcClicked(result.entityId, info, result.distance);
         }
+      } else if (result.type === 'building' && result.building) {
+        this.onBuildingClicked(result.building);
       } else {
         // Clicked on empty space
         this.onEmptyClick();
@@ -112,6 +128,47 @@ export class EntityClickHandler {
       return { type: 'npc', entityId: closestNpc.eid };
     }
     
+    // Check for buildings
+    if (this.featureQuery) {
+      const queryResult = this.featureQuery.query(point);
+      if (queryResult.building) {
+        const building = queryResult.building;
+        let geometry = building.geometry;
+        
+        // Convert click point to lat/lng for point-in-polygon check
+        const clickLngLat = this.map.unproject([point.x, point.y]);
+        const clickLng = clickLngLat.lng;
+        const clickLat = clickLngLat.lat;
+        
+        // Extract individual polygon from MultiPolygon if needed
+        geometry = this.extractPolygonAtPoint(geometry, clickLng, clickLat);
+        
+        // Calculate center point of building polygon
+        const coords = geometry.coordinates[0]; // Exterior ring
+        let centerLng = 0, centerLat = 0;
+        for (const coord of coords) {
+          centerLng += coord[0];
+          centerLat += coord[1];
+        }
+        centerLng /= coords.length;
+        centerLat /= coords.length;
+        
+        // Extract building properties
+        const props = building.properties || {};
+        const buildingInfo: BuildingInfo = {
+          name: props.name || undefined,
+          buildingType: props.building || props['building:type'] || undefined,
+          height: props.render_height ? parseFloat(String(props.render_height)) : undefined,
+          centerLat,
+          centerLng,
+          properties: props,
+          geometry: geometry // Store extracted polygon (not MultiPolygon)
+        };
+        
+        return { type: 'building', entityId: null, building: buildingInfo };
+      }
+    }
+    
     return { type: 'none', entityId: null };
   }
 
@@ -167,6 +224,54 @@ export class EntityClickHandler {
       lat: Position.y[entityId],
       rotation: Rotation.angle[entityId] || 0,
     };
+  }
+
+  /**
+   * Extract individual polygon from MultiPolygon that contains the click point
+   */
+  private extractPolygonAtPoint(
+    geometry: any,
+    clickLng: number,
+    clickLat: number
+  ): any {
+    if (geometry.type === 'Polygon') {
+      return geometry;
+    }
+    
+    if (geometry.type === 'MultiPolygon') {
+      // Find polygon containing click point
+      for (const polygonCoords of geometry.coordinates) {
+        const exteriorRing = polygonCoords[0];
+        if (this.isPointInPolygon(clickLng, clickLat, exteriorRing)) {
+          return {
+            type: 'Polygon',
+            coordinates: polygonCoords
+          };
+        }
+      }
+      // Fallback: return first polygon if point-in-polygon fails
+      return {
+        type: 'Polygon',
+        coordinates: geometry.coordinates[0]
+      };
+    }
+    
+    return geometry; // Return as-is if not Polygon or MultiPolygon
+  }
+
+  /**
+   * Check if a point is inside a polygon using ray casting algorithm
+   */
+  private isPointInPolygon(lng: number, lat: number, ring: number[][]): boolean {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const xi = ring[i][0], yi = ring[i][1];
+      const xj = ring[j][0], yj = ring[j][1];
+      const intersect = ((yi > lat) !== (yj > lat)) && 
+                       (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
   }
 }
 

@@ -72,6 +72,7 @@ export default class MapView implements Updatable, Renderable {
   private entityClickHandler: EntityClickHandler | null = null; // Handles clicking on entities
   private npcLayer: any = null; // NPC rendering layer (NpcCanvasLayer or NpcWebglLayer)
   private npcController: any = null; // NPC controller (for WebGL path)
+  private selectedBuilding: import('./EntityClickHandler').BuildingInfo | null = null; // Currently selected building
   
   // Player state tracking
   private playerPosition: { lng: number; lat: number } | null = null; // Current player position (lat/lng)
@@ -160,6 +161,10 @@ export default class MapView implements Updatable, Renderable {
     // Canvas path: PlayerCanvasView (consistent with NPC rendering)
     if (PLAYER_RENDER_PATH === 'canvas') {
       this.playerCanvasView = new PlayerCanvasView(this.map);
+    } else if (PLAYER_RENDER_PATH === 'webgl') {
+      // PlayerWebglView will be initialized later in setNpcRenderingLayers()
+      // when the WebGL layer is available
+      this.playerDomView = null; // Don't create DOM view
     } else {
       this.playerDomView = new PlayerDomView(this.map);
     }
@@ -838,11 +843,78 @@ export default class MapView implements Updatable, Renderable {
   }
 
   /**
+   * Set selected building and update visual highlight
+   */
+  public setSelectedBuilding(building: import('./EntityClickHandler').BuildingInfo | null): void {
+    this.selectedBuilding = building;
+    this.updateBuildingHighlight();
+  }
+
+  /**
+   * Update building highlight layer to show selected building outline
+   */
+  private updateBuildingHighlight(): void {
+    if (!this.map) return;
+    
+    // Remove existing highlight if present
+    if (this.map.getLayer('building-highlight-outline')) {
+      this.map.removeLayer('building-highlight-outline');
+    }
+    if (this.map.getLayer('building-highlight-fill')) {
+      this.map.removeLayer('building-highlight-fill');
+    }
+    if (this.map.getSource('building-highlight-source')) {
+      this.map.removeSource('building-highlight-source');
+    }
+    
+    if (!this.selectedBuilding || !this.selectedBuilding.geometry) {
+      return; // No building selected or no geometry available
+    }
+    
+    // Create GeoJSON feature from building geometry
+    const highlightFeature = {
+      type: 'Feature' as const,
+      geometry: this.selectedBuilding.geometry,
+      properties: {}
+    };
+    
+    // Add source
+    this.map.addSource('building-highlight-source', {
+      type: 'geojson',
+      data: highlightFeature
+    });
+    
+    // Add fill layer with slight transparency for better visibility
+    this.map.addLayer({
+      id: 'building-highlight-fill',
+      type: 'fill',
+      source: 'building-highlight-source',
+      paint: {
+        'fill-color': 'rgba(220, 53, 69, 0.2)', // Light red fill
+        'fill-opacity': 0.3
+      }
+    });
+    
+    // Add outline layer (red outline similar to NPC selection)
+    this.map.addLayer({
+      id: 'building-highlight-outline',
+      type: 'line',
+      source: 'building-highlight-source',
+      paint: {
+        'line-color': 'rgba(220, 53, 69, 0.9)', // Red color matching NPC selection
+        'line-width': 3,
+        'line-opacity': 1.0
+      }
+    });
+  }
+
+  /**
    * Set up entity click handler with callbacks
    */
   public setupEntityClickHandler(
     onOccupantClicked: (eid: number, info: EntityInfo) => void,
     onNpcClicked: (eid: number, info: EntityInfo, distanceMeters: number) => void,
+    onBuildingClicked: (info: import('./EntityClickHandler').BuildingInfo) => void,
     onEmptyClick: () => void
   ): void {
     if (this.entityClickHandler) {
@@ -853,9 +925,11 @@ export default class MapView implements Updatable, Renderable {
     
     this.entityClickHandler = new EntityClickHandler(
       this.map,
+      this.featureQuery,
       () => this.getCurrentOccupantEid(),
       onOccupantClicked,
       onNpcClicked,
+      onBuildingClicked,
       onEmptyClick
     );
     
