@@ -34,6 +34,7 @@ export default class HUDView implements Updatable {
   private possessBtn: HTMLButtonElement | null;
   
   // Building panel elements
+  private buildingIdEl: HTMLElement | null;
   private buildingNameEl: HTMLElement | null;
   private buildingTypeEl: HTMLElement | null;
   private buildingHeightEl: HTMLElement | null;
@@ -81,6 +82,7 @@ export default class HUDView implements Updatable {
     this.possessBtn = document.getElementById('possess-btn') as HTMLButtonElement | null;
     
     // Query building panel elements
+    this.buildingIdEl = document.getElementById('building-id');
     this.buildingNameEl = document.getElementById('building-name');
     this.buildingTypeEl = document.getElementById('building-type');
     this.buildingHeightEl = document.getElementById('building-height');
@@ -386,6 +388,10 @@ export default class HUDView implements Updatable {
     this.entityInfoPanel.classList.remove('hidden');
     
     // Update building info
+    if (this.buildingIdEl) {
+      this.buildingIdEl.textContent = info.id || 'Unknown';
+    }
+    
     if (this.buildingNameEl) {
       this.buildingNameEl.textContent = info.name || 'Unknown';
     }

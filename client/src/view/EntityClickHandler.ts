@@ -25,6 +25,7 @@ export interface EntityInfo {
 }
 
 export interface BuildingInfo {
+  id: string; // Centroid-based hash ID
   name?: string;
   buildingType?: string;
   height?: number;
@@ -153,9 +154,13 @@ export class EntityClickHandler {
         centerLng /= coords.length;
         centerLat /= coords.length;
         
+        // Generate building ID
+        const buildingId = this.generateBuildingId(geometry, centerLat, centerLng);
+        
         // Extract building properties
         const props = building.properties || {};
         const buildingInfo: BuildingInfo = {
+          id: buildingId,
           name: props.name || undefined,
           buildingType: props.building || props['building:type'] || undefined,
           height: props.render_height ? parseFloat(String(props.render_height)) : undefined,
@@ -272,6 +277,43 @@ export class EntityClickHandler {
       if (intersect) inside = !inside;
     }
     return inside;
+  }
+
+  /**
+   * Generate stable building ID from centroid and geometry
+   * Creates a short, memorable hash-based ID
+   * Uses improved hash function to reduce collision risk
+   */
+  private generateBuildingId(polygon: any, centerLat: number, centerLng: number): string {
+    const coords = polygon.coordinates[0]; // Exterior ring
+    
+    // Create a comprehensive hash string from centroid + multiple coordinate points
+    // Include more points and use precise formatting to ensure uniqueness
+    const hashParts = [
+      centerLat.toFixed(8), // Higher precision for centroid
+      centerLng.toFixed(8),
+      ...coords.slice(0, 8).map((c: number[]) => `${c[0].toFixed(8)}_${c[1].toFixed(8)}`), // More points
+      coords.length.toString() // Include polygon vertex count for additional uniqueness
+    ];
+    const hashString = hashParts.join('_');
+    
+    // Improved hash function (FNV-1a variant) for better distribution and collision resistance
+    // This provides better avalanche effect - small input changes cause large hash changes
+    let hash = 2166136261; // FNV offset basis (32-bit)
+    for (let i = 0; i < hashString.length; i++) {
+      hash ^= hashString.charCodeAt(i);
+      // Multiply by FNV prime (16777619) using bit operations for efficiency
+      hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+    }
+    
+    // Ensure positive 32-bit integer
+    hash = hash >>> 0;
+    
+    // Convert to base36 (0-9, a-z) for shorter, more readable ID
+    const base36 = hash.toString(36);
+    
+    // Take first 8 characters for a short, memorable ID
+    return `bld_${base36.substring(0, 8)}`;
   }
 }
 
