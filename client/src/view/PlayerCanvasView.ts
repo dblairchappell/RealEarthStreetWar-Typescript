@@ -311,7 +311,7 @@ export default class PlayerCanvasView implements Renderable, Updatable {
     
     // Calculate rotation
     // For now, use stored rotation (could also use velocity like NPCs)
-    const rotation = calculateRotationFromStored(rotationDeg, this.cameraBearing);
+    const rotation = calculateRotationFromStored(rotationDeg, -this.cameraBearing);
     
     // Check if sprites are loaded
     const animType = this.animationState.animType;
