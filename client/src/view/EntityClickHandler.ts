@@ -29,6 +29,7 @@ export interface BuildingInfo {
   name?: string;
   buildingType?: string;
   height?: number;
+  area?: number; // Area in square meters
   centerLat: number;
   centerLng: number;
   properties: Record<string, any>;
@@ -157,6 +158,9 @@ export class EntityClickHandler {
         // Generate building ID
         const buildingId = this.generateBuildingId(geometry, centerLat, centerLng);
         
+        // Calculate building area
+        const area = this.calculatePolygonArea(geometry);
+        
         // Extract building properties
         const props = building.properties || {};
         const buildingInfo: BuildingInfo = {
@@ -164,6 +168,7 @@ export class EntityClickHandler {
           name: props.name || undefined,
           buildingType: props.building || props['building:type'] || undefined,
           height: props.render_height ? parseFloat(String(props.render_height)) : undefined,
+          area: area,
           centerLat,
           centerLng,
           properties: props,
@@ -277,6 +282,38 @@ export class EntityClickHandler {
       if (intersect) inside = !inside;
     }
     return inside;
+  }
+
+  /**
+   * Calculate polygon area using shoelace formula
+   * Returns area in square meters (approximate for lat/lng coordinates)
+   */
+  private calculatePolygonArea(polygon: any): number {
+    const coords = polygon.coordinates[0]; // Exterior ring
+    if (coords.length < 3) return 0;
+    
+    // Shoelace formula: sum of (x[i] * y[i+1] - x[i+1] * y[i]) / 2
+    let area = 0;
+    for (let i = 0; i < coords.length - 1; i++) {
+      const [lng1, lat1] = coords[i];
+      const [lng2, lat2] = coords[i + 1];
+      area += lng1 * lat2 - lng2 * lat1;
+    }
+    // Close the polygon (last point to first point)
+    const [lngLast, latLast] = coords[coords.length - 1];
+    const [lngFirst, latFirst] = coords[0];
+    area += lngLast * latFirst - lngFirst * latLast;
+    
+    area = Math.abs(area) / 2;
+    
+    // Convert degrees² to approximate square meters
+    // At equator: 1 degree lat ≈ 111,320m, 1 degree lng ≈ 111,320m
+    // Use average of centroid lat for more accurate conversion
+    const avgLat = coords.reduce((sum: number, c: number[]) => sum + c[1], 0) / coords.length;
+    const metersPerDegreeLat = 111320;
+    const metersPerDegreeLng = 111320 * Math.cos(avgLat * Math.PI / 180);
+    
+    return area * metersPerDegreeLat * metersPerDegreeLng;
   }
 
   /**

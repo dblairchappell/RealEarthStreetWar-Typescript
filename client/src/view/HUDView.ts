@@ -38,6 +38,7 @@ export default class HUDView implements Updatable {
   private buildingNameEl: HTMLElement | null;
   private buildingTypeEl: HTMLElement | null;
   private buildingHeightEl: HTMLElement | null;
+  private buildingAreaEl: HTMLElement | null;
   private buildingCoordinatesEl: HTMLElement | null;
 
   private mapInstance: any = null; // Will be set by setMapInstance
@@ -86,6 +87,7 @@ export default class HUDView implements Updatable {
     this.buildingNameEl = document.getElementById('building-name');
     this.buildingTypeEl = document.getElementById('building-type');
     this.buildingHeightEl = document.getElementById('building-height');
+    this.buildingAreaEl = document.getElementById('building-area');
     this.buildingCoordinatesEl = document.getElementById('building-coordinates');
     
     // Set up button event listeners
@@ -405,6 +407,14 @@ export default class HUDView implements Updatable {
         this.buildingHeightEl.textContent = `${info.height.toFixed(1)} m`;
       } else {
         this.buildingHeightEl.textContent = 'Unknown';
+      }
+    }
+    
+    if (this.buildingAreaEl) {
+      if (info.area !== undefined) {
+        this.buildingAreaEl.textContent = `${info.area.toFixed(1)} m²`;
+      } else {
+        this.buildingAreaEl.textContent = 'Unknown';
       }
     }
     
