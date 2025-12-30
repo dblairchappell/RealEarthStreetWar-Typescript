@@ -7,11 +7,12 @@
 
 import { addComponent, addEntity, createWorld, defineQuery, IWorld, removeComponent } from 'bitecs';
 import { Position, Rotation, Velocity, PlayerTag, NpcTag, SpriteRef, entityCollisionSystem, SpatialGrid, GameState, GameStateConstants, calculateDistanceMeters, BuildingCollider, buildingCollisionSystem, buildingCollisionPreventSystem } from '@shared/realearthstreetwar';
-import { randomWalkSystem, initializeNpcSpeedMultiplier, getNpcSpeed, cleanupNpcData } from './systems/randomWalkSystem';
+import { randomWalkSystem, initializeNpcSpeedMultiplier, getNpcSpeed, cleanupNpcData, setRoadLoader } from './systems/randomWalkSystem';
 import { movementSystem } from './systems/movementSystem';
 import { GameStateSnapshot, PlayerSnapshot, NpcSnapshot } from '../network/types';
 import { PlayerManager } from '../players/PlayerManager';
 import { BuildingDataLoader } from '../data/BuildingDataLoader';
+import { RoadDataLoader } from '../data/RoadDataLoader';
 import * as path from 'path';
 import * as fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -35,6 +36,9 @@ export class GameWorld {
   
   /** Building collider wrapper */
   private buildingCollider: BuildingCollider | null = null;
+  
+  /** Road data loader for NPC pathfinding constraints */
+  private roadLoader: RoadDataLoader | null = null;
   
   /** Player entity IDs mapped by player ID */
   private playerEntities: Map<string, number> = new Map();
@@ -90,6 +94,38 @@ export class GameWorld {
     } catch (error) {
       console.error('[GameWorld] Failed to initialize building collision system:', error);
       console.warn('[GameWorld] Building collision will be disabled');
+    }
+    
+    // Initialize road loader with same PMTiles file
+    try {
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = dirname(__filename);
+      
+      const possiblePaths = [
+        path.join(process.cwd(), 'assets', 'maps', 'tiles', 'nj-complete.pmtiles'),
+        path.join(process.cwd(), '..', 'assets', 'maps', 'tiles', 'nj-complete.pmtiles'),
+        path.resolve(__dirname, '..', '..', '..', 'assets', 'maps', 'tiles', 'nj-complete.pmtiles'),
+      ];
+      
+      let pmtilesPath: string | null = null;
+      for (const testPath of possiblePaths) {
+        const resolved = path.resolve(testPath);
+        if (fs.existsSync(resolved)) {
+          pmtilesPath = resolved;
+          break;
+        }
+      }
+      
+      if (pmtilesPath) {
+        this.roadLoader = new RoadDataLoader(pmtilesPath);
+        setRoadLoader(this.roadLoader);
+        console.log('[GameWorld] Road constraint system initialized');
+      } else {
+        console.warn('[GameWorld] PMTiles file not found for road loader');
+      }
+    } catch (error) {
+      console.error('[GameWorld] Failed to initialize road constraint system:', error);
+      console.warn('[GameWorld] NPCs will move randomly without road constraints');
     }
   }
 
@@ -505,8 +541,8 @@ export class GameWorld {
       }
     }
 
-    // Run NPC systems
-    randomWalkSystem(this.world);
+    // Run NPC systems (now async for road constraint checks)
+    await randomWalkSystem(this.world);
     
     // Get all entities for collision detection (players + NPCs)
     const npcEnts = this.npcQuery(this.world);
