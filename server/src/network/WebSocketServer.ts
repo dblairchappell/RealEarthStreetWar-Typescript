@@ -9,6 +9,7 @@ import { PlayerManager } from '../players/PlayerManager';
 import { GameWorld } from '../game/GameWorld';
 import { ClientMessage, ServerMessage } from './types';
 import type { InputState } from '@shared/realearthstreetwar';
+import { ServerConfig } from '../config';
 
 export interface MessageHandlers {
   onInput?: (playerId: string, input: InputState) => void;
@@ -112,8 +113,8 @@ export class WebSocketServer {
       // Create new player entity at default spawn location
       this.gameWorld.createPlayer(
         player.id,
-        -74.05682, // Default starting position (NYC)
-        40.69337,
+        ServerConfig.DEFAULT_SPAWN_CENTER.lng,
+        ServerConfig.DEFAULT_SPAWN_CENTER.lat,
         180
       );
     }
