@@ -30,6 +30,8 @@ export interface BuildingInfo {
   buildingType?: string;
   height?: number;
   area?: number; // Area in square meters
+  floors?: number; // Estimated number of floors (height / 3m per floor)
+  totalFloorspace?: number; // Total floorspace in square meters (area × floors)
   centerLat: number;
   centerLng: number;
   properties: Record<string, any>;
@@ -163,12 +165,31 @@ export class EntityClickHandler {
         
         // Extract building properties
         const props = building.properties || {};
+        
+        // Calculate estimated number of floors (assuming 3m per storey)
+        let floors: number | undefined = undefined;
+        let totalFloorspace: number | undefined = undefined;
+        if (props.render_height) {
+          const height = parseFloat(String(props.render_height));
+          if (!isNaN(height) && height > 0) {
+            floors = Math.round(height / 3); // Round to nearest integer
+            if (floors < 1) floors = 1; // Minimum 1 floor
+            
+            // Calculate total floorspace
+            if (area > 0) {
+              totalFloorspace = area * floors;
+            }
+          }
+        }
+        
         const buildingInfo: BuildingInfo = {
           id: buildingId,
           name: props.name || undefined,
           buildingType: props.building || props['building:type'] || undefined,
           height: props.render_height ? parseFloat(String(props.render_height)) : undefined,
           area: area,
+          floors: floors,
+          totalFloorspace: totalFloorspace,
           centerLat,
           centerLng,
           properties: props,

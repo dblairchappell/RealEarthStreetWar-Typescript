@@ -39,6 +39,8 @@ export default class HUDView implements Updatable {
   private buildingTypeEl: HTMLElement | null;
   private buildingHeightEl: HTMLElement | null;
   private buildingAreaEl: HTMLElement | null;
+  private buildingFloorsEl: HTMLElement | null;
+  private buildingFloorspaceEl: HTMLElement | null;
   private buildingCoordinatesEl: HTMLElement | null;
 
   private mapInstance: any = null; // Will be set by setMapInstance
@@ -88,6 +90,8 @@ export default class HUDView implements Updatable {
     this.buildingTypeEl = document.getElementById('building-type');
     this.buildingHeightEl = document.getElementById('building-height');
     this.buildingAreaEl = document.getElementById('building-area');
+    this.buildingFloorsEl = document.getElementById('building-floors');
+    this.buildingFloorspaceEl = document.getElementById('building-floorspace');
     this.buildingCoordinatesEl = document.getElementById('building-coordinates');
     
     // Set up button event listeners
@@ -415,6 +419,22 @@ export default class HUDView implements Updatable {
         this.buildingAreaEl.textContent = `${info.area.toFixed(1)} m²`;
       } else {
         this.buildingAreaEl.textContent = 'Unknown';
+      }
+    }
+    
+    if (this.buildingFloorsEl) {
+      if (info.floors !== undefined) {
+        this.buildingFloorsEl.textContent = info.floors.toString();
+      } else {
+        this.buildingFloorsEl.textContent = 'Unknown';
+      }
+    }
+    
+    if (this.buildingFloorspaceEl) {
+      if (info.totalFloorspace !== undefined) {
+        this.buildingFloorspaceEl.textContent = `${info.totalFloorspace.toFixed(1)} m²`;
+      } else {
+        this.buildingFloorspaceEl.textContent = 'Unknown';
       }
     }
     
