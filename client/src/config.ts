@@ -1,12 +1,12 @@
 // Global switches & tweakables for the whole game.
 // -----------------------------------------------------------------
-export const GTA1_STYLE_TOP_DOWN = true;   // ← flip to false for 3-D mode
+export const GTA1_STYLE_TOP_DOWN = false;   // ← flip to false for 3-D mode
 
 // 'dom': DOM-based rendering with CSS transforms (works with any projection, including Globe)
 // 'canvas': Canvas-based rendering (works with any projection, including Globe)
 // 'webgl': WebGL-based rendering (best performance) (best for Mercator projection)
-export const PLAYER_RENDER_PATH: 'dom' | 'canvas' | 'webgl' = 'canvas';
-export const NPC_RENDER_PATH: 'dom' | 'canvas' | 'webgl' = 'canvas'; // Using canvas because sprite sheets exceed GPU max texture size (8192px)
+export const PLAYER_RENDER_PATH: 'dom' | 'canvas' | 'webgl' = 'webgl';
+export const NPC_RENDER_PATH: 'dom' | 'canvas' | 'webgl' = 'webgl'; // Using canvas because sprite sheets exceed GPU max texture size (8192px)
 
 // Note: WebGL rendering path works best with 'mercator' projection.
 // Canvas rendering path works with any projection.

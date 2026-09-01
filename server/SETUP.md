@@ -1,36 +1,48 @@
 # Server Setup Notes
 
-## Module Resolution
+The server is an npm workspace and imports common code from the existing `shared` workspace. It does not import source files from the browser client.
 
-The server imports shared code from the client's `src/` directory using relative paths (e.g., `../../src/ecs/world`). 
+## Install and Run
 
-**Note**: TypeScript's type checker may show errors for these imports, but they will resolve correctly at runtime when using `tsx` or after compilation, as Node.js resolves relative paths correctly.
+At repository root:
 
-## Running the Server
-
-### Development Mode
 ```bash
-npm run dev
+npm install
+npm run dev --workspace=server
 ```
 
-This uses `tsx` which handles TypeScript and module resolution at runtime.
+The development command uses `tsx watch src/server.ts`, so it restarts on server or shared source changes.
 
-### Production Build
-```bash
-npm run build
-npm start
+## Shared Imports
+
+Server code imports shared exports by package name:
+
+```ts
+import { Position, NpcTag } from '@shared/realearthstreetwar';
 ```
 
-The compiled JavaScript will have the correct relative paths that Node.js can resolve.
+Shared components, game state, collision systems, and utilities live in `shared/src`. Server-specific simulation belongs in `server/src`.
 
-## Architecture
+## Map Data
 
-The server shares the following with the client:
-- ECS components (`Position`, `Rotation`, `Velocity`, `NpcTag`, `SpriteRef`, `PlayerTag`)
-- ECS systems (`collisionSystem`)
-- Game state model (`GameState`)
-- Input types (`InputState`)
-- Utilities (`SpatialGrid`)
+For the server's map-derived behaviour, provide the archive at a path it searches, normally:
 
-This is intentional for Phase 1 - both server and client use the same game logic. In a future phase, we may extract shared code into a separate package.
+```text
+assets/maps/tiles/nj-complete.pmtiles
+```
 
+The browser currently serves its copy from `public/assets/maps/tiles/nj-complete.pmtiles`; these paths are not yet aligned. The server can start without its archive, but disables building collision and road-aware NPC constraints when it cannot locate it.
+
+## Type Checking and Builds
+
+Run the server checker with:
+
+```bash
+npm run typecheck --workspace=server
+```
+
+TypeScript errors are real failures and should be fixed. Do not rely on old advice to ignore missing shared-module errors.
+
+The current check fails because `src/game/systems/randomWalkSystem.ts` imports `RoadDataLoader` from an incorrect relative path. This is a code issue, not an expected workspace-resolution limitation.
+
+The server build/start flow has not been established as a production deployment process. Use `tsx` development mode until ESM workspace packaging has been verified for the intended deployment environment.

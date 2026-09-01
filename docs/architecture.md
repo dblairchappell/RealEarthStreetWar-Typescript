@@ -1,503 +1,140 @@
-# Architecture Overview
+# Architecture
 
-Real-Earth Street War uses a **server-authoritative multiplayer architecture** with a **monorepo structure** managed by npm workspaces.
+## Overview
 
-## 🏗️ High-Level Architecture
+Real-Earth Street War uses a server-authoritative multiplayer model. The browser captures input and renders replicated state; the Node.js server runs game simulation and broadcasts snapshots.
 
-```
-┌─────────────┐         WebSocket          ┌─────────────┐
-│   Client    │◄──────────────────────────►│   Server    │
-│  (Browser)  │      (60Hz snapshots)      │  (Node.js)  │
-└─────────────┘                             └─────────────┘
-      │                                             │
-      │ ECS World Instance                         │ ECS World Instance
-      │ (for rendering)                            │ (authoritative)
-      │                                             │
-      └─────────────────────────────────────────────┘
-                    Shared Package (@shared/realearthstreetwar)
-                    (Components, Models, Systems, Utils)
+```text
+Browser client -- WebSocket --> server simulation
+     ^                              |
+     +------ state snapshots --------+
 ```
 
-## 📦 Monorepo Structure
+The codebase is an npm-workspace monorepo:
 
-The project uses **npm workspaces** to manage three packages:
-
-### 1. Root Package (Client)
-- **Location**: `./`
-- **Purpose**: Browser-based game client
-- **Tech**: Vite, TypeScript, MapLibre GL JS
-- **Entry**: `src/main.ts`
-
-### 2. Shared Package
-- **Location**: `./shared`
-- **Package Name**: `@shared/realearthstreetwar`
-- **Purpose**: Code shared between client and server
-- **Contents**:
-  - ECS component definitions (Position, Rotation, Velocity, PlayerTag, NpcTag, SpriteRef)
-  - Game state models (GameState, PlayerCharacter)
-  - Input types (InputState)
-  - ECS systems (collisionSystem)
-  - Utilities (SpatialGrid)
-
-### 3. Server Package
-- **Location**: `./server`
-- **Package Name**: `realearthstreetwar-server`
-- **Purpose**: Authoritative game server
-- **Tech**: Node.js, TypeScript, WebSocket (ws), bitecs
-- **Entry**: `src/server.ts`
-
-## 🎮 Client Architecture
-
-The client follows **MVC (Model-View-Controller)** pattern:
-
-```
-src/
-├── main.ts                 # Application bootstrap
-├── controller/
-│   └── GameController.ts  # Coordinates game logic
-├── debug/
-│   └── PerfOverlay.ts     # Performance monitoring overlay
-├── view/
-│   ├── MapView.ts         # Main map view and coordination
-│   ├── CharacterView.ts   # Player sprite rendering and animation
-│   ├── HUDView.ts         # UI and HUD
-│   ├── NpcLayer.ts        # Canvas NPC rendering (globe fallback)
-│   ├── NpcInstancedLayer.ts  # WebGL NPC rendering (Mercator)
-│   ├── NpcController.ts   # NPC interpolation and data management
-│   └── map/               # Map-specific components
-│       ├── CameraController.ts  # Camera following, zoom, rotation
-│       ├── FeatureQuery.ts      # Map feature queries (buildings, transport)
-│       └── MarkerLayer.ts       # Map markers
-├── network/
-│   ├── GameClient.ts      # WebSocket client
-│   ├── NetworkStateManager.ts  # Syncs server state to client ECS
-│   └── ClientPrediction.ts     # Client-side prediction (currently disabled)
-├── ecs/
-│   └── world.ts           # Client ECS world instance
-├── input/
-│   ├── InputManager.ts    # Keyboard input handling
-│   └── IInputService.ts   # Input service interface
-└── loop/
-    └── GameLoop.ts        # Variable-timestep game loop
+```text
+client/   Browser application: Vite, TypeScript, MapLibre, bitecs
+shared/   ECS components, models, collision systems, utilities
+server/   WebSocket server, authoritative ECS world, NPC systems
 ```
 
-### Client-Side ECS
+The root package is a workspace coordinator, not the client package.
 
-The client maintains its **own ECS World instance** for rendering:
+## Client
 
-- **Purpose**: Display server state visually
-- **World Instance**: Created in `src/ecs/world.ts`
-- **Components**: Imported from `@shared/realearthstreetwar`
-- **No Simulation**: Client does NOT run game logic (no movement systems, no collision)
+`client/src/main.ts` is the application wiring layer. It creates the map, input manager, HUD, controller, WebSocket client, and game loop.
 
-**Key Point**: The client's World is a **mirror** of server state, updated via snapshots.
+### Responsibilities
 
-## 🖥️ Server Architecture
+- Capture keyboard and pointer input in `input/InputManager.ts`.
+- Send input and possession requests through `network/GameClient.ts`.
+- Mirror server snapshots into a local ECS world through `network/NetworkStateManager.ts`.
+- Render the map, entities, building selection, HUD, sprites, and camera.
+- Perform no authoritative game simulation.
 
-The server is **authoritative** - it owns all game state:
+`ClientPrediction.ts` exists but prediction is deliberately disabled because reconciliation produced rubber-banding. Player movement is therefore snapshot-authoritative.
 
-```
-server/src/
-├── server.ts              # Entry point
-├── game/
-│   ├── GameWorld.ts      # Authoritative game state + ECS world
-│   ├── GameLoop.ts       # Fixed-timestep loop (60Hz)
-│   └── systems/          # Server-side ECS systems
-│       ├── movementSystem.ts
-│       └── randomWalkSystem.ts
-├── network/
-│   ├── WebSocketServer.ts  # WebSocket handling
-│   └── types.ts            # Message type definitions
-└── players/
-    └── PlayerManager.ts    # Player connection management
-```
+### Rendering
 
-### Server-Side ECS
+`client/src/config.ts` independently chooses player and NPC rendering paths:
 
-The server maintains the **authoritative ECS World**:
+- `PlayerDomView`, `PlayerCanvasView`, `PlayerWebglView`
+- `NpcDomLayer`, `NpcCanvasLayer`, `NpcWebglLayer`
+- `NpcWebglController` supplies WebGL NPC state and animation updates.
 
-- **Purpose**: Run all game simulation
-- **World Instance**: Created in `GameWorld.ts`
-- **Components**: Imported from `@shared/realearthstreetwar`
-- **Systems**: Movement, collision, NPC AI
+WebGL is intended for Mercator performance. DOM and Canvas paths work with all supported projections. NPC WebGL and Canvas paths currently use current replicated positions rather than a history-based interpolation controller.
 
-**Key Point**: The server's World is the **source of truth** for all game state.
+`MapView` owns MapLibre configuration, entity/building clicks, camera coordination, building highlighting, and player positioning. It can enable local vector map data, building extrusion, and terrain. The current terrain source is remote when `SHOW_TERRAIN` is enabled.
 
-## 🔄 Data Flow
+### Client Loop
 
-### 1. Input Flow (Client → Server)
+`client/src/loop/GameLoop.ts` runs three phases:
 
-```
-User Input → InputManager → GameClient → WebSocket → Server
-```
+1. Fixed updates at 60 Hz for registered client systems.
+2. Variable updates for animation and view work.
+3. Interpolated rendering through `requestAnimationFrame`.
 
-1. User presses keys
-2. `InputManager` captures input
-3. `GameClient` sends `{ type: 'input', input: InputState }` to server
-4. Server receives input and processes movement
+## Shared Package
 
-### 2. State Sync Flow (Server → Client)
+`shared/src` is the common data and systems package, imported as `@shared/realearthstreetwar`.
 
-```
-Server ECS → GameWorld → Snapshot → WebSocket → NetworkStateManager → Client ECS
-```
+- `ecs/components.ts`: position, rotation, velocity, altitude, and player marker components.
+- `components/`: NPC marker and sprite-reference components.
+- `model/GameState.ts`: game clock and shared constants, including the 5 m possession range.
+- `systems/`: entity collision and map-building collision systems.
+- `utils/`: distances and spatial grid support.
 
-1. Server runs simulation (60Hz fixed timestep)
-2. `GameWorld` creates state snapshot
-3. `WebSocketServer` broadcasts snapshot at 60Hz: `{ type: 'state_snapshot', state: GameStateSnapshot }`
-4. `NetworkStateManager` applies snapshot to client ECS world
-5. Client renders updated state with interpolation
+Client and server create separate bitecs worlds. Component definitions are shared, but component storage and entity IDs are local to each process.
 
-### 3. Rendering Flow (Client)
+## Server
 
-```
-Client ECS → NetworkStateManager → GameState → Views → Screen
-```
+`server/src/server.ts` creates `GameWorld`, `PlayerManager`, `ServerGameLoop`, and `WebSocketServer`.
 
-1. Client ECS world updated from snapshot
-2. `NetworkStateManager` syncs game time to `GameState` model
-3. Views read directly from ECS components:
-   - `MapView` queries ECS for player/NPC positions
-   - `CharacterView` reads player Position/Rotation from ECS
-   - `NpcController` reads NPC positions from ECS and interpolates
-   - `HUDView` reads game time from `GameState`
-4. Rendering updates with interpolation for smooth visuals
+`GameWorld` owns the authoritative ECS world and game time. It loads the PMTiles archive when present:
 
-## 🧩 Entity Component System (ECS)
+- `BuildingDataLoader` provides footprint geometry for building collision.
+- `RoadDataLoader` provides transportation geometry for NPC road-aware steering.
 
-### Component Definitions (Shared)
+If the archive cannot be found, those map-derived systems are disabled and the server logs the degraded state. The server currently searches legacy `assets/maps/tiles/nj-complete.pmtiles` paths rather than the client's public directory.
 
-Components are **defined once** in `shared/src/ecs/components.ts`:
+### Fixed Update Order
 
-```typescript
-export const Position = defineComponent({ x: Types.f64, y: Types.f64 }); // x = lng, y = lat
-export const Rotation = defineComponent({ angle: Types.f32 }); // degrees (0 = north)
-export const Velocity = defineComponent({ x: Types.f64, y: Types.f64 }); // degrees/second
-export const PlayerTag = defineComponent(); // Marker component
-export const NpcTag = defineComponent(); // Marker component
-export const SpriteRef = defineComponent({ id: Types.ui16 }); // Sprite ID for rendering
+`GameWorld.fixedUpdate()` performs:
+
+1. Advance game time.
+2. Apply stored player input, including building collision and wall sliding.
+3. Run NPC random/road-aware direction selection.
+4. Prevent movement into building footprints.
+5. Apply velocity movement.
+6. Rebuild the spatial grid and resolve entity collisions.
+7. Run corrective building collision as a safety net.
+
+The loop targets 60 Hz. Road and building lookups are asynchronous, so actual tick performance depends on map data, cache state, and NPC population.
+
+### NPC Behaviour
+
+NPCs spawn around the server configuration's default center. Each has a random speed multiplier. Periodically, an NPC chooses a direction:
+
+- With road data, it prefers the local road direction or steers toward the nearest road.
+- Without usable road data, it selects a random direction.
+
+This is a heuristic constraint system, not road-graph pathfinding.
+
+## Protocol
+
+Client messages:
+
+```ts
+{ type: 'input', input: InputState }
+{ type: 'spawn_npc', count: number } // development-only
+{ type: 'possess_entity', targetEid: number }
+{ type: 'ping', timestamp: number }
 ```
 
-**Component Usage**:
-- `Position`: Stores longitude (x) and latitude (y) in degrees
-- `Rotation`: Stores rotation angle in degrees (0° = north, 90° = east)
-- `Velocity`: Stores velocity in degrees per second
-- `SpriteRef`: Stores sprite ID (ui16) for selecting which sprite to render
-- `PlayerTag` / `NpcTag`: Marker components for entity identification
-  - Entities can switch between these tags during possession transfer
-  - Server transfers `PlayerTag` from old entity to new entity
-  - Client mirrors this change in its ECS world
+Server messages:
 
-### World Instances (Separate)
-
-Each side creates its **own World instance**:
-
-**Client** (`src/ecs/world.ts`):
-```typescript
-export const world = createWorld();  // Client's world
+```ts
+{ type: 'state_snapshot', state: GameStateSnapshot, timestamp: number }
+{ type: 'player_joined', playerId: string }
+{ type: 'player_left', playerId: string }
+{ type: 'possession_transferred', playerId: string, newEntityId: number, oldEntityId: number }
+{ type: 'possession_failed', reason: string }
+{ type: 'pong', timestamp: number }
+{ type: 'error', message: string }
 ```
 
-**Server** (`server/src/game/GameWorld.ts`):
-```typescript
-public readonly world = createWorld();  // Server's world
-```
+The server broadcasts state snapshots at a target 60 Hz. Possession is server-validated: targets must exist, may not belong to another player, and must be within `GameStateConstants.POSSESSION_RANGE_METERS` (5 m).
 
-### Why Separate Worlds?
+## State and Reconnection
 
-- **Different Entity IDs**: Server assigns ID 5, client might assign ID 2
-- **Different Lifecycles**: Server creates NPCs, client receives them later
-- **Different Data**: Server calculates positions, client displays them
-- **Separation of Concerns**: Server simulates, client renders
+The client reconnects with limited exponential backoff. The current server reconnection mapping is not durable identity/session restoration and is suitable only for prototype or single-player-oriented use. Do not treat it as robust multiplayer account support.
 
-**Important**: Components are **shared** (same structure), but each World has **separate storage arrays**.
+## Map Data
 
-## 🔌 Network Protocol
+The local vector style expects `public/assets/maps/tiles/nj-complete.pmtiles`. The server currently searches separate legacy `assets/maps/tiles/nj-complete.pmtiles` paths, so its map-data path must be aligned before one archive can enable both processes. The active expansion metadata describes a New Jersey region in `config/expansion-packs.json`.
 
-### Client → Server Messages
+Offline support applies to the vector basemap when this archive is installed. Terrain uses a remote DEM source by default and must be disabled or replaced for a fully offline deployment.
 
-```typescript
-type ClientMessage =
-  | { type: 'input'; input: InputState }
-  | { type: 'spawn_npc'; count: number }
-  | { type: 'possess_entity'; targetEid: number }
-  | { type: 'ping'; timestamp: number };
-```
+## Production Limitations
 
-### Server → Client Messages
-
-```typescript
-type ServerMessage =
-  | { type: 'state_snapshot'; state: GameStateSnapshot; timestamp: number }
-  | { type: 'player_joined'; playerId: string }
-  | { type: 'player_left'; playerId: string }
-  | { type: 'possession_transferred'; playerId: string; newEntityId: number; oldEntityId: number }
-  | { type: 'possession_failed'; reason: string }
-  | { type: 'pong'; timestamp: number }
-  | { type: 'error'; message: string };
-```
-
-### State Snapshot Format
-
-```typescript
-interface GameStateSnapshot {
-  gameDate: string;        // ISO string
-  players: PlayerSnapshot[];
-  npcs: NpcSnapshot[];
-}
-```
-
-## ⚙️ Game Loop
-
-### Server Loop (60Hz Fixed Timestep)
-
-```typescript
-// server/src/game/GameWorld.ts
-fixedUpdate() {
-  // 1. Advance game time
-  // 2. Process player movement based on stored input
-  // 3. Run NPC AI (randomWalkSystem)
-  // 4. Apply movement (movementSystem)
-  // 5. Rebuild spatial grid
-  // 6. Handle collisions (entityCollisionSystem)
-}
-
-// server/src/network/WebSocketServer.ts
-// Broadcasts state snapshots at 60Hz (separate from game loop)
-startBroadcasting() {
-  setInterval(() => {
-    const snapshot = gameWorld.createSnapshot();
-    broadcastState(snapshot);
-  }, 1000 / 60); // 60Hz
-}
-```
-
-### Client Loop (Variable Timestep)
-
-```typescript
-// src/loop/GameLoop.ts
-update(deltaMs: number) {
-  // 1. Render interpolation
-  // 2. Update views
-  // 3. Handle input
-}
-```
-
-## 🎨 Rendering System
-
-### View Components
-
-The client uses a modular view system with specialized components:
-
-**MapView** (`src/view/MapView.ts`):
-- Main orchestrator for all visual elements
-- Manages MapLibre GL map instance
-- Coordinates sub-components (CharacterView, CameraController, etc.)
-- Handles map events (clicks, drags, zoom)
-- Manages player entity tracking and interpolation state
-- Resets interpolation state on possession transfer for smooth movement
-
-**CharacterView** (`src/view/CharacterView.ts`):
-- Player sprite rendering and animation
-- Sprite sheet animation system (idle/walking/running)
-- Pseudo-3D effect with slice stacking (when not top-down)
-- Zoom-based sprite scaling
-- Camera-relative rotation
-
-**CameraController** (`src/view/map/CameraController.ts`):
-- Camera following player
-- Continuous zoom/rotation/pan with acceleration
-- Camera lock/unlock functionality
-- Smooth camera transitions
-
-**NPC Rendering** (dual-path system):
-- **NpcInstancedLayer**: WebGL-based instanced rendering for Mercator projection
-  - Uses WebGL point sprites
-  - Single draw call for all NPCs
-  - High performance (1000+ NPCs at 60fps)
-- **NpcLayer**: Canvas-based rendering for Globe projection
-  - Fallback when `ENABLE_GLOBE = true`
-  - Uses `map.project()` for coordinate conversion
-  - Slower but works with any projection
-
-**NpcController** (`src/view/NpcController.ts`):
-- Handles NPC interpolation between snapshots
-- Maintains position history for smooth rendering
-- Converts lat/lng to screen coordinates
-- Passes data to rendering layer
-
-**Other Components**:
-- **EntityClickHandler** (`src/view/EntityClickHandler.ts`):
-  - Detects clicks on entities (player's current body or NPCs)
-  - Calculates distances between entities
-  - Triggers callbacks for entity interactions
-  - Uses ECS queries and map projection for accurate click detection
-- **HUDView** (`src/view/HUDView.ts`):
-  - Displays game time and stats
-  - Shows entity info panels (occupant info, NPC info)
-  - Manages possession and command UI
-  - Handles panel visibility and range checking
-- **FeatureQuery**: Queries map features (buildings, transport) at click points
-- **MarkerLayer**: Manages map markers
-- **PerfOverlay**: Performance monitoring (FPS, frame time, CPU)
-
-### Sprite Animation System
-
-The game uses a sprite sheet animation system:
-
-- **Animation States**: idle, walking, running
-- **Frame Timing**: Uses accumulator pattern for consistent frame rates
-- **Sprite Sheets**: Located in `assets/sprites/brian/` directory
-- **Animation Switching**: Automatically based on movement state
-- **Pseudo-3D**: Multiple sprite slices stacked for depth (when not top-down)
-
-### Map Projections
-
-The game supports multiple map projections:
-
-- **Mercator** (default): Flat map, best performance, WebGL NPC rendering
-- **Globe**: 3D sphere view, accurate sizes, Canvas NPC rendering fallback
-- **Vertical-Perspective**: 3D perspective view (experimental)
-
-Projection is configured via `MAP_PROJECTION` in `src/config.ts`.
-
-### Offline Map Support
-
-The game uses **PMTiles** protocol for offline map tiles:
-- Single-file format for efficient tile storage
-- Map style: `config/offline-map-style.json`
-- Tile data: `assets/maps/tiles/nj-complete.pmtiles`
-- Protocol registered with MapLibre GL JS
-
-## 🎯 Design Principles
-
-### 1. Server Authority
-- **All game logic** runs on the server
-- Client is **display-only** (no simulation)
-- Server sends **authoritative snapshots**
-
-### 2. Shared Code
-- **Single source of truth** for components, models, systems
-- No code duplication between client/server
-- Changes to shared code affect both sides
-
-### 3. Separation of Concerns
-- **Client**: Rendering, input capture, UI
-- **Server**: Simulation, game logic, state management
-- **Shared**: Data structures, component definitions
-
-### 4. Type Safety
-- TypeScript throughout
-- Shared types ensure client/server compatibility
-- Path mappings resolve workspace packages correctly
-
-## 🔧 Extension Points
-
-### Adding New Components
-
-1. **Define in shared**: `shared/src/ecs/components.ts`
-2. **Export**: Add to `shared/src/index.ts`
-3. **Use on server**: Import from `@shared/realearthstreetwar`
-4. **Use on client**: Import from `@shared/realearthstreetwar`
-
-### Adding New Systems
-
-1. **Create in shared**: `shared/src/systems/` (if used by both)
-2. **Or create server-only**: `server/src/game/systems/`
-3. **Add to GameWorld**: Call in `fixedUpdate()`
-
-### Adding New Models
-
-1. **Create in shared**: `shared/src/model/`
-2. **Export**: Add to `shared/src/index.ts`
-3. **Use**: Import from `@shared/realearthstreetwar`
-
-## 📊 Performance Considerations
-
-### Server
-- **Fixed timestep**: 60Hz ensures deterministic simulation
-- **Broadcast rate**: 60Hz for responsive state updates
-- **Spatial grid**: Efficient collision detection (O(n) instead of O(n²))
-- **Hot-reload**: Config file watching for NPC count changes
-
-### Client
-- **Render interpolation**: Smooth visuals between snapshots (NpcController)
-- **Dual rendering paths**: 
-  - WebGL instanced rendering (`NpcInstancedLayer`) for Mercator projection
-  - Canvas overlay (`NpcLayer`) for Globe projection
-- **Sprite animations**: Frame-based animation system with accumulator pattern
-- **Performance overlay**: Built-in FPS and frame time monitoring
-- **Minimal computation**: No game logic, just display and interpolation
-
-## 🚀 Future Architecture Improvements
-
-- **Delta compression**: Send only changed entities
-- **Client-side prediction**: Code exists but currently disabled (see `ClientPrediction.ts`)
-  - Full reconciliation system implemented with smooth correction
-  - Three-tier error handling (tiny/medium/catastrophic)
-  - Disabled to prevent rubber-banding issues
-- **Interpolation**: Already implemented in `NpcController` for NPCs and `MapView` for player
-- **Command System**: Issue commands to NPCs when vacating bodies (planned)
-- **Chunking**: Load map regions on-demand
-- **Caching**: Cache snapshots for reconnection
-- **Input buffering**: Queue inputs for reconciliation with server state
-
-## 🎮 Possession System
-
-The game features a **possession system** that allows players to transfer control between entities:
-
-### How It Works
-
-1. **Player starts** with control of an initial body (spawned as a player entity)
-2. **Click on NPC** within 50 meters to view info and possess
-3. **Click "Possess Body"** button in HUD to transfer control
-4. **Server transfers** `PlayerTag` from old entity to new entity
-5. **Old body becomes NPC** (receives `NpcTag` and starts wandering)
-6. **New body becomes player** (receives `PlayerTag` and responds to input)
-
-### Implementation Details
-
-**Server-Side** (`server/src/game/GameWorld.ts`):
-- `transferPossession()` validates distance and transfers tags
-- Resets velocity for both entities to prevent drift
-- Updates `playerEntities` mapping
-
-**Client-Side** (`src/network/NetworkStateManager.ts`):
-- `transferPlayerEntity()` mirrors server tag changes
-- Maps server entity IDs to client entity IDs
-- Maintains reverse mapping for click detection
-
-**Visual Feedback**:
-- **Green outline**: Current possessed body (via CSS class `possessed-body`)
-- **Red outline**: Selected NPC (rendered by `NpcLayer`)
-
-**Interpolation Handling** (`src/view/MapView.ts`):
-- `resetInterpolationState()` clears `prevPosition` on possession transfer
-- Prevents jittery movement by skipping interpolation on first frame
-- Matches behavior of initial character creation
-
-### Network Messages
-
-**Client → Server**:
-```typescript
-{ type: 'possess_entity'; targetEid: number }
-```
-
-**Server → Client**:
-```typescript
-{ type: 'possession_transferred'; playerId: string; newEntityId: number; oldEntityId: number }
-{ type: 'possession_failed'; reason: string }
-```
-
-### Range and Validation
-
-- **Possession Range**: 50 meters (0.0005 degrees)
-- **Validation**: Server checks distance, entity existence, and prevents possessing other players
-- **Visual Range Indicator**: HUD shows distance and enables/disables possess button
-
-## 🌍 Timezone Support
-
-The game uses `tz-lookup` library for timezone-aware time display:
-- Game time is stored in UTC
-- Display time is converted based on player's geographic location (lat/lng)
-- HUD shows local time for the current map position
-- Timezone lookup happens automatically via `tzLookup(lat, lng)`
+The server lacks authentication, authorization, rate limiting, transport security configuration, and input-hardening suitable for a public deployment. `spawn_npc` is unrestricted debug functionality. Production hosting must also preserve the cross-origin-isolation headers configured for Vite.

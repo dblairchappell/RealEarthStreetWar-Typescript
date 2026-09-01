@@ -1,265 +1,141 @@
 # Real-Earth Street War
 
-A top-down GTA1-style game prototype set on a real-world map. Players explore and interact with NPCs in a server-authoritative multiplayer simulation.
+A browser-based, real-world-map game prototype. The client renders a New Jersey map and player/NPC sprites; a Node.js WebSocket server owns the simulation and sends authoritative state snapshots.
 
-## 🎮 Current Features
+## Current Capabilities
 
-- **Real-World Maps**: Authentic street layouts using MapLibre GL JS with offline PMTiles support
-- **Server-Authoritative Simulation**: NPCs and game state managed by the server
-- **Player Movement**: WASD-style character controls with smooth movement and sprite animations
-- **NPC Simulation**: Server-controlled NPCs that walk around the map with collision detection
-- **Possession System**: Click on NPCs to take control of them - your current body becomes an NPC
-- **Entity Interaction**: Click on entities to view info and possess nearby NPCs (within 5m range)
-- **Visual Feedback**: Green outline for possessed body, red outline for selected NPCs
-- **Time Progression**: In-game time advances at 60x speed (1 game minute = 1 real second) with timezone-aware display (uses `tz-lookup` based on lat/lng)
-- **Multiplayer-Ready**: WebSocket-based client-server architecture (60Hz state broadcasts)
-- **Advanced Camera**: Continuous zoom/rotation/pan controls with camera following
-- **Multiple Projections**: Support for Mercator, Globe, and Vertical-Perspective projections
-- **Performance Tools**: Built-in performance overlay for FPS and frame time monitoring
-- **Sprite System**: Animated character sprites with idle/walking/running states
+- Server-authoritative player and NPC simulation at a target 60 Hz.
+- Arrow-key player movement, rotation, strafing, and running.
+- NPC spawning, entity collision, building collision, and heuristic road-aware wandering.
+- Possession: control can transfer to an NPC within 5 metres; the prior body becomes an NPC.
+- Map building selection, highlighting, and informational HUD data (area, height, estimated floors, and floorspace where available).
+- DOM, Canvas, and WebGL rendering paths for players and NPCs.
+- Mercator, globe, and vertical-perspective map projections.
+- Local-time HUD, sprite animation, camera controls, and a performance overlay.
 
-## 🏗️ Architecture
+The project is a prototype. Territory, resources, combat, durable multiplayer identity, authentication, and production deployment are not implemented.
 
-This project uses **npm workspaces** with three packages:
+## Workspace Layout
 
-- **Root Package**: Client application (browser-based)
-- **`shared/`**: Shared code between client and server (ECS components, models, systems, utilities)
-- **`server/`**: Game server (Node.js with WebSocket)
+```text
+.
+├── client/                  # Vite browser client
+│   ├── src/                 # Input, networking, rendering, UI
+│   └── tests/               # Playwright smoke test
+├── shared/                  # Shared ECS components, models, systems, utilities
+├── server/                  # Node.js WebSocket server and simulation
+├── config/                  # Map style and expansion metadata
+└── public/assets/           # Fonts and sprite assets
+```
 
-### Key Technologies
+The root package coordinates the `client`, `shared`, and `server` workspaces. Root `dev`, `build`, `test`, and `typecheck` scripts delegate to the client workspace.
 
-- **Client**: TypeScript, Vite, MapLibre GL JS
-- **Server**: Node.js, TypeScript, WebSocket (ws)
-- **ECS**: bitecs (Entity Component System)
-- **Shared Code**: npm workspaces for code reuse
+## Requirements
 
-## 🚀 Quick Start
+- Node.js 18 or newer.
+- A modern browser with WebGL support.
+- A local PMTiles map archive at `public/assets/maps/tiles/nj-complete.pmtiles` for the browser map.
 
-### Prerequisites
+The PMTiles archive is not included in the repository. It is required by the local map style. The server currently searches separate legacy `assets/maps/tiles/nj-complete.pmtiles` locations for building collision and road-aware NPC movement, so a single archive placement does not yet enable both client and server map features. The active map configuration covers New Jersey; see `config/expansion-packs.json`.
 
-- Node.js 18+ and npm
-- Modern web browser with WebGL support
+Terrain is remote by default when enabled. Disable `SHOW_TERRAIN` in `client/src/config.ts` for a fully local vector-map setup.
 
-### Installation
+## Run Locally
+
+Install workspace dependencies from the repository root:
 
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd RealEarthStreetWar
-
-# Install all dependencies (workspace packages)
 npm install
 ```
 
-### Running the Game
-
-**Terminal 1 - Start the server:**
+Start the server:
 
 ```bash
-cd server
+npm run dev --workspace=server
+```
+
+Start the client in another terminal:
+
+```bash
 npm run dev
 ```
 
-The server will start on `ws://localhost:8080` (or the port specified in `PORT` environment variable).
+Open `http://localhost:5173`. The client connects to `ws://localhost:8080` by default. Override this with `VITE_SERVER_URL`.
 
-**Terminal 2 - Start the client:**
+## Controls
+
+| Input | Action |
+| --- | --- |
+| Arrow keys | Move |
+| Left / Right arrow | Rotate |
+| Shift + Left / Right arrow | Strafe |
+| Double-tap Up arrow | Run |
+| W / S | Zoom camera |
+| A / D | Rotate camera |
+| Shift + W / A / S / D | Pan camera |
+| Shift + C | Toggle camera follow lock |
+| Click NPC | Inspect; possess if it is within 5 m |
+| Click building | Highlight it and show available building data |
+
+## Configuration
+
+- Client: `client/src/config.ts`
+  - `PLAYER_RENDER_PATH` and `NPC_RENDER_PATH`: `dom`, `canvas`, or `webgl`.
+  - `MAP_PROJECTION`: `mercator`, `globe`, or `vertical-perspective`.
+  - Building, terrain, collision-bound, and performance-overlay switches.
+  - `SERVER_URL`, sourced from `VITE_SERVER_URL` or `ws://localhost:8080`.
+- Server: `server/src/config.ts`
+  - `NPC_COUNT` defaults to `251`.
+  - `NPC_SPAWN_RADIUS` defaults to `0.001` degrees.
+  - `PORT` defaults to `8080` and accepts the `PORT` environment variable.
+
+The server watches its configuration file and adjusts the NPC count when `NPC_COUNT` changes.
+
+## Development Commands
 
 ```bash
-# From project root
+# Client development server
 npm run dev
-```
 
-Visit `http://localhost:5173` to start playing!
-
-### Controls
-
-- **Arrow Keys**: Move character (↑↓←→)
-- **Shift + ←/→**: Rotate character left/right
-- **Double-tap ↑**: Run
-- **W/S**: Continuous zoom in/out (with acceleration)
-- **A/D**: Continuous camera rotation left/right (with acceleration)
-- **Q/E**: Continuous camera pan left/right
-- **R/F**: Continuous camera pan up/down
-- **Shift + C**: Toggle camera follow lock
-- **Mouse Click**: Click on NPCs to view info and possess (must be within 50m)
-- **Mouse Click**: Click on your current body to view occupant info
-
-## 📁 Project Structure
-
-```
-RealEarthStreetWar/
-├── shared/                 # Shared package (npm workspace)
-│   ├── src/
-│   │   ├── components/    # ECS components (NpcTag, SpriteRef)
-│   │   ├── ecs/           # ECS component definitions (Position, Rotation, Velocity, PlayerTag)
-│   │   ├── input/         # Input types (InputState)
-│   │   ├── model/         # Game state models (GameState)
-│   │   ├── systems/       # ECS systems (collisionSystem)
-│   │   └── utils/         # Utilities (SpatialGrid)
-│   └── package.json
-│
-├── server/                 # Server package (npm workspace)
-│   ├── src/
-│   │   ├── game/          # Game world and systems
-│   │   ├── network/       # WebSocket server
-│   │   ├── players/       # Player management
-│   │   └── server.ts      # Entry point
-│   └── package.json
-│
-├── src/                    # Client application
-│   ├── controller/        # Game controller (MVC)
-│   ├── debug/             # Debug tools (PerfOverlay)
-│   ├── ecs/               # Client ECS world instance
-│   ├── input/             # Input handling
-│   ├── loop/              # Game loop
-│   ├── model/             # (deprecated - use shared)
-│   ├── network/           # WebSocket client
-│   ├── view/              # Rendering and UI
-│   │   ├── map/           # Map components (CameraController, FeatureQuery, MarkerLayer)
-│   │   ├── CharacterView.ts  # Player sprite rendering
-│   │   ├── EntityClickHandler.ts  # Entity click detection
-│   │   ├── HUDView.ts     # UI and HUD (entity info panels)
-│   │   ├── MapView.ts     # Main map view
-│   │   ├── NpcLayer.ts    # Canvas NPC rendering (globe fallback)
-│   │   ├── NpcInstancedLayer.ts  # WebGL NPC rendering (Mercator)
-│   │   └── NpcController.ts  # NPC interpolation controller
-│   └── main.ts            # Entry point
-│
-└── package.json            # Root workspace config
-```
-
-## 🛠️ Development
-
-### Type Checking
-
-```bash
-# Check all packages
-npm run typecheck
-
-# Check specific package
-cd server && npm run typecheck
-cd shared && npm run typecheck
-```
-
-### Building
-
-```bash
-# Build client
+# Client production build (output: client/dist/)
 npm run build
 
-# Build server
-cd server && npm run build
+# Server development server
+npm run dev --workspace=server
+
+# One-shot TypeScript checks
+npx tsc --noEmit --project client/tsconfig.json
+npm run typecheck --workspace=shared
+npm run typecheck --workspace=server
+
+# Browser smoke/performance test
+npm test
 ```
 
-### Workspace Management
+`npm run typecheck` at the root starts the client watch-mode checker; it does not check all workspaces.
 
-Since this project uses npm workspaces, dependencies are managed at the root:
+## Testing
 
-```bash
-# Install a dependency for the client
-npm install <package> --workspace=.
+The Playwright smoke test loads the map with 1,000 NPCs and asserts an average frame rate of at least 55 FPS. It is GPU- and environment-dependent. Run it with `npm test` after installing Playwright browser dependencies as needed.
 
-# Install a dependency for the server
-npm install <package> --workspace=server
+## Deployment and Security Status
 
-# Install a dependency for shared
-npm install <package> --workspace=shared
+The Vite development configuration sets COOP and COEP headers for cross-origin isolation. A production host must provide equivalent headers:
+
+```text
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
 ```
 
-## 📚 Documentation
+The WebSocket server currently has no authentication, authorization, TLS/WSS setup, rate limiting, or admin authorization. The `spawn_npc` message and browser `window.spawnNpc()` helper are development tools and must not be exposed unchanged on a public server.
 
-- [Architecture Overview](docs/architecture.md) - System architecture and design patterns
-- [Development Guide](docs/development.md) - Contributing and extending the game
-- [Server Documentation](server/README.md) - Server setup and API
+## Documentation
 
-## 🎯 Current Status
+- [Architecture](docs/architecture.md)
+- [Development guide](docs/development.md)
+- [Roadmap](docs/roadmap.md)
+- [Server guide](server/README.md)
 
-**Implemented:**
-
-- ✅ Server-authoritative game state
-- ✅ Player movement synchronization (60Hz server, 60Hz client broadcasts)
-- ✅ NPC spawning and simulation with collision detection
-- ✅ Possession system - transfer control between entities
-- ✅ Entity click detection and interaction
-- ✅ HUD system with entity info panels
-- ✅ Visual feedback (green outline for possessed, red outline for selected)
-- ✅ Time progression system with timezone-aware display
-- ✅ WebSocket client-server communication
-- ✅ Shared code package (npm workspaces)
-- ✅ Sprite animation system (idle/walking/running)
-- ✅ Advanced camera controls (zoom/rotation/pan)
-- ✅ Multiple map projections (Mercator/Globe/Vertical-Perspective)
-- ✅ Dual NPC rendering paths (WebGL for Mercator, Canvas for Globe)
-- ✅ Performance monitoring overlay
-- ✅ Offline map support (PMTiles)
-- ✅ Server config hot-reload
-
-**Planned:**
-
-- 🔲 Gameplay mechanics (HQ placement, territory control)
-- 🔲 Resource management
-- 🔲 Combat system
-- 🔲 Multiplayer features
-
-## 🔧 Configuration
-
-### Server Configuration
-
-Edit `server/src/config.ts`:
-
-```typescript
-export const ServerConfig = {
-  NPC_COUNT: 10,              // Number of NPCs to spawn
-  DEFAULT_SPAWN_CENTER: {     // Default spawn location
-    lng: -74.05682,           // NYC coordinates
-    lat: 40.69337,
-  },
-  NPC_SPAWN_RADIUS: 0.0001,   // Spawn radius in degrees
-  PORT: 8080,                 // Server port
-};
-```
-
-### Client Configuration
-
-Edit `src/config.ts`:
-
-```typescript
-// Visual style
-export const GTA1_STYLE_TOP_DOWN = true;   // Toggle top-down vs 3D angled view
-export const ENABLE_GLOBE = true;           // Enable globe projection mode
-export const MAP_PROJECTION: 'mercator' | 'globe' | 'vertical-perspective' = 'mercator';
-
-// Debug tools
-export const SHOW_PERF_OVERLAY = true;      // Show performance overlay (FPS, frame time)
-export const SHOW_COLLISION_BOUNDS = false; // Show collision circles around NPCs
-
-// Network
-export const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'ws://localhost:8080';
-```
-
-## 🐛 Troubleshooting
-
-**Server won't start:**
-
-- Check if port 8080 is available
-- Verify `npm install` completed successfully
-- Check server logs for errors
-
-**Client can't connect:**
-
-- Ensure server is running first
-- Check `SERVER_URL` in `src/config.ts` matches server port
-- Check browser console for WebSocket errors
-
-**Type errors:**
-
-- Run `npm install` to ensure workspace linking is correct
-- Verify TypeScript path mappings in `tsconfig.json` and `server/tsconfig.json`
-
-## 📄 License
+## License
 
 ISC
-
----
-
-Built with TypeScript, Vite, MapLibre GL JS, bitecs, and npm workspaces.
